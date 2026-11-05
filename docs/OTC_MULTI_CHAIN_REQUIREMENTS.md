@@ -152,6 +152,38 @@ identifies a network.
 - Preserve the compatibility rule that a legacy offer without `stablecoin`
   means USDT.
 
+### Fees
+
+- The OTC transaction fee is charged/denominated in **USDT**. The conversation
+  explicitly settled the fee currency as USDT, including the intent to
+  consolidate transaction value into USDT.
+- Do not charge the fee in the user's source token merely because that is the
+  token or network used to fund a cross-chain route. If a route is funded with
+  USDC or another supported asset, fee accounting and collection still need to
+  resolve to USDT.
+- The conversation did not settle whether the fee is charged to the sender
+  only or split between both counterparties, nor exactly when it is collected
+  (before routing, from the received amount, or after settlement). Keep payer,
+  calculation basis, and collection stage as explicit policy decisions rather
+  than inferring them from the fee currency.
+- Show the USDT-denominated fee and its calculation/collection effect in the
+  quote and immutable trade terms before the user commits.
+- Fee destinations were supplied for TRON, NEAR, Bitcoin, Ethereum, Solana,
+  Avalanche C-Chain, Sei, Polygon PoS, TON, BNB Smart Chain, Arbitrum One,
+  Base, and Aptos. The address values belong in the deployment environment,
+  not in this requirements document or tests.
+
+- These are recorded as operator-provided destinations, not yet validated or
+  configured for automatic fee transfers. An address alone does not establish
+  that the required USDT asset exists on that network or that a transfer,
+  conversion, or NEAR Intents route is available. In particular, the Bitcoin
+  address is not itself a USDT receiving address; do not collect a USDT fee
+  there unless an explicit supported conversion and payout flow is designed.
+- Validate the chain/address pair and confirm asset/route support before
+  enabling fee collection. Keep these operational destinations in deployment
+  environment configuration, not hard-coded into frontend code or public
+  application defaults.
+
 ## Frontend and wallet requirements
 
 - Keep the token picker searchable and add an explicit network selector for

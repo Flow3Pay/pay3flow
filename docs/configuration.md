@@ -55,6 +55,23 @@ symbiosis_execution_contracts = [
 ]
 ```
 
+`OTC_FEE_RECIPIENTS` is an optional environment-only JSON string array of
+`network=address` entries, for example:
+
+```sh
+export OTC_FEE_RECIPIENTS='["tron=T...","ethereum=0x..."]'
+```
+
+The deployment renderer passes `PAY3FLOW_OTC_FEE_RECIPIENTS` through the
+Kubernetes Secret to the backend as `OTC_FEE_RECIPIENTS`. The complete
+operator-provided destination list is in
+[`deploy/external.env.example`](../deploy/external.env.example). The backend
+rejects malformed entries, duplicate networks, and address formats that do
+not match the configured network. This config only records receiving
+destinations; it does not initiate transfers. OTC currently accrues fee
+amounts in its internal ledger, and automated USDT fee collection/payout must
+be implemented separately.
+
 The optional third address pins the `OnchainGateway` used by same-chain
 Symbiosis swaps; it serves as both transaction destination and ERC-20 spender.
 Cross-chain quotes still require the separate MetaRouter and MetaRouterGateway.
@@ -78,6 +95,7 @@ These values are never read from `config.toml`:
 | `JWT_SECRET` | Signs user tokens |
 | `SECRETS_KEY` | Encrypts stored sensitive values |
 | `ADMIN_TOKEN` | Protects admin exchange controls |
+| `OTC_FEE_RECIPIENTS` | Optional network-to-address map for OTC fee destinations (JSON string array) |
 | `BESTCHANGE_API_KEY` | Authenticated BestChange rates API |
 | `ZEROX_API_KEY` | Optional server-side 0x quote credential |
 | `BARTER_API_KEY` | Optional server-side Barter quote credential |

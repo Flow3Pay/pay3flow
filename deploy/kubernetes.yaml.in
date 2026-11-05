@@ -101,6 +101,7 @@ stringData:
   SECRETS_KEY: "$PAY3FLOW_SECRETS_KEY"
   ADMIN_TOKEN: "$PAY3FLOW_ADMIN_TOKEN"
   NEAR_INTENTS_JWT: "$PAY3FLOW_NEAR_INTENTS_JWT"
+  OTC_FEE_RECIPIENTS: '$PAY3FLOW_OTC_FEE_RECIPIENTS'
   BESTCHANGE_API_KEY: "$PAY3FLOW_BESTCHANGE_API_KEY"
   SYMBIOSIS_PARTNER_ID: "$PAY3FLOW_SYMBIOSIS_PARTNER_ID"
   ZEROX_API_KEY: "$PAY3FLOW_ZEROX_API_KEY"
@@ -316,6 +317,12 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: NEAR_INTENTS_JWT
+            - name: OTC_FEE_RECIPIENTS
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: OTC_FEE_RECIPIENTS
+                  optional: true
             - name: HEX_TRADING_ENABLED
               value: "$PAY3FLOW_HEX_TRADING_ENABLED"
             - name: BESTCHANGE_API_KEY

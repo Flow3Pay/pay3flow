@@ -1,5 +1,6 @@
 use super::error::{invalid, Error, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub(crate) const USDT: &str = "0xdac17f958d2ee523a2206206994597c13d831ec7";
 pub(crate) const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
@@ -70,6 +71,8 @@ pub(crate) struct Config {
     pub heartbeat_url: Option<String>,
     pub live_gate_evidence: Option<String>,
     pub escrow: Option<super::escrow::EscrowPolicy>,
+    #[serde(skip)]
+    pub fee_recipients: BTreeMap<String, String>,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -119,6 +122,7 @@ impl Default for Config {
             heartbeat_url: None,
             live_gate_evidence: None,
             escrow: None,
+            fee_recipients: BTreeMap::new(),
         }
     }
 }
@@ -129,6 +133,12 @@ impl Config {
             Err(_) => Self::default(),
         };
         cfg.origin = origin.trim_end_matches('/').to_string();
+        cfg.fee_recipients = match std::env::var("OTC_FEE_RECIPIENTS") {
+            Ok(value) if value.trim().is_empty() => BTreeMap::new(),
+            Ok(value) => parse_fee_recipients(&value)?,
+            Err(std::env::VarError::NotPresent) => BTreeMap::new(),
+            Err(error) => return Err(error.into()),
+        };
         cfg.usdt_contract = cfg.usdt_contract.to_ascii_lowercase();
         cfg.p2p_usdt_contract = cfg.p2p_usdt_contract.map(|c| c.to_ascii_lowercase());
         // A view-only offers deployment must keep booting with whatever network
@@ -179,6 +189,102 @@ impl Config {
             &self.p2p_ethereum_rpc
         }
     }
+}
+
+fn parse_fee_recipients(raw: &str) -> anyhow::Result<BTreeMap<String, String>> {
+    let entries: Vec<String> = serde_json::from_str(raw).map_err(|error| {
+        anyhow::anyhow!("OTC_FEE_RECIPIENTS must be a JSON string array: {error}")
+    })?;
+    let mut recipients = BTreeMap::new();
+    for entry in entries {
+        let (network, address) = entry
+            .split_once('=')
+            .ok_or_else(|| anyhow::anyhow!("fee recipient must use network=address format"))?;
+        let network = network.trim().to_ascii_lowercase();
+        let address = address.trim();
+        if !valid_fee_recipient(&network, address) {
+            anyhow::bail!("invalid OTC fee recipient for network {network}");
+        }
+        if recipients
+            .insert(network.clone(), address.to_string())
+            .is_some()
+        {
+            anyhow::bail!("duplicate OTC fee recipient for network {network}");
+        }
+    }
+    Ok(recipients)
+}
+
+fn valid_fee_recipient(network: &str, address: &str) -> bool {
+    let evm = matches!(
+        network,
+        "ethereum"
+            | "avalanche-c"
+            | "polygon-pos"
+            | "bnb-smart-chain"
+            | "arbitrum-one"
+            | "base"
+            | "optimism"
+    );
+    if evm {
+        return address.len() == 42
+            && address.starts_with("0x")
+            && address[2..].bytes().all(|byte| byte.is_ascii_hexdigit());
+    }
+    match network {
+        "tron" => {
+            address.len() == 34
+                && address.starts_with('T')
+                && address.bytes().all(|byte| {
+                    b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(&byte)
+                })
+        }
+        "near" => {
+            address.len() == 64 && address.bytes().all(|byte| byte.is_ascii_hexdigit())
+                || address.ends_with(".near")
+                    && (2..=64).contains(&address.len())
+                    && address.bytes().all(|byte| {
+                        byte.is_ascii_lowercase()
+                            || byte.is_ascii_digit()
+                            || matches!(byte, b'.' | b'-' | b'_')
+                    })
+        }
+        "bitcoin" => address.strip_prefix("bc1").is_some_and(|payload| {
+            (42..=62).contains(&address.len())
+                && payload
+                    .bytes()
+                    .all(|byte| b"023456789acdefghjklmnpqrstuvwxyz".contains(&byte))
+        }),
+        "solana" => {
+            (32..=44).contains(&address.len())
+                && address.bytes().all(|byte| {
+                    b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(&byte)
+                })
+        }
+        "sei" => {
+            address.starts_with("sei1")
+                && (8..=90).contains(&address.len())
+                && address
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        }
+        "ton" => {
+            address.len() == 48
+                && (address.starts_with("EQ") || address.starts_with("UQ"))
+                && address
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        }
+        "aptos" => {
+            address.len() == 66
+                && address.starts_with("0x")
+                && address[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+        }
+        _ => false,
+    }
+}
+
+impl Config {
     pub fn validate(&self) -> Result<()> {
         if let Some(policy) = &self.escrow {
             policy.validate()?;
@@ -201,6 +307,14 @@ impl Config {
                 return Err(invalid("OTC configuration is incomplete"));
             }
         }
+        if self
+            .fee_recipients
+            .iter()
+            .any(|(network, address)| !valid_fee_recipient(network, address))
+        {
+            return Err(invalid("invalid OTC fee recipient configuration"));
+        }
+
         super::wallet::address("ethereum", &self.usdt_wallet)?;
         super::wallet::address("everscale", &self.ever_wallet)?;
         if self.ever_resource == self.usdt_resource
@@ -212,6 +326,7 @@ impl Config {
         {
             return Err(invalid("invalid OTC route policy"));
         }
+
         let min = super::amount::units(&self.min_usdt, 6)?;
         if min > super::amount::units(&self.max_usdt, 6)? {
             return Err(invalid("invalid OTC trade limits"));
@@ -277,5 +392,52 @@ impl Config {
             return Err(Error::Disabled);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod fee_recipient_tests {
+    use super::parse_fee_recipients;
+
+    #[test]
+    fn parses_all_operator_fee_recipients() {
+        let entries = r#"[
+            "tron=T111111111111111111111111111111111",
+            "near=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bitcoin=bc1qaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ethereum=0x1111111111111111111111111111111111111111",
+            "solana=11111111111111111111111111111111",
+            "avalanche-c=0x1111111111111111111111111111111111111111",
+            "sei=sei1aaaaaaaaaaaaaaaaaaaa",
+            "polygon-pos=0x1111111111111111111111111111111111111111",
+            "ton=UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "bnb-smart-chain=0x1111111111111111111111111111111111111111",
+            "arbitrum-one=0x1111111111111111111111111111111111111111",
+            "base=0x1111111111111111111111111111111111111111",
+            "aptos=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]"#;
+        let recipients = parse_fee_recipients(entries).unwrap();
+        assert_eq!(recipients.len(), 13);
+        assert_eq!(
+            recipients.get("tron").map(String::as_str),
+            Some("T111111111111111111111111111111111")
+        );
+        assert_eq!(
+            recipients.get("ethereum").map(String::as_str),
+            Some("0x1111111111111111111111111111111111111111")
+        );
+        assert_eq!(
+            recipients.get("aptos").map(String::as_str),
+            Some("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_and_duplicate_fee_recipients() {
+        assert!(parse_fee_recipients(r#"["ethereum=not-an-address"]"#).is_err());
+        assert!(parse_fee_recipients(
+            r#"["ethereum=0x1111111111111111111111111111111111111111","ethereum=0x1111111111111111111111111111111111111111"]"#
+        )
+        .is_err());
     }
 }
