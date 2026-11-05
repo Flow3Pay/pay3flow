@@ -120,3 +120,19 @@ symbol_remove = "-"
 success_pointer = "/code"
 success_value = "0"
 error_pointer = "/msg"
+
+[adapter.futures]
+kind = "http_json"
+endpoint = "https://www.okx.com/api/v5/market/tickers"
+method = "GET"
+query = { instType = "SWAP" }
+timeout_ms = 10000
+items_pointer = "/data"
+symbol_pointer = "/instId"
+bid_pointer = "/bidPx"
+ask_pointer = "/askPx"
+symbol_suffix_remove = "-SWAP"
+symbol_remove = "-"
+success_pointer = "/code"
+success_value = "0"
+error_pointer = "/msg"

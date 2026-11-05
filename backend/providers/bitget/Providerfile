@@ -82,6 +82,20 @@ success_pointer = "/code"
 success_value = "00000"
 error_pointer = "/msg"
 
+[adapter.futures]
+kind = "http_json"
+endpoint = "https://api.bitget.com/api/v2/mix/market/tickers"
+method = "GET"
+query = { productType = "USDT-FUTURES" }
+timeout_ms = 10000
+items_pointer = "/data"
+symbol_pointer = "/symbol"
+bid_pointer = "/bidPr"
+ask_pointer = "/askPr"
+success_pointer = "/code"
+success_value = "00000"
+error_pointer = "/msg"
+
 [review_code]
 language = "rust"
 source = { path = "reviews.rs" }

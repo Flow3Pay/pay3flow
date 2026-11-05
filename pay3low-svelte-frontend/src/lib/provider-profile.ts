@@ -2,7 +2,7 @@ import { apiUrl } from './api';
 import type { ProviderDefinition } from './exchange';
 
 export type ProfilePeriod = '7d' | '30d' | '90d';
-export type MarketType = 'p2p' | 'spot' | 'swap' | 'exchanger';
+export type MarketType = 'p2p' | 'spot' | 'futures' | 'swap' | 'exchanger';
 export interface ProfileDay { started_at: string; searches: number; top10: number; top1: number }
 export interface ProfileDirection { source_currency: string; target_currency: string; searches: number; top10: number; best_rank: number | null }
 export interface ProviderStatistics {

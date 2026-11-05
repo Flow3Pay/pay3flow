@@ -177,6 +177,9 @@ ORDER BY name, operation, slug
             if adapter.get("market").is_some() {
                 market_types.push("spot".into());
             }
+            if adapter.get("futures").is_some() {
+                market_types.push("futures".into());
+            }
             if exchange_methods.contains(&ProviderExchangeMethod::Exchanger)
                 && !exchange_methods.contains(&ProviderExchangeMethod::P2p)
             {

@@ -119,3 +119,17 @@ ask_pointer = "/ask1Price"
 success_pointer = "/retCode"
 success_value = "0"
 error_pointer = "/retMsg"
+
+[adapter.futures]
+kind = "http_json"
+endpoint = "https://api.bybit.com/v5/market/tickers"
+method = "GET"
+query = { category = "linear" }
+timeout_ms = 10000
+items_pointer = "/result/list"
+symbol_pointer = "/symbol"
+bid_pointer = "/bid1Price"
+ask_pointer = "/ask1Price"
+success_pointer = "/retCode"
+success_value = "0"
+error_pointer = "/retMsg"

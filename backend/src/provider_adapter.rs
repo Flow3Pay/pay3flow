@@ -19,6 +19,7 @@ const REQUEST_PLACEHOLDERS: [&str; 8] = [
 pub struct ProviderAdapters {
     pub p2p: Option<P2pAdapterConfig>,
     pub market: Option<MarketAdapterConfig>,
+    pub futures: Option<MarketAdapterConfig>,
     pub bestchange: Option<BestChangeAdapterConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub papa_change: Option<PapaChangeAdapterConfig>,
@@ -358,6 +359,8 @@ pub struct MarketAdapterConfig {
     pub bid_pointer: String,
     pub ask_pointer: String,
     pub symbol_remove: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol_suffix_remove: Option<String>,
     pub success_pointer: Option<String>,
     pub success_value: Option<String>,
     #[serde(default)]
@@ -369,11 +372,12 @@ impl ProviderAdapters {
     pub fn validate(&self, has_buy: bool, has_sell: bool, context: &str) -> Result<(), String> {
         if self.p2p.is_none()
             && self.market.is_none()
+            && self.futures.is_none()
             && self.bestchange.is_none()
             && self.papa_change.is_none()
         {
             return Err(format!(
-                "{context}: adapter must contain [adapter.p2p], [adapter.market], [adapter.bestchange], or [adapter.papa_change]"
+                "{context}: adapter must contain [adapter.p2p], [adapter.market], [adapter.futures], [adapter.bestchange], or [adapter.papa_change]"
             ));
         }
         if let Some(p2p) = &self.p2p {
@@ -381,6 +385,9 @@ impl ProviderAdapters {
         }
         if let Some(market) = &self.market {
             market.validate(context)?;
+        }
+        if let Some(futures) = &self.futures {
+            futures.validate(context)?;
         }
         if let Some(bestchange) = &self.bestchange {
             bestchange.validate(context)?;

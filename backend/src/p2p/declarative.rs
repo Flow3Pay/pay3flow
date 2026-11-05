@@ -12,6 +12,7 @@ use sha2::Sha512;
 use crate::p2p::service::{
     Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
 };
+use crate::p2p::futures::{FuturesTicker, PerpetualMarketSource};
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::provider_adapter::{
     environment_variable, MarketAdapterConfig, OfferMapping, P2pAdapterConfig, P2pAdapterMarket,
@@ -460,6 +461,20 @@ impl DeclarativeMarketSource {
                 config,
             })
     }
+
+    pub(crate) fn from_futures_record(
+        client: Client,
+        record: &ProviderAdapterRecord,
+    ) -> Option<Self> {
+        let config = record.config.as_ref()?.futures.clone()?;
+        record
+            .supports(ProviderExchangeMethod::Exchanger)
+            .then(|| Self {
+                client,
+                slug: record.slug.clone(),
+                config,
+            })
+    }
 }
 
 #[async_trait]
@@ -546,6 +561,9 @@ impl DeclarativeMarketSource {
             .filter_map(|item| {
                 let mut symbol =
                     required_string(item, &self.config.symbol_pointer, "symbol").ok()?;
+                if let Some(suffix) = &self.config.symbol_suffix_remove {
+                    symbol = symbol.strip_suffix(suffix).unwrap_or(&symbol).to_owned();
+                }
                 if let Some(remove) = &self.config.symbol_remove {
                     symbol = symbol.replace(remove, "");
                 }
@@ -567,6 +585,30 @@ impl DeclarativeMarketSource {
             })
             .collect::<Vec<_>>();
         Ok(tickers)
+    }
+}
+
+#[async_trait]
+impl PerpetualMarketSource for DeclarativeMarketSource {
+    fn name(&self) -> &str {
+        &self.slug
+    }
+
+    fn timeout(&self, _default: Duration) -> Duration {
+        Duration::from_millis(self.config.timeout_ms)
+    }
+
+    async fn tickers(&self) -> Result<Vec<FuturesTicker>> {
+        self.fetch_tickers("").await.map(|tickers| {
+            tickers
+                .into_iter()
+                .map(|ticker| FuturesTicker {
+                    symbol: ticker.symbol,
+                    bid: ticker.bid,
+                    ask: ticker.ask,
+                })
+                .collect()
+        })
     }
 }
 

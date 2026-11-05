@@ -117,6 +117,15 @@ symbol_pointer = "/symbol"
 bid_pointer = "/bidPrice"
 ask_pointer = "/askPrice"
 
+[adapter.futures]
+kind = "http_json"
+endpoint = "https://fapi.binance.com/fapi/v1/ticker/bookTicker"
+method = "GET"
+timeout_ms = 10000
+symbol_pointer = "/symbol"
+bid_pointer = "/bidPrice"
+ask_pointer = "/askPrice"
+
 [review_code]
 language = "rust"
 source = { path = "reviews.rs" }

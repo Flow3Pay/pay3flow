@@ -158,6 +158,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/market-values", post(market_prices::market_values))
         .route("/api/p2p/search", get(p2p::search))
+        .route("/api/p2p/futures", get(p2p::futures))
         .route("/api/p2p/routes", get(p2p::routes))
         .route("/api/p2p/discovery", get(super::discovery::search))
         .route("/ws/p2p/discovery", get(super::discovery::socket))

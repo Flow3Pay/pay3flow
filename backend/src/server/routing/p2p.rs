@@ -14,8 +14,8 @@ use uuid::Uuid;
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::p2p::{
-    ExchangeMode, P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, P2pSearchQuery,
-    P2pSearchResponse,
+    ExchangeMode, FuturesSearchQuery, FuturesSearchResponse, P2pRoute, P2pRouteSearchQuery,
+    P2pRouteSearchResponse, P2pSearchQuery, P2pSearchResponse,
 };
 use crate::route_engine::canonical_network_id;
 use crate::service_reputation::{
@@ -109,6 +109,19 @@ pub async fn search(
     state
         .p2p
         .search(query)
+        .await
+        .map(Json)
+        .map_err(|error| AppError::BadRequest(error.to_string()))
+}
+
+/// Read-only comparison of public USDT-settled perpetual contract books.
+pub async fn futures(
+    State(state): State<AppState>,
+    Query(query): Query<FuturesSearchQuery>,
+) -> Result<Json<FuturesSearchResponse>, AppError> {
+    state
+        .p2p
+        .search_futures(query)
         .await
         .map(Json)
         .map_err(|error| AppError::BadRequest(error.to_string()))

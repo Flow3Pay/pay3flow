@@ -1,5 +1,6 @@
 mod declarative;
 pub(crate) mod discovery;
+mod futures;
 mod latency;
 mod models;
 mod routes;
@@ -9,6 +10,7 @@ mod r#virtual;
 mod workflow;
 
 pub use crate::compiled_provider_code::id_pay::IdPayRouteProvider;
+pub use futures::{FuturesOpportunity, FuturesSearchQuery, FuturesSearchResponse};
 pub use models::{
     Advertiser, FiatRouteQuote, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSide, SourceStatus,
 };

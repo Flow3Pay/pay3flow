@@ -739,6 +739,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/p2p/futures",
+        "get",
+        "Search perpetual spreads",
+        "Compare public USDT-settled perpetual best bid/ask quotes across configured venues. Gross spread estimates exclude fees, funding, slippage and margin requirements.",
+        "Routing",
+        false,
+        false,
+    ),
+    (
         "/api/p2p/routes",
         "get",
         "List routes",

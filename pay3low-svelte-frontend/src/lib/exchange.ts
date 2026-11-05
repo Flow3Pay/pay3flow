@@ -41,7 +41,7 @@ export interface ProviderDefinition {
   currency_exceptions: string[];
   banks: string[];
   exchange_methods: Array<"p2p" | "exchanger">;
-  market_types?: Array<"p2p" | "spot" | "swap" | "exchanger">;
+  market_types?: Array<"p2p" | "spot" | "futures" | "swap" | "exchanger">;
   fee_model?: ProviderFeeModel | null;
   guidance?: ProviderGuidance | null;
   searchable: boolean;

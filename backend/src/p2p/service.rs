@@ -23,6 +23,9 @@ use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
 use crate::p2p::latency::ServiceLatencyTracker;
+use crate::p2p::futures::{
+    compose_opportunities, FuturesSearchQuery, FuturesSearchResponse, PerpetualMarketSource,
+};
 pub(crate) use crate::p2p::models::P2pOfferMarket;
 pub(crate) use crate::p2p::models::{
     Advertiser, FiatRouteQuote, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSide, SourceStatus,
@@ -349,6 +352,7 @@ pub struct P2pSearchService {
     sources: Arc<[Arc<dyn P2pSource>]>,
     payment_method_aliases: Arc<HashMap<String, BTreeMap<String, Vec<String>>>>,
     market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
+    futures_market_sources: Arc<[Arc<dyn PerpetualMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
     pub(crate) fiat_intermediaries: Arc<[String]>,
     pub(crate) networks: NetworkCatalog,
@@ -680,6 +684,7 @@ impl P2pSearchService {
             .context("failed to build P2P HTTP client")?;
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
         let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
+        let mut futures_market_sources: Vec<Arc<dyn PerpetualMarketSource>> = Vec::new();
         let payment_method_aliases = records
             .iter()
             .filter_map(|record| {
@@ -703,6 +708,11 @@ impl P2pSearchService {
             }
             if let Some(source) = DeclarativeMarketSource::from_record(client.clone(), record) {
                 market_sources.push(Arc::new(source));
+            }
+            if let Some(source) =
+                DeclarativeMarketSource::from_futures_record(client.clone(), record)
+            {
+                futures_market_sources.push(Arc::new(source));
             }
             if let Some(source) = WorkflowP2pSource::from_record(
                 record,
@@ -747,6 +757,7 @@ impl P2pSearchService {
             sources: sources.into(),
             payment_method_aliases: Arc::new(payment_method_aliases),
             market_sources: market_sources.into(),
+            futures_market_sources: futures_market_sources.into(),
             default_assets: default_assets.into(),
             fiat_intermediaries: fiat_intermediaries.into(),
             networks,
@@ -780,6 +791,7 @@ impl P2pSearchService {
             sources: sources.into(),
             payment_method_aliases: Arc::new(HashMap::new()),
             market_sources: Vec::new().into(),
+            futures_market_sources: Vec::new().into(),
             default_assets: vec![
                 "USDT".into(),
                 "USDC".into(),
@@ -1571,6 +1583,75 @@ impl P2pSearchService {
                     .iter()
                     .any(|status| status.source == source.name() && status.ok)
             })
+    }
+
+    pub async fn search_futures(
+        &self,
+        mut query: FuturesSearchQuery,
+    ) -> Result<FuturesSearchResponse> {
+        query.asset = query.asset.trim().to_ascii_uppercase();
+        if !(2..=12).contains(&query.asset.len())
+            || !query
+                .asset
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric())
+            || query.asset == "USDT"
+        {
+            bail!("asset must be a supported crypto symbol other than USDT");
+        }
+        if !query.notional_usdt.is_finite()
+            || !(0.01..=100_000_000.0).contains(&query.notional_usdt)
+        {
+            bail!("notional_usdt must be between 0.01 and 100000000");
+        }
+        query.sources = normalize_sources(query.sources)?;
+        let started = Instant::now();
+        let mut searches = self
+            .futures_market_sources
+            .iter()
+            .filter(|source| {
+                query.sources.as_deref().is_none_or(|requested| {
+                    requested.split(',').any(|name| name == source.name())
+                })
+            })
+            .cloned()
+            .map(|source| async move {
+                let name = source.name().to_owned();
+                let result = tokio::time::timeout(source.timeout(self.timeout), source.tickers())
+                    .await
+                    .map_err(|_| anyhow::anyhow!("{name} perpetual ticker request timed out"))
+                    .and_then(|result| result);
+                (name, result)
+            })
+            .collect::<FuturesUnordered<_>>();
+        let mut markets = Vec::new();
+        let mut statuses = Vec::new();
+        while let Some((source, result)) = searches.next().await {
+            statuses.push(SourceStatus {
+                source: source.clone(),
+                ok: result.is_ok(),
+                cached: false,
+                latency_ms: started.elapsed().as_millis(),
+                offers_found: result.as_ref().map(Vec::len).unwrap_or(0),
+                error: result.as_ref().err().map(ToString::to_string),
+            });
+            if let Ok(tickers) = result {
+                markets.push((source, tickers));
+            }
+        }
+        statuses.sort_by(|left, right| left.source.cmp(&right.source));
+        let opportunities = compose_opportunities(&query.asset, query.notional_usdt, &markets);
+        Ok(FuturesSearchResponse {
+            asset: query.asset,
+            notional_usdt: query.notional_usdt,
+            searched_at: Utc::now(),
+            opportunities,
+            sources: statuses,
+            warnings: vec![
+                "Estimated cross-exchange USDT-perpetual spread only; trading fees, funding, slippage, liquidation risk, margin requirements and position sizing are not included.".into(),
+                "This is not an executable or guaranteed arbitrage route. Verify contract specifications, available liquidity and prices on both venues before acting.".into(),
+            ],
+        })
     }
 
     pub(crate) async fn stream_market_tickers(
