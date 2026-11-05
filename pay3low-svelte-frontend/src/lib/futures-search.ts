@@ -1,3 +1,6 @@
+/*
+Futures search draft paused by product decision; preserve this API client for
+when the feature is resumed.
 import { apiUrl } from "./api";
 
 export interface FuturesOpportunity {
@@ -42,3 +45,4 @@ export async function searchFutures(
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }
+*/

@@ -1,3 +1,7 @@
+<!--
+Futures page draft paused by product decision. The route redirects to SWAP from
+the server load in `+page.server.ts`. Preserve this implementation for a future
+approved release.
 <script lang="ts">
   import { onDestroy } from "svelte";
   import Header from "$lib/components/Header.svelte";
@@ -248,3 +252,4 @@
   @media (max-width: 940px) { .searchPanel { grid-template-columns: 1fr 1fr; }.searchPanel fieldset { grid-column: 1 / -1; }.submit { grid-column: 1 / -1; } }
   @media (max-width: 560px) { .futuresPage { margin-top: 30px; }.searchPanel { grid-template-columns: 1fr; padding: 15px; }.searchPanel fieldset, .submit { grid-column: auto; }.venues { display: grid; grid-template-columns: 1fr 1fr; }.resultsHeading { align-items: start; }.tableWrap { margin-right: calc(-1 * var(--page-gutter)); border-right: 0; border-radius: 10px 0 0 10px; }th, td { padding: 12px; font-size: 10px; } }
 </style>
+-->

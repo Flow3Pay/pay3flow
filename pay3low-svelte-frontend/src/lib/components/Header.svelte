@@ -183,7 +183,11 @@
       {/if}
     </div>
     <a class="brand" href={swapHref} aria-label="Pay3Flow"><img class="logo" src="/icons/assets/pay3flow-mark.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></a>
-    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><ScrambleLink href={swapHref} label="SWAP" active={activePage === "swap"} current={activePage === "swap" ? "page" : undefined} /><ScrambleLink href="/futures" label={activeLocale === "ru" ? "ФЬЮЧЕРСЫ" : activeLocale === "hy" ? "ՖՅՈՒՉԵՐՍՆԵՐ" : "FUTURES"} active={activePage === "futures"} current={activePage === "futures" ? "page" : undefined} /><ScrambleLink href={otcHref} label="OTC" active={activePage === "otc"} current={activePage === "otc" ? "page" : undefined} onNavigate={onOtcNavigate} /><ScrambleLink href="/trends" label={t("TRENDS", {}, activeLocale)} active={activePage === "trends"} current={activePage === "trends" ? "page" : undefined} /><ScrambleLink href="/providers" label={t("Platforms", {}, activeLocale).toLocaleUpperCase(activeLocale)} active={activePage === "providers"} current={activePage === "providers" ? "page" : undefined} /></nav>
+    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><ScrambleLink href={swapHref} label="SWAP" active={activePage === "swap"} current={activePage === "swap" ? "page" : undefined} />
+      <!-- Futures navigation paused by product decision; retain draft link for later.
+      <ScrambleLink href="/futures" label={activeLocale === "ru" ? "ФЬЮЧЕРСЫ" : activeLocale === "hy" ? "ՖՅՈՒՉԵՐՍՆԵՐ" : "FUTURES"} active={activePage === "futures"} current={activePage === "futures" ? "page" : undefined} />
+      -->
+      <ScrambleLink href={otcHref} label="OTC" active={activePage === "otc"} current={activePage === "otc" ? "page" : undefined} onNavigate={onOtcNavigate} /><ScrambleLink href="/trends" label={t("TRENDS", {}, activeLocale)} active={activePage === "trends"} current={activePage === "trends" ? "page" : undefined} /><ScrambleLink href="/providers" label={t("Platforms", {}, activeLocale).toLocaleUpperCase(activeLocale)} active={activePage === "providers"} current={activePage === "providers" ? "page" : undefined} /></nav>
     <div class="utilityActions">
       <WalletMenu />
       <div class="languageWrap" bind:this={languageWrap} on:focusout={languageFocus}>

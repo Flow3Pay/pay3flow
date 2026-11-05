@@ -18,6 +18,8 @@
   import { canOpenSwap } from "$lib/swap-embed";
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { recordTrendSearch } from "$lib/trends/activity";
+  // Futures are paused by product decision; keep this import for the resumed integration.
+  // import { searchFutures, type FuturesOpportunity } from "$lib/futures-search";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import type { ExchangeShareState } from "$lib/exchange-share";
@@ -145,6 +147,14 @@
   let activityModalOpen = false;
   let venueListOpen = false;
   let selectedVenueId: string | null = null;
+  /*
+  Futures integration paused; keep the draft state for later:
+  let futuresOpportunities: FuturesOpportunity[] = [];
+  let futuresLoading = false;
+  let futuresError = "";
+  let futuresController: AbortController | null = null;
+  let futuresRequestId = 0;
+  */
   let activityExpanded = false;
   let activityRevealElement: HTMLDivElement | undefined;
   let routesRevealElement: HTMLDivElement | undefined;
@@ -933,6 +943,58 @@
     }
   }
 
+  /*
+  Futures integration paused; resume this after product approval.
+  async function searchFuturesForSwap(response: P2pRouteSearchResponse) {
+    futuresController?.abort();
+    const request = ++futuresRequestId;
+    futuresOpportunities = [];
+    futuresError = "";
+    const responseTargetAmount = mapRoutes(response).find(
+      (route) => route.status === "complete" && route.target_currency === selectedTargetCurrency,
+    )?.target_amount;
+
+    const side = [
+      sourceMethod?.kind === "wallet"
+        ? { currency: selectedSourceCurrency, amount: amountNumber(amount) }
+        : null,
+      targetMethod?.kind === "wallet"
+        ? {
+            currency: selectedTargetCurrency,
+            amount: amountSide === "target"
+              ? amountNumber(targetAmount)
+              : Number(responseTargetAmount ?? 0),
+          }
+        : null,
+    ].find((candidate) =>
+      candidate
+      && CRYPTO_CURRENCIES.has(candidate.currency.toUpperCase())
+      && candidate.currency.toUpperCase() !== "USDT",
+    );
+    if (!side) return;
+
+    const price = marketPrices[side.currency.toUpperCase()]
+      ?? (["USDC", "DAI", "FDUSD"].includes(side.currency.toUpperCase()) ? 1 : undefined);
+    const notionalUsdt = side.amount * (price ?? 0);
+    if (!Number.isFinite(notionalUsdt) || notionalUsdt < 0.01 || notionalUsdt > 100_000_000) return;
+
+    const activeController = new AbortController();
+    futuresController = activeController;
+    futuresLoading = true;
+    try {
+      const response = await searchFutures(side.currency, notionalUsdt, [], activeController.signal);
+      if (activeController.signal.aborted || request !== futuresRequestId) return;
+      futuresOpportunities = response.opportunities;
+    } catch (cause) {
+      if (!activeController.signal.aborted && request === futuresRequestId) {
+        futuresError = cause instanceof Error ? cause.message : "Could not load futures quotes";
+      }
+    } finally {
+      if (request === futuresRequestId) futuresLoading = false;
+    }
+  }
+  */
+
   async function startSearch(countActivity = true) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
@@ -1014,6 +1076,7 @@
       }
       if (!rerunForTargetAmount) {
         applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
+        // void searchFuturesForSwap(response); // Paused until futures are approved for SWAP.
         if (guideRequested && pendingGuide) {
           const path = pendingGuide.params.get("path");
           const fresh = mapRoutes(response).find(item => item.status === "complete" && item.source_currency === pendingGuide!.sourceCurrency && item.target_currency === pendingGuide!.targetCurrency && (!path || guideRoutePath(item) === path));
@@ -1187,6 +1250,7 @@
   });
   onDestroy(() => {
     controller?.abort();
+    // futuresController?.abort(); // Paused until futures are approved for SWAP.
     activityController?.abort();
     marketController?.abort();
     cancelRouteRendering();

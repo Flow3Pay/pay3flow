@@ -12,12 +12,30 @@ const supportedLocales: Locale[] = ["en", "ru", "hy"];
 const messages: Record<Locale, Record<string, string>> = {
   en: {
     ...walletMessages.en,
+    /* Futures feature paused.
+    "Perpetual futures spread": "Perpetual futures spread",
+    "Estimated gross profit": "Estimated gross profit",
+    "Long on {venue}": "Long on {venue}",
+    "Short on {venue}": "Short on {venue}",
+    "Gross estimate excludes fees, funding, slippage and liquidation risk.": "Gross estimate excludes fees, funding, slippage and liquidation risk.",
+    "Comparing perpetual futures quotes…": "Comparing perpetual futures quotes…",
+    "Futures quotes are temporarily unavailable.": "Futures quotes are temporarily unavailable.",
+    */
     "Whitebird sell": "Sell",
     "Whitebird receive": "Receive",
     "Whitebird exchange": "Exchange",
     "Whitebird verification required": "Exchange is available to verified users",
   },
   ru: {
+    /* Futures feature paused.
+    "Perpetual futures spread": "Спред фьючерсов",
+    "Estimated gross profit": "Оценка валовой прибыли",
+    "Long on {venue}": "Лонг на {venue}",
+    "Short on {venue}": "Шорт на {venue}",
+    "Gross estimate excludes fees, funding, slippage and liquidation risk.": "Оценка без учёта комиссий, финансирования, проскальзывания и риска ликвидации.",
+    "Comparing perpetual futures quotes…": "Сравниваем котировки фьючерсов…",
+    "Futures quotes are temporarily unavailable.": "Котировки фьючерсов временно недоступны.",
+    */
     "Reference rate": "Справочный курс",
     "Route median": "Медиана маршрутов",
     "{count} samples": "Котировок: {count}",
@@ -588,6 +606,15 @@ const messages: Record<Locale, Record<string, string>> = {
     "Approval confirmed. Review and sign the refreshed swap transaction.": "Разрешение подтверждено. Проверьте и подпишите обновлённую транзакцию обмена.",
   },
   hy: {
+    /* Futures feature paused.
+    "Perpetual futures spread": "Ֆյուչերսների սպրեդ",
+    "Estimated gross profit": "Համախառն շահույթի գնահատում",
+    "Long on {venue}": "Լոնգ՝ {venue}-ում",
+    "Short on {venue}": "Շորթ՝ {venue}-ում",
+    "Gross estimate excludes fees, funding, slippage and liquidation risk.": "Գնահատումը չի ներառում վճարները, ֆանդինգը, սահքը և լիկվիդացման ռիսկը։",
+    "Comparing perpetual futures quotes…": "Համեմատում ենք ֆյուչերսների գնանշումները…",
+    "Futures quotes are temporarily unavailable.": "Ֆյուչերսների գնանշումները ժամանակավորապես անհասանելի են։",
+    */
     "Reference rate": "Տեղեկատու փոխարժեք",
     "Route median": "Երթուղիների մեդիանա",
     "{count} samples": "Գնանշումներ՝ {count}",

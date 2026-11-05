@@ -3,6 +3,8 @@
   import { quintOut } from "svelte/easing";
   import { fly } from "svelte/transition";
   import type { RouteCandidate, ServiceVote } from "$lib/exchange";
+  // Futures are paused; retain this type for the resumed result cards.
+  // import type { FuturesOpportunity } from "$lib/futures-search";
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
   import { assetIcon, dislikeIcon, likeIcon, venueIcon, warningIcon } from "$lib/icons";
   import WorkflowControl from "$lib/components/WorkflowControl.svelte";
@@ -13,6 +15,12 @@
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
+  /*
+  Futures integration paused; keep these props for later:
+  export let futuresOpportunities: FuturesOpportunity[] = [];
+  export let futuresLoading = false;
+  export let futuresError = "";
+  */
   export let sourceCurrency = "";
   export let targetCurrency = "";
   export let selectedRouteId: string | null;
@@ -167,6 +175,52 @@
               </div>
             </div></li>
           {/each}
+          <!-- Futures result cards paused by product decision; retain draft markup for later.
+          {#each futuresOpportunities as opportunity, index (`${opportunity.contract}-${opportunity.long_venue}-${opportunity.short_venue}`)}
+            <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}>
+              <div class="routeCardShell">
+                <article class="routeCard futuresCard" data-testid="futures-opportunity">
+                  <div class="routeCardMain">
+                    <span class="routeTopline">
+                      <span class="routeRank">#{String(routes.length + index + 1).padStart(2, "0")}</span>
+                      <span class="routeBadges">
+                        <span class="bestBadge">{t("Perpetual futures spread", {}, $locale)}</span>
+                        <span class="deltaBadge">+{(opportunity.spread_bps / 100).toFixed(3)}%</span>
+                      </span>
+                    </span>
+                    <span class="routeAmount">{opportunity.contract} · {t("Estimated gross profit", {}, $locale)} +{opportunity.estimated_gross_profit_usdt.toLocaleString($locale === "ru" ? "ru-RU" : $locale === "hy" ? "hy-AM" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>
+                  </div>
+                  <div class="routeActionRow futuresActionRow">
+                    <div class="workflow">
+                      <span class="workflowPart">
+                        {#if opportunity.long_url}
+                          <a href={opportunity.long_url} target="_blank" rel="noopener noreferrer"><img src={venueIcon(opportunity.long_venue)} alt="" width="20" height="20" />{t("Long on {venue}", { venue: venueName(opportunity.long_venue) }, $locale)} · Ask {opportunity.long_ask.toLocaleString("en-US", { maximumFractionDigits: 8 })}</a>
+                        {:else}
+                          <span><img src={venueIcon(opportunity.long_venue)} alt="" width="20" height="20" />{t("Long on {venue}", { venue: venueName(opportunity.long_venue) }, $locale)} · Ask {opportunity.long_ask.toLocaleString("en-US", { maximumFractionDigits: 8 })}</span>
+                        {/if}
+                      </span>
+                      <span class="workflowArrow" aria-hidden="true">→</span>
+                      <span class="workflowPart">
+                        {#if opportunity.short_url}
+                          <a href={opportunity.short_url} target="_blank" rel="noopener noreferrer"><img src={venueIcon(opportunity.short_venue)} alt="" width="20" height="20" />{t("Short on {venue}", { venue: venueName(opportunity.short_venue) }, $locale)} · Bid {opportunity.short_bid.toLocaleString("en-US", { maximumFractionDigits: 8 })}</a>
+                        {:else}
+                          <span><img src={venueIcon(opportunity.short_venue)} alt="" width="20" height="20" />{t("Short on {venue}", { venue: venueName(opportunity.short_venue) }, $locale)} · Bid {opportunity.short_bid.toLocaleString("en-US", { maximumFractionDigits: 8 })}</span>
+                        {/if}
+                      </span>
+                    </div>
+                  </div>
+                  <small class="routeQuoteMeta">{t("Gross estimate excludes fees, funding, slippage and liquidation risk.", {}, $locale)}</small>
+                </article>
+              </div>
+            </li>
+          {/each}
+          {#if futuresLoading}
+            <li aria-live="polite"><div class="routeCard futuresCard" data-testid="futures-searching">{t("Comparing perpetual futures quotes…", {}, $locale)}</div></li>
+          {/if}
+          {#if futuresError}
+            <li><div class="routeCard futuresCard futuresError" role="status">{t("Futures quotes are temporarily unavailable.", {}, $locale)}</div></li>
+          {/if}
+          -->
         </ul>
         {#if selectedVenueId && visibleRoutes.length === 0}<p class="venueFilterEmpty">No ranked routes from {selectedVenueName} for this amount and payment method.</p>{/if}
       </div>
@@ -198,6 +252,33 @@
 </aside>
 
 <style>
+/* Futures result styling paused with the result cards.
+.futuresCard .workflowPart :global(a),
+.futuresCard .workflowPart > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+}
+
+.futuresCard .workflowPart :global(a:hover) {
+  color: var(--color-accent-text);
+}
+
+.futuresCard .workflowPart img {
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.futuresActionRow .workflow {
+  align-items: center;
+}
+
+.futuresError {
+  color: var(--color-danger, #c44);
+}
+*/
+
 .side {
   position: relative;
   z-index: 20;
