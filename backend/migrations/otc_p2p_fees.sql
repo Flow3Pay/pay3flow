@@ -1,6 +1,5 @@
--- One service fee per completed peer-to-peer deal. Both on-chain legs stay
--- gross; the fee is accrued here and collected separately, never deducted
--- from a signed transfer.
+-- One service fee per peer-to-peer deal. The stablecoin leg pays net to the
+-- seller; the fee is collected separately to the configured destination.
 CREATE TABLE IF NOT EXISTS otc_p2p_fees (
  id UUID PRIMARY KEY,
  trade_id UUID NOT NULL REFERENCES otc_p2p_trades(id),

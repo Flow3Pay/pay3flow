@@ -24,6 +24,7 @@ interface Instructions {
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
   call?: { family: string; chain_id?: number; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
   source_asset?: string; source_asset_id?: string; source_network?: string; source_decimals?: number;
+  fee_source_asset?: string; fee_source_asset_id?: string; fee_source_address?: string;
   source_amount?: string; source_address?: string; token_contract?: string; destination_asset?: string;
   destination_decimals?: number; recipient?: string; refund_to?: string; expected_output?: string;
   minimum_output?: string; deposit_address?: string; deposit_memo?: string; quote_expires_at?: string;

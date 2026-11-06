@@ -200,7 +200,7 @@ fn parse_fee_recipients(raw: &str) -> anyhow::Result<BTreeMap<String, String>> {
         let (network, address) = entry
             .split_once('=')
             .ok_or_else(|| anyhow::anyhow!("fee recipient must use network=address format"))?;
-        let network = network.trim().to_ascii_lowercase();
+        let network = crate::route_engine::canonical_network_id(network.trim());
         let address = address.trim();
         if !valid_fee_recipient(&network, address) {
             anyhow::bail!("invalid OTC fee recipient for network {network}");
@@ -219,6 +219,7 @@ fn valid_fee_recipient(network: &str, address: &str) -> bool {
     let evm = matches!(
         network,
         "ethereum"
+            | "gnosis"
             | "avalanche-c"
             | "polygon-pos"
             | "bnb-smart-chain"
@@ -414,10 +415,11 @@ mod config_tests {
             "bnb-smart-chain=0x1111111111111111111111111111111111111111",
             "arbitrum-one=0x1111111111111111111111111111111111111111",
             "base=0x1111111111111111111111111111111111111111",
+            "gnosis=0x1111111111111111111111111111111111111111",
             "aptos=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ]"#;
         let recipients = parse_fee_recipients(entries).unwrap();
-        assert_eq!(recipients.len(), 13);
+        assert_eq!(recipients.len(), 14);
         assert_eq!(
             recipients.get("tron").map(String::as_str),
             Some("T111111111111111111111111111111111")
@@ -439,6 +441,13 @@ mod config_tests {
             r#"["ethereum=0x1111111111111111111111111111111111111111","ethereum=0x1111111111111111111111111111111111111111"]"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn canonicalizes_fee_recipient_network_aliases() {
+        let recipients =
+            parse_fee_recipients(r#"["eth=0x1111111111111111111111111111111111111111"]"#).unwrap();
+        assert!(recipients.contains_key("ethereum"));
     }
 
     #[test]

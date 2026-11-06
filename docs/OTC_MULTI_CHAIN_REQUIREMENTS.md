@@ -157,15 +157,26 @@ identifies a network.
 - The OTC transaction fee is charged/denominated in **USDT**. The conversation
   explicitly settled the fee currency as USDT, including the intent to
   consolidate transaction value into USDT.
+- For a USDC-denominated offer, the currently agreed calculation uses nominal
+  parity (1 USDC = 1 USDT) rather than a live conversion quote. The immutable
+  fee policy records this assumption; it is not an assertion that the market
+  price is exactly equal.
 - Do not charge the fee in the user's source token merely because that is the
   token or network used to fund a cross-chain route. If a route is funded with
   USDC or another supported asset, fee accounting and collection still need to
   resolve to USDT.
-- The conversation did not settle whether the fee is charged to the sender
-  only or split between both counterparties, nor exactly when it is collected
-  (before routing, from the received amount, or after settlement). Keep payer,
-  calculation basis, and collection stage as explicit policy decisions rather
-  than inferring them from the fee currency.
+- The P2P fee policy names the stablecoin sender as payer and accrues the USDT
+  obligation after the stablecoin payment is verified. The seller's principal
+  payout is `gross - fee`; the fee payer separately signs a transfer of the
+  exact fee to the configured recipient in the selected receiving network.
+  Ethereum USDT uses a direct transfer when the payment source is already
+  Ethereum USDT; other supported source/destination combinations use an
+  exact-output route. The fee is marked collected only after the backend
+  verifies the exact destination amount, and EVER payout stays blocked until
+  then.
+- A routed fee is a separate wallet-approved transaction. Its source amount
+  and route fee are shown before signing; route costs are not counted as service
+  fee or silently added to the service-fee amount.
 - Show the USDT-denominated fee and its calculation/collection effect in the
   quote and immutable trade terms before the user commits.
 - Fee destinations were supplied for TRON, NEAR, Bitcoin, Ethereum, Solana,
@@ -173,16 +184,15 @@ identifies a network.
   Base, and Aptos. The address values belong in the deployment environment,
   not in this requirements document or tests.
 
-- These are recorded as operator-provided destinations, not yet validated or
-  configured for automatic fee transfers. An address alone does not establish
-  that the required USDT asset exists on that network or that a transfer,
-  conversion, or NEAR Intents route is available. In particular, the Bitcoin
-  address is not itself a USDT receiving address; do not collect a USDT fee
-  there unless an explicit supported conversion and payout flow is designed.
-- Validate the chain/address pair and confirm asset/route support before
-  enabling fee collection. Keep these operational destinations in deployment
-  environment configuration, not hard-coded into frontend code or public
-  application defaults.
+- Fee destinations are enabled only when the configured chain/address pair is
+  valid, six-decimal USDT exists in the provider catalog, and the required
+  payment and fee routes are available. An address alone is not sufficient.
+  Networks without an executable wallet path or a routable USDT token are
+  excluded even if an address is configured. In particular, the configured
+  Bitcoin address is not itself a USDT receiving address and Bitcoin is not
+  currently an OTC settlement destination.
+- Keep operational fee destinations in environment configuration, not
+  hard-coded into frontend code or public application defaults.
 
 ## Frontend and wallet requirements
 
@@ -251,10 +261,10 @@ provider branding.
 Implemented so far:
 
 - The P2P taker can select a source token/network from the live provider token
-  catalog, enter a source amount, and review quote output, expiry, deposit
-  address, and memo before wallet submission. The source stablecoin may differ
-  from the deal stablecoin, enabling a USDC-to-USDT or USDT-to-USDC principal
-  conversion through the route.
+  catalog and review the calculated source amount, exact net quote output,
+  expiry, deposit address, and memo before wallet submission. The source
+  stablecoin may differ from the deal stablecoin, enabling a USDC-to-USDT or
+  USDT-to-USDC principal conversion through the route.
 - The backend validates the selected source asset against its exact catalog
   asset ID and the selected OTC stablecoin. Quote creation binds exact source
   and destination asset IDs to avoid resolving duplicate tickers to a different
@@ -266,23 +276,33 @@ Implemented so far:
   user response.
 - OTC attempt instructions persist the source/destination asset identity and
   quote/deposit information. Provider status polling advances the trade only
-  when the reported output amount exactly matches the deal amount; a confirmed
-  refund releases the attempt for retry.
+  when the reported output amount exactly matches the required net amount; a
+  confirmed refund releases the attempt for retry. Exact-output quote creation
+  is covered by a mocked provider test that checks the requested output and
+  decodes the calculated source amount.
 - For identical Ethereum source and destination assets, the ordinary direct
   payment path is used without a provider quote, and only when the exact
   catalog asset IDs match. Direct payment on identical non-Ethereum networks
   is not implemented yet.
-- The recorded fee policy is denominated in USDT. This does not yet implement
-  conversion/collection of a USDT fee when the trade settles in USDC or when a
-  source route uses another token. The added cross-stablecoin payment route
-  converts the deal principal; it does not collect the service fee.
+- The recorded fee policy is denominated in USDT. For USDC offers, the fee
+  amount is calculated using nominal 1:1 USDC/USDT parity. The stablecoin leg
+  sends only the net principal to the seller; the separate fee leg sends the
+  exact USDT fee to the configured destination. Fee accrual starts after
+  payment verification, and the seller's EVER payout is gated on verified fee
+  collection.
+- Destination choices are filtered by the configured fee address, wallet
+  executor support, a six-decimal USDT token, and available payment/fee routes.
+  Ethereum, supported EVM networks, NEAR, and TRON are the wallet-executable
+  network families; a configured address for Bitcoin, Solana, Sei, TON, or
+  Aptos does not make those networks OTC-enabled.
 
 Still incomplete and not to be presented as supported:
 
-- Sell offers can choose a stablecoin receiving network from the supported
-  provider catalog; buy offers still receive stablecoins on Ethereum. The
-  selected sell-offer network and exact asset ID are bound into accepted deal
-  terms and used as the cross-network quote destination.
+- Sell offers choose a stablecoin receiving network from the routable provider
+  catalog. When accepting a buy offer, the counterparty chooses a supported
+  stablecoin receiving network and supplies its address; the backend validates
+  the exact token identity and that Ethereum can route to it. Those immutable
+  deal terms drive the cross-network quote destination.
 - Wallet-executable source networks are limited to the supported EVM, NEAR,
   and TRON paths. In particular, address validation alone does not provide
   signing/submission support for Solana, Sei, Sui, TON, or Aptos. The catalog
@@ -290,14 +310,15 @@ Still incomplete and not to be presented as supported:
 - Memo handling is currently accepted only for NEAR source transfers; other
   memo/tag-dependent source networks must remain unavailable until their
   wallet executors support the required instruction.
-- Cross-network quote output is constrained to exact deal-value equality.
-  Status handling has focused unit coverage for exact output, missing or
-  mismatched output, pending/unknown states, and refunds. The provider's
-  amount-unit encoding still needs authoritative confirmation.
-- Fee conversion and actual collection, buy-offer destination-network choice,
-  and complete cross-network payout/refund handling remain outstanding. The
-  offer preview labels the 3% amount as indicative for USDC offers because no
-  live USDC/USDT conversion is yet applied.
+- Direct same-network settlement outside Ethereum is still unsupported; those
+  cases must not be presented as working direct transfers. Cross-network
+  principal and fee routes use exact-output quotes and status verification;
+  transaction-level real-network testing remains a separate validation task.
+- Fee-routing availability is amount-dependent: a quote can still fail after
+  the catalog shows a route, for example if the provider applies a minimum
+  amount. The UI surfaces that failure and does not permit seller payout until
+  the exact fee output is verified. The 3% USDT fee on USDC offers uses the
+  explicitly agreed nominal 1:1 calculation, not a live USDC/USDT conversion.
 
 The worktree changes are not a finished production multi-chain feature.
 Networks must not be exposed as supported unless their complete wallet,
@@ -311,13 +332,13 @@ settlement, status, and refund paths are implemented.
   its transfer requires a memo/tag.
 - Which requested wallets can be supported by existing dependencies and which
   require new, maintained wallet SDKs.
-- Whether provider-reported output amounts are atomic units or decimal token
-  amounts for every supported status response.
+- Production verification of provider-reported output amounts and exact-output
+  behavior across every enabled token/network pair.
 - How destination network/address terms can be added to offers and persisted
   immutably without weakening account or trade authorization.
 - Whether the supported source-wallet executors safely support memo/tag
   requirements and refunds for each catalog network.
-- How USDT-denominated fees are converted and collected for USDC and
-  cross-network settlement, including supported fee destinations.
+- Which configured fee destinations have a live USDT token and reliable
+  exact-output route at the smallest applicable fee amount.
 - What “confidential swap” is intended to mean technically; until specified,
   no privacy promise is in scope.

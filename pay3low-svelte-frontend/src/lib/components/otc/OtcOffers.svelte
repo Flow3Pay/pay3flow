@@ -225,8 +225,8 @@
   }
   onMount(() => {
     mounted = true;
-    void request<{ assets: typeof stablecoinAssets }>("/p2p/assets")
-      .then(result => { stablecoinAssets = result.assets || []; })
+    void request<{ destination_assets: typeof stablecoinAssets }>("/p2p/assets")
+      .then(result => { stablecoinAssets = result.destination_assets || []; })
       .catch(() => { stablecoinAssets = []; });
     const timer = setInterval(() => { if (enabled && !posting && !busy) void refresh(); }, 5000);
     const controller = new AbortController();

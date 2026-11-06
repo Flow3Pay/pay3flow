@@ -67,10 +67,12 @@ Kubernetes Secret to the backend as `OTC_FEE_RECIPIENTS`. The complete
 operator-provided destination list is in
 [`deploy/external.env.example`](../deploy/external.env.example). The backend
 rejects malformed entries, duplicate networks, and address formats that do
-not match the configured network. This config only records receiving
-destinations; it does not initiate transfers. OTC currently accrues fee
-amounts in its internal ledger, and automated USDT fee collection/payout must
-be implemented separately.
+not match the configured network. For P2P OTC, a destination is offered only
+when the wallet executor, six-decimal USDT token, payment route, and fee route
+are all available for that network. The fee payer signs the fee transfer from
+their wallet; the backend verifies the exact USDT output before marking it
+collected, and the seller's EVER payout remains blocked until then. A configured
+address by itself does not enable settlement on a network.
 
 The optional third address pins the `OnchainGateway` used by same-chain
 Symbiosis swaps; it serves as both transaction destination and ERC-20 spender.

@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use tokio::sync::RwLock;
 
 use crate::route_engine::{
-    canonical_network_id, decimal_to_atomic, ensure_success, first_string,
+    atomic_to_decimal, canonical_network_id, decimal_to_atomic, ensure_success, first_string,
     parse_near_quote_with_decimals, parse_network_addresses, truncate_decimal, Amount, Asset,
     NearQuote, NearQuoteRequest, NearSwapStatus, NearToken, PublicRouteProvider, PublicRouteQuote,
     QuoteProvider, QuoteUnavailable, DEFAULT_INTENTS_URL, DEFAULT_QUOTE_TTL,
@@ -284,6 +284,19 @@ impl NearIntentsProvider {
             .with_context(|| format!("unsupported NEAR Intents asset {asset}"))
     }
 
+    pub async fn unique_token_for_asset(&self, asset: &Asset) -> Result<NearToken> {
+        let tokens = self.tokens.read().await;
+        let mut matches = tokens.iter().filter(|token| token.matches(asset));
+        let token = matches
+            .next()
+            .cloned()
+            .with_context(|| format!("unsupported NEAR Intents asset {asset}"))?;
+        if matches.next().is_some() {
+            bail!("NEAR Intents asset {asset} is ambiguous");
+        }
+        Ok(token)
+    }
+
     pub async fn token_for_asset_id(&self, asset: &Asset, asset_id: &str) -> Result<NearToken> {
         self.tokens
             .read()
@@ -363,8 +376,9 @@ impl NearIntentsProvider {
     }
 
     pub(crate) async fn request_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
-        if request.amount.asset != request.from {
-            bail!("quote amount asset must equal the origin asset");
+        let exact_output = request.amount.asset == request.to;
+        if !exact_output && request.amount.asset != request.from {
+            bail!("quote amount asset must equal the origin or destination asset");
         }
         if !request.from.qualified() || !request.to.qualified() {
             bail!("NEAR Intents assets must include a blockchain location");
@@ -398,12 +412,17 @@ impl NearIntentsProvider {
                 destination.decimals,
             )
         };
-        let input_value = truncate_decimal(&request.amount.value, origin_decimals)?;
-        let input = Amount::new(input_value, request.from.clone())?;
-        let atomic_amount = decimal_to_atomic(&input.value, origin_decimals)?;
+        let amount_decimals = if exact_output {
+            destination_decimals
+        } else {
+            origin_decimals
+        };
+        let amount_value = truncate_decimal(&request.amount.value, amount_decimals)?;
+        let quoted_amount = Amount::new(amount_value, request.amount.asset.clone())?;
+        let atomic_amount = decimal_to_atomic(&quoted_amount.value, amount_decimals)?;
         let body = json!({
             "dry": request.dry,
-            "swapType": "EXACT_INPUT",
+            "swapType": if exact_output { "EXACT_OUTPUT" } else { "EXACT_INPUT" },
             "slippageTolerance": request.slippage_bps,
             "originAsset": origin_asset,
             "destinationAsset": destination_asset,
@@ -452,6 +471,18 @@ impl NearIntentsProvider {
             .await
             .context("decode NEAR Intents quote")?;
         let quote_payload = raw.get("quote").cloned().unwrap_or_else(|| raw.clone());
+        let input = if exact_output {
+            let value = first_string(&quote_payload, &["amountIn", "amount_in"])
+                .or_else(|| first_string(&raw, &["amountIn", "amount_in"]))
+                .context("NEAR Intents exact-output quote has no input amount")?;
+            let value = origin_decimals
+                .map(|decimals| atomic_to_decimal(&value, decimals))
+                .transpose()?
+                .unwrap_or(value);
+            Amount::new(value, request.from.clone())?
+        } else {
+            Amount::new(quoted_amount.value, request.from.clone())?
+        };
         let mut quote = parse_near_quote_with_decimals(
             quote_payload,
             request.from,

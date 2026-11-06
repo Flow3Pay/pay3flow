@@ -58,7 +58,7 @@ pub(crate) fn fee_policy(basis: u128) -> Value {
         "version": P2P_FEE_VERSION, "rate": P2P_FEE_RATE, "floor": "0",
         "basis_units": basis.to_string(), "fee_units": fee.to_string(),
         "net_units": basis.saturating_sub(fee).to_string(), "precision": P2P_FEE_PRECISION,
-        "asset": "USDT", "payer": "stablecoin_sender", "withheld": false,
+        "asset": "USDT", "payer": "stablecoin_sender", "withheld": true,
     })
 }
 
@@ -127,6 +127,10 @@ impl PublicOfferDraft {
         {
             return Err(invalid("stablecoin asset identity is required"));
         }
+        let mut policy = fee_policy(usdt);
+        if self.stablecoin == Stablecoin::Usdc {
+            policy["conversion"] = json!("nominal_usdc_usdt_1_to_1");
+        }
         Ok(json!({
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
             "stablecoin":self.stablecoin.symbol(),
@@ -137,7 +141,7 @@ impl PublicOfferDraft {
             "ever_network_id":42, "ethereum_chain_id":1,
             "usdt_contract":self.stablecoin.contract(),
             "stablecoin_contract":self.stablecoin.contract(),
-            "fee_policy":fee_policy(usdt),
+            "fee_policy":policy,
         }))
     }
 }
@@ -240,6 +244,29 @@ impl Service {
             {
                 return Err(invalid("selected network token does not match the offer"));
             }
+            if receiving_network != "ethereum" {
+                let mut route_available = false;
+                for source_token in provider.supported_tokens().await {
+                    if !matches!(
+                        source_token.symbol.to_ascii_uppercase().as_str(),
+                        "USDT" | "USDC"
+                    ) || !crate::route_execution::supports_otc_wallet_network(
+                        &crate::route_engine::canonical_network_id(&source_token.blockchain),
+                    ) {
+                        continue;
+                    }
+                    let Ok(source) = source_token.asset() else {
+                        continue;
+                    };
+                    if source != asset && provider.route_available(&source, &asset).await {
+                        route_available = true;
+                        break;
+                    }
+                }
+                if !route_available {
+                    return Err(invalid("no supported payment route reaches this network"));
+                }
+            }
         }
         let seller = self.wallet(actor, "everscale").await?;
         let mut client = self.pool.get().await?;
@@ -307,7 +334,7 @@ mod tests {
         assert_eq!(terms["fee_policy"]["net_units"], "4850000");
         assert_eq!(terms["fee_policy"]["asset"], "USDT");
         assert_eq!(terms["fee_policy"]["payer"], "stablecoin_sender");
-        assert_eq!(terms["fee_policy"]["withheld"], false);
+        assert_eq!(terms["fee_policy"]["withheld"], true);
         for value in ["0", "-1", "0.0000000001", "1000000000001", "NaN"] {
             let mut item = draft();
             item.ever_amount = value.into();
@@ -390,6 +417,14 @@ mod tests {
             super::super::config::USDC
         );
         assert_eq!(usdc.terms(&cfg).unwrap()["fee_policy"]["asset"], "USDT");
+        assert_eq!(
+            usdc.terms(&cfg).unwrap()["fee_policy"]["conversion"],
+            "nominal_usdc_usdt_1_to_1"
+        );
+        assert_eq!(
+            usdc.terms(&cfg).unwrap()["fee_policy"]["fee_units"],
+            "356670"
+        );
         let mut invalid = body;
         invalid["direction"] = json!("anything");
         assert!(serde_json::from_value::<PublicOfferDraft>(invalid).is_err());

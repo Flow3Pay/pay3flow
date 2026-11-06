@@ -1,10 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  p2pAction, p2pActive, p2pBothConfirmed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
-  p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
-  type P2pDeal, type P2pLeg,
+  p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+  p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
+  type P2pDeal,
 } from "../src/lib/otc/p2p.ts";
+
+test("payment networks are restricted to routes for the exact destination token", () => {
+  const sources = [
+    { asset: "USDT@ethereum", asset_id: "eth-usdt", destination_asset_ids: ["eth-usdt", "near-usdt"] },
+    { asset: "USDC@ethereum", asset_id: "eth-usdc", destination_asset_ids: ["near-usdt"] },
+    { asset: "USDT@tron", asset_id: "tron-usdt", destination_asset_ids: ["sol-usdt"] },
+  ];
+  assert.deepEqual(p2pCompatibleSources(sources, "near-usdt"), [sources[0], sources[1]]);
+  assert.deepEqual(p2pCompatibleSources(sources, "missing"), []);
+  assert.equal(p2pDirectAssetMatch(sources[0], "USDT@ethereum", "eth-usdt", "ethereum"), true);
+  assert.equal(p2pDirectAssetMatch(sources[0], "USDT@ethereum", "lookalike", "ethereum"), false);
+  assert.equal(p2pDirectAssetMatch(sources[2], "USDT@tron", "tron-usdt", "tron"), false);
+});
 
 function deal(overrides: Partial<P2pDeal> = {}): P2pDeal {
   return {
@@ -25,7 +38,7 @@ function deal(overrides: Partial<P2pDeal> = {}): P2pDeal {
   };
 }
 
-function attempt(state: string, kind: P2pLeg = "payment") {
+function attempt(state: string, kind = "payment") {
   return { id: `${kind}-${state}`, kind, state, instructions: {}, reference: null } as any;
 }
 
@@ -42,7 +55,15 @@ test("the open leg follows the deal state and the viewer's side", () => {
   assert.equal(p2pKind(deal({ state: "delivery_pending", my_leg: "payout" })), "payout");
   assert.equal(p2pKind(deal({ state: "delivery_pending", my_leg: "payment" })), null);
   assert.equal(p2pKind(deal({ state: "completed" })), null);
-  assert.equal(p2pAction(deal({ state: "delivery_pending", my_leg: "payout", my_confirmed: true, counterparty_confirmed: true })), "send");
+  const feePaid = attempt("verified", "fee");
+  assert.equal(p2pAction(deal({
+    state: "delivery_pending", my_leg: "payout", my_confirmed: true, counterparty_confirmed: true,
+    fee_accrued: true, attempts: [feePaid],
+  })), "send");
+  assert.equal(p2pAction(deal({
+    state: "delivery_pending", my_leg: "payout", my_confirmed: true, counterparty_confirmed: true,
+    fee_accrued: true,
+  })), null);
 });
 
 test("an unresolved attempt blocks another signature and a failed one retries", () => {
@@ -98,6 +119,15 @@ test("the modal names the exact token each viewer sends and receives", () => {
     send: { asset: "USDC", amount: "11.889" },
     receive: { asset: "EVER", amount: "100" },
   });
+  assert.deepEqual(p2pViewerLegs(deal({
+    fee_policy: {
+      version: "v1", rate: "0.03", floor: "0", basis_units: "11889000",
+      fee_units: "356670", net_units: "11532330", precision: 6,
+    },
+  })), {
+    send: { asset: "USDT", amount: "11.53233" },
+    receive: { asset: "EVER", amount: "100" },
+  });
   assert.equal(p2pViewerLegs(deal({ my_leg: undefined })), null);
 });
 
@@ -108,6 +138,8 @@ test("late windows are visible without blocking a delivery retry", () => {
   const lateDelivery = deal({
     state: "delivery_pending", my_leg: "payout",
     my_confirmed: true, counterparty_confirmed: true,
+    fee_accrued: true,
+    attempts: [attempt("verified", "fee")],
     payout_by: "2026-11-03T11:00:00Z",
   });
   assert.equal(p2pOverdue(lateDelivery, now), true);
@@ -118,4 +150,21 @@ test("addresses stay readable in the modal", () => {
   assert.equal(p2pShortAddress("0:abcdef0123456789"), "0:abcd…6789");
   assert.equal(p2pShortAddress("short"), "short");
   assert.equal(p2pShortAddress(undefined), "");
+});
+
+test("fee collection status follows a verified fee attempt and formats exact USDT units", () => {
+  const completed = deal({
+    state: "completed",
+    fee_accrued: true,
+    fee_policy: {
+      version: "v1", rate: "0.03", floor: "5", basis_units: "10000000",
+      fee_units: "5000000", net_units: "9500000", precision: 6,
+    },
+  });
+  assert.equal(p2pFeeStatus(completed), "accrued");
+  assert.equal(p2pFeeStatus({ ...completed, attempts: [attempt("prepared", "fee")] }), "pending");
+  assert.equal(p2pFeeStatus({ ...completed, attempts: [attempt("verified", "fee")] }), "collected");
+  assert.equal(p2pFormatUnits("5000000"), "5");
+  assert.equal(p2pFormatUnits("1234567"), "1.234567");
+  assert.equal(p2pFormatUnits("12x"), "");
 });

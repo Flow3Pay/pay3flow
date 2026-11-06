@@ -153,12 +153,15 @@
   function chooseSide(next: Direction) { if (next !== direction) { direction = next; listingId = ""; edited(); syncLink(); } }
   function selectListing(proposal: Proposal, side: Direction) { chooseSide(side); if (listingId !== proposal.id) edited(); listingId = proposal.id; document.getElementById("otc-input")?.focus(); }
   function openOffer(offer: PublicOffer) { void tick().then(() => offerBook?.openOffer(offer)); }
-  async function acceptOffer(id: string) {
+  async function acceptOffer(
+    id: string,
+    destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string },
+  ) {
     const owner = session;
     tab = "orders";
     if (!owner) { error = say("Connect your wallet to accept an offer.", "Подключите кошелёк, чтобы принять оффер."); return; }
     await run(async () => {
-      const accepted = await request<P2pDeal>(`/offers/${id}/accept`, owner.token, {}, crypto.randomUUID());
+      const accepted = await request<P2pDeal>(`/offers/${id}/accept`, owner.token, destination || {}, crypto.randomUUID());
       await tick();
       await dealModal?.openDeal(accepted.id);
     });

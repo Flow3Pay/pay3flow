@@ -1270,6 +1270,73 @@ mod tests {
         let body = body_rx.await.unwrap();
         assert_eq!(body["originAsset"], "usdt-selected");
         assert_eq!(body["destinationAsset"], "usdc-selected");
+        assert_eq!(body["swapType"], "EXACT_INPUT");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn near_quote_supports_exact_output_without_changing_exact_input() {
+        let (body_tx, body_rx) = tokio::sync::oneshot::channel();
+        let body_tx = std::sync::Arc::new(std::sync::Mutex::new(Some(body_tx)));
+        let app = axum::Router::new().route(
+            "/v0/quote",
+            axum::routing::post(move |axum::Json(body): axum::Json<Value>| async move {
+                if let Ok(mut sender) = body_tx.lock() {
+                    if let Some(sender) = sender.take() {
+                        let _ = sender.send(body);
+                    }
+                }
+                axum::Json(json!({"quote": {
+                    "amountIn": "3500000",
+                    "amountOut": "3000000",
+                    "depositAddress": "deposit-address",
+                    "status": "success"
+                }}))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let provider = NearIntentsProvider::new(format!("http://{address}"), None).unwrap();
+        let from = asset("USDC@ethereum");
+        let to = asset("USDT@tron");
+        provider.set_supported_tokens(vec![
+            NearToken {
+                asset_id: "eth-usdc".into(),
+                blockchain: "eth".into(),
+                symbol: "USDC".into(),
+                decimals: Some(6),
+                contract_address: Some("0x111".into()),
+            },
+            NearToken {
+                asset_id: "tron-usdt".into(),
+                blockchain: "tron".into(),
+                symbol: "USDT".into(),
+                decimals: Some(6),
+                contract_address: Some("T111111111111111111111111111111111".into()),
+            },
+        ]);
+        let quote = provider
+            .executable_quote(NearQuoteRequest {
+                from: from.clone(),
+                to: to.clone(),
+                origin_asset_id: Some("eth-usdc".into()),
+                destination_asset_id: Some("tron-usdt".into()),
+                amount: Amount::new("3", to).unwrap(),
+                recipient: "recipient".into(),
+                refund_to: "refund".into(),
+                slippage_bps: 0,
+                dry: false,
+            })
+            .await
+            .unwrap();
+        assert_eq!(quote.input.value, "3.5");
+        assert_eq!(quote.output.value, "3");
+        assert_eq!(quote.input.asset, from);
+        let body = body_rx.await.unwrap();
+        assert_eq!(body["swapType"], "EXACT_OUTPUT");
+        assert_eq!(body["amount"], "3000000");
+        assert_eq!(body["destinationAsset"], "tron-usdt");
         server.abort();
     }
 
@@ -1401,6 +1468,31 @@ mod tests {
             contract_address: None,
         };
         assert!(xrp_token.matches(&asset("XRP@xrpl")));
+    }
+
+    #[tokio::test]
+    async fn near_fee_asset_lookup_rejects_ambiguous_network_tickers() {
+        let provider = NearIntentsProvider::new("https://example.test", None).unwrap();
+        provider.set_supported_tokens(vec![
+            NearToken {
+                asset_id: "usdt-first".into(),
+                blockchain: "tron".into(),
+                symbol: "USDT".into(),
+                decimals: Some(6),
+                contract_address: Some("token-one".into()),
+            },
+            NearToken {
+                asset_id: "usdt-second".into(),
+                blockchain: "tron".into(),
+                symbol: "USDT".into(),
+                decimals: Some(6),
+                contract_address: Some("token-two".into()),
+            },
+        ]);
+        assert!(provider
+            .unique_token_for_asset(&asset("USDT@tron"))
+            .await
+            .is_err());
     }
 
     #[test]
