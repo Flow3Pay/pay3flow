@@ -115,7 +115,7 @@
 
 {#snippet side(levels: BookLevel[], who: string, label: string, key: string)}
   <section class="obTable" data-side={key} aria-label={label}>
-    <div class="obHead"><span>{who}</span><span>{say("Price", "Цена")}<small>USDT / USDC</small></span><span>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></span><span>{say("Total", "Всего")}<small>USDT / USDC</small></span></div>
+    <div class="obHead"><span>{who}</span><span>{say("Price", "Цена")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT / <img src="/icons/assets/usdc.png" alt="" width="12" height="12" />USDC</small></span><span>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></span><span>{say("Total", "Всего")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT / <img src="/icons/assets/usdc.png" alt="" width="12" height="12" />USDC</small></span></div>
     {#each levels as level (level.offer.id)}
       {@render levelRow(level)}
     {:else}

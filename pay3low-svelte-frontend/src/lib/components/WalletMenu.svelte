@@ -31,7 +31,7 @@
     { family: "solana", network: "solana", label: "Solana", icon: "/icons/assets/sol.png", keywords: "SOL Solana солана" },
     { family: "sui", network: "sui", label: "Sui", icon: "/icons/assets/sui.webp", keywords: "SUI sui" },
     { family: "aptos", network: "aptos", label: "Aptos", icon: "/icons/assets/apt.webp", keywords: "APT aptos" },
-    { family: "ton", network: "ton", label: "TON", icon: "/icons/assets/any.svg", keywords: "Toncoin TON telegram" },
+    { family: "ton", network: "ton", label: "TON", icon: assetIcon("ton"), keywords: "Toncoin TON telegram" },
     { family: "everscale", network: "everscale", label: "Everscale", icon: "/icons/assets/ever.svg", keywords: "EVER эверскейл" },
   ];
   $: open = $walletDialogMode !== null;
@@ -135,8 +135,12 @@
     if (context && (network === "ethereum" || network === "everscale") && context.enabled && context.chains.includes(network)) {
       const proof = context.bound.find(value => value.startsWith(`${network}:`))?.slice(network.length + 1).trim();
       if (wallet && proof?.toLowerCase() === wallet.address.toLowerCase()) {
-        await disconnect(family, network);
-        return;
+        if (family === "evm") {
+          if (wallet.family === "evm" && wallet.chainId === chainIdForNetwork(network)) return;
+        } else {
+          await disconnect(family, network);
+          return;
+        }
       }
       busy = family; activeChain = network; error = "";
       try {
@@ -145,8 +149,8 @@
       } finally { busy = null; void focusChoice(network); }
       return;
     }
-    if (wallet?.family === "evm" && wallet.chainId !== chainIdForNetwork(network)) {
-      await connect(family, network);
+    if (wallet?.family === "evm") {
+      if (wallet.chainId !== chainIdForNetwork(network)) await connect(family, network);
       return;
     }
     if (wallet) await disconnect(family, network);
@@ -200,14 +204,15 @@
               {@const proof = otcChain ? account?.bound.find(value => value.startsWith(`${otcChain}:`))?.slice(otcChain.length + 1).trim() : undefined}
               {@const canVerify = !!(otcChain && account?.enabled && account.chains.includes(otcChain))}
               {@const verified = !!(wallet && proof?.toLowerCase() === wallet.address.toLowerCase())}
-              {@const disconnectable = !!wallet && (!otcChain || verified || !canVerify)}
+              {@const disconnectable = !!wallet && choice.family !== "evm" && (!otcChain || verified || !canVerify)}
               {@const verificationAction = !!(canVerify && account?.session && (!proof || (wallet && !verified)))}
-              {@const selected = !!wallet && (wallet.family !== "evm" || wallet.chainId === chainIdForNetwork(choice.network))}
-              {@const action = busy === choice.family ? copy("Connecting…") : disconnectable && selected ? copy("Disconnect") : verificationAction ? copy("Verify") : wallet && choice.family === "evm" ? copy("Switch network") : copy("Connect")}
+              {@const selected = !!wallet}
+              {@const activeEvmNetwork = wallet?.family === "evm" && wallet.chainId === chainIdForNetwork(choice.network)}
+              {@const action = busy === choice.family ? copy("Connecting…") : verificationAction ? copy("Verify") : wallet && choice.family === "evm" ? activeEvmNetwork ? copy("Connected") : copy("Switch network") : disconnectable && selected ? copy("Disconnect") : copy("Connect")}
               {@const address = wallet?.address}
               <div class="walletChoice" data-family={choice.family} data-network={choice.network} aria-busy={busy === choice.family}>
                 {#snippet disconnectAction()}
-                  {#if wallet && !disconnectable}
+                {#if wallet && choice.family !== "evm" && !disconnectable}
                     <button type="button" class="cardAction" disabled={working} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click|stopPropagation={() => disconnect(choice.family, choice.network)}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.9 7.56c.31-3.6 2.16-5.07 6.21-5.07h.13c4.47 0 6.26 1.79 6.26 6.26v6.52c0 4.47-1.79 6.26-6.26 6.26h-.13c-4.02 0-5.87-1.45-6.2-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="M15 12H3.62" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="m5.85 8.65-3.35 3.35 3.35 3.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     </button>
@@ -223,7 +228,7 @@
                   meta={address && address.length > 20 ? `${address.slice(0, 7)}…${address.slice(-6)}` : address}
                   metaTitle={address}
                   disabled={working}
-                  ariaLabel={disconnectable && selected ? copy("Disconnect {network} wallet", { network: choice.label }) : verificationAction ? copy("Verify {network} wallet", { network: choice.label }) : wallet && choice.family === "evm" ? copy("Switch wallet to {network}", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
+                  ariaLabel={verificationAction ? copy("Verify {network} wallet", { network: choice.label }) : wallet && choice.family === "evm" ? activeEvmNetwork ? copy("Connected") : copy("Switch wallet to {network}", { network: choice.label }) : disconnectable && selected ? copy("Disconnect {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
                   trailing={disconnectAction}
                   onSelect={() => selectChoice(choice.family, choice.network)}
                 />
@@ -235,6 +240,7 @@
           </section>
           {#if error || account?.error}<p role="alert">{error || account?.error}</p>{/if}
           {#if account?.progress}<p class="walletStatus" role="status">{copy(account.progress)}</p>{/if}
+          {#if $wallets.evm}<button class="accountAction" type="button" disabled={working} on:click={() => disconnect("evm", "ethereum")}>{copy("Disconnect EVM wallet")}</button>{/if}
           {#if account?.session}<button class="accountAction" type="button" disabled={account.disconnectDisabled || !!account.progress || Boolean(busy)} on:click={account.onDisconnect}>{copy("Disconnect")}</button>{/if}
           {#if account?.requestingQuote}
             <button class="quoteAction" type="button" disabled={working || !account.quoteReady} on:click={account.onRequest}>{copy("Request exact quote")}</button>

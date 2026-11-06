@@ -87,9 +87,9 @@
       <table>
         <thead><tr>
           <th>{title}</th>
-          <th>{say("Price", "Цена")}<small>USDT / USDC</small></th>
+          <th>{say("Price", "Цена")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT / <img src="/icons/assets/usdc.png" alt="" width="12" height="12" />USDC</small></th>
           <th>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></th>
-          <th>{say("Total", "Всего")}<small>USDT / USDC</small></th>
+          <th>{say("Total", "Всего")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT / <img src="/icons/assets/usdc.png" alt="" width="12" height="12" />USDC</small></th>
         </tr></thead>
         <tbody>
           {#each items as item (item.key)}

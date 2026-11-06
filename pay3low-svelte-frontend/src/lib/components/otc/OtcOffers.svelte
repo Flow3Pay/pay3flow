@@ -86,12 +86,6 @@
           : !/^0x[0-9a-fA-F]{40}$/.test(receivingAddress.trim())
             ? say("Enter a valid receiving address.", "Укажите корректный адрес получения.") : "";
   $: valid = !blockingReason;
-  $: stablecoinNetworks = [
-        { network: "ethereum", assetId: "" },
-        ...stablecoinAssets
-          .filter(item => item.symbol === stablecoin && item.network !== "ethereum")
-          .map(item => ({ network: item.network, assetId: item.asset_id })),
-      ].filter((item, index, list) => list.findIndex(candidate => candidate.network === item.network) === index);
   $: if (direction !== loadedDirection) resetDirection(direction);
   function resetDirection(next: Direction) { loadedDirection = next; amountSource = next === "buy" ? "usdt" : "ever"; stablecoinNetwork = "ethereum"; receivingAddress = ""; reviewing = false; key = ""; message = ""; }
   $: if (mounted) suggestEthereum(
@@ -248,7 +242,7 @@
     edited();
   }
   $: ticket = {
-    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, stablecoinNetwork, stablecoinNetworks, seller, askingRate, valid, reviewing, linkingEvm,
+    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, stablecoinNetwork, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingEvm,
     marketPrice, marketRate, marketUsdRate, marketApprox, error,
     onPrice: changePrice,
     onEver: changeEver,

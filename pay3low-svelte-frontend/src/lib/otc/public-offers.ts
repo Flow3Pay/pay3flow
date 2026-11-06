@@ -47,7 +47,7 @@ export interface SaleTicketState {
   usdtAmount: string;
   receivingAddress: string;
   stablecoinNetwork: string;
-  stablecoinNetworks: Array<{ network: string; assetId: string }>;
+  supportedStablecoinAssets: Array<{ symbol: Stablecoin; network: string }>;
   seller: string;
   askingRate: string;
   valid: boolean;

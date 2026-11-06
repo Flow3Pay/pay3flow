@@ -1,13 +1,15 @@
 <script lang="ts">
   import { tick } from "svelte";
   import ExchangeFlowBridge from "../ExchangeFlowBridge.svelte";
+  import PaymentMethodPicker from "../PaymentMethodPicker.svelte";
   import OtcOfferReview from "./OtcOfferReview.svelte";
-  import OtcStablecoinPicker from "./OtcStablecoinPicker.svelte";
   import { locale } from "$lib/i18n";
   import { networkIcon } from "$lib/icons";
+  import type { CryptoNetwork } from "$lib/networks";
   import { otcCopy } from "$lib/otc/copy";
+  import type { PaymentMethod } from "$lib/payment-methods";
   import { rate, type Direction, type Trade } from "$lib/otc/service";
-  import { type SaleTicketState } from "$lib/otc/public-offers";
+  import { type SaleTicketState, type Stablecoin } from "$lib/otc/public-offers";
   import { everFromUsd, offerTotal } from "$lib/otc/offer-amount";
   import { formatTokenMarketValue, formatUsdAmount, formatUsdMarketValue, sanitizeDecimalInput } from "$lib/usd-amount";
   export let sale: SaleTicketState | null = null;
@@ -40,6 +42,53 @@
     const available = sale?.fundedBalance ? say(` — available ${sale.fundedBalance} ${asset}`, ` — доступно ${sale.fundedBalance} ${asset}`) : "";
     return say(`Not enough ${asset} in your wallet${available}. You can still publish the offer.`, `Недостаточно ${asset} на кошельке${available}. Опубликовать предложение всё равно можно.`);
   };
+  const stablecoinMethods: PaymentMethod[] = [
+    { id: "otc-usdt", name: "Tether", country: "global", currency: "USDT", role: "recipient", kind: "wallet", color: "#26a17b", initials: "USDT", iconUrl: "/icons/assets/usdt.png", p2pQuery: "USDT" },
+    { id: "otc-usdc", name: "USD Coin", country: "global", currency: "USDC", role: "recipient", kind: "wallet", color: "#2775ca", initials: "USDC", iconUrl: "/icons/assets/usdc.png", p2pQuery: "USDC" },
+  ];
+  const networkNames: Record<string, string> = {
+    ethereum: "Ethereum (ERC-20)",
+    "avalanche-c": "Avalanche C-Chain",
+    "polygon-pos": "Polygon PoS",
+    "arbitrum-one": "Arbitrum One",
+    "bnb-smart-chain": "BNB Smart Chain",
+    near: "NEAR",
+    solana: "Solana",
+    ton: "TON",
+    tron: "TRON",
+    aptos: "Aptos",
+    base: "Base",
+    optimism: "Optimism",
+    sei: "Sei",
+  };
+  function makeStablecoinNetworks(assets: SaleTicketState["supportedStablecoinAssets"] = []): CryptoNetwork[] {
+    const networks = new Map<string, CryptoNetwork>([["ethereum", {
+      id: "ethereum",
+      name: networkNames.ethereum,
+      currencies: ["USDT", "USDC"],
+    }]]);
+    for (const asset of assets) {
+      const network = networks.get(asset.network) ?? {
+        id: asset.network,
+        name: networkNames[asset.network] ?? asset.network,
+        currencies: [],
+      };
+      if (!network.currencies.includes(asset.symbol)) network.currencies.push(asset.symbol);
+      networks.set(asset.network, network);
+    }
+    return [...networks.values()];
+  }
+  let stablecoinPickerOpen = false;
+  $: stablecoinPickerNetworks = makeStablecoinNetworks(sale?.supportedStablecoinAssets);
+  $: selectedStablecoinMethod = stablecoinMethods.find((method) => method.currency === sale?.stablecoin) ?? null;
+  $: selectedStablecoinNetwork = stablecoinPickerNetworks.find((network) => network.id === sale?.stablecoinNetwork);
+  function selectStablecoin(method: PaymentMethod, network?: CryptoNetwork) {
+    if (!sale || !network || (method.currency !== "USDT" && method.currency !== "USDC")) return;
+    const token: Stablecoin = method.currency;
+    if (sale.stablecoin !== token) sale.onStablecoin(token);
+    if (sale.stablecoinNetwork !== network.id) sale.onStablecoinNetwork(network.id);
+    stablecoinPickerOpen = false;
+  }
   let settingsOpen = false, settingsWrap: HTMLDivElement, settingsInput: HTMLInputElement;
   function openSettings() {
     settingsOpen = true;
@@ -114,7 +163,7 @@
         {#if settingsOpen}
           <div class="settingsPanel" role="dialog" aria-label={say("Offer settings", "Настройки предложения")} tabindex="-1">
             <div class="settingsPanelHead"><strong>{say("Offer settings", "Настройки предложения")}</strong><button type="button" class="settingsClose" aria-label={say("Close settings", "Закрыть настройки")} on:click={() => closeSettings(true)}>×</button></div>
-            <label class="recipientField">{say(`${sale.stablecoin} ${direction === "buy" ? "payment" : "receiving"} network`, `Сеть ${direction === "buy" ? "оплаты" : "получения"} ${sale.stablecoin}`)}<select value={sale.stablecoinNetwork} on:change={(event) => sale?.onStablecoinNetwork(event.currentTarget.value)} disabled={busy}>{#each sale.stablecoinNetworks as option}<option value={option.network}>{option.network}</option>{/each}</select>{say(`Your ${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address on ${sale.stablecoinNetwork}`, `Ваш ${direction === "buy" ? "адрес оплаты" : "адрес получения"} ${sale.stablecoin} в сети ${sale.stablecoinNetwork}`)}<input bind:this={settingsInput} data-testid="otc-offer-recipient" value={sale.receivingAddress} on:input={(event) => sale?.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={sale.stablecoinNetwork === "ethereum" ? "0x…" : say("Wallet address", "Адрес кошелька")} disabled={busy} /></label>
+            <label class="recipientField">{say(`Your ${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address on ${sale.stablecoinNetwork}`, `Ваш ${direction === "buy" ? "адрес оплаты" : "адрес получения"} ${sale.stablecoin} в сети ${sale.stablecoinNetwork}`)}<input bind:this={settingsInput} data-testid="otc-offer-recipient" value={sale.receivingAddress} on:input={(event) => sale?.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={sale.stablecoinNetwork === "ethereum" ? "0x…" : say("Wallet address", "Адрес кошелька")} disabled={busy} /></label>
             {#if sale.stablecoinNetwork === "ethereum"}<button class="walletAddress" type="button" disabled={busy || sale.linkingEvm} on:click={sale.onUseEthereum}>{sale.linkingEvm ? say("Connecting…", "Подключаем…") : say("Use my Ethereum wallet address", "Использовать адрес моего Ethereum-кошелька")}</button>{/if}
           </div>
         {/if}
@@ -124,7 +173,7 @@
   <div class="moneyStack">
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say(usdMode ? "Buy amount · USD" : "Buy amount · EVER", usdMode ? "Количество к покупке · USD" : "Количество к покупке · EVER") : say(usdMode ? "Sell amount · USD" : "Sell amount · EVER", usdMode ? "Количество к продаже · USD" : "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={focusSend} on:blur={blurSend} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div>{#if sale}<div class="marketMeta"><span class="marketValue" data-testid="otc-market-value" aria-label={usdMode && usdAvailable ? say("Approximate EVER amount", "Примерная сумма в EVER") : say("Approximate USD market value", "Примерная рыночная стоимость в долларах")}>{usdMode && usdAvailable ? formatTokenMarketValue(Number(sale.everAmount), "EVER") : formatUsdMarketValue(Number(usdValue))}</span><button type="button" class="usdToggle" class:usdToggleActive={usdMode} aria-pressed={usdMode} disabled={!usdAvailable || busy} title={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} aria-label={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} on:click={toggleUsd}>USD</button>{#if maxBalance}<button type="button" class="usdToggle" class:usdToggleActive={maxActive} data-testid="otc-amount-max" aria-pressed={maxActive} disabled={busy} title={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} aria-label={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} on:click={applyMax}>{say("Max", "Макс")}</button>{/if}</div>{/if}</div></div>
   <ExchangeFlowBridge overlay reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{#if sale}<OtcStablecoinPicker selected={sale.stablecoin} onSelect={sale.onStablecoin} />{:else}{@render asset(receiveAsset)}{/if}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say(`Total to pay · ${sale.stablecoin}`, `Всего к оплате · ${sale.stablecoin}`) : say(`Total to receive · ${sale.stablecoin}`, `Всего к получению · ${sale.stablecoin}`) : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} />{#if receiveShort}{@render shortfallMark(sale?.stablecoin || "USDT")}{/if}</div></div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{#if sale}<button type="button" class="stablecoinNetworkPicker" aria-haspopup="dialog" aria-label={say(`Choose token and network, currently ${sale.stablecoin} on ${selectedStablecoinNetwork?.name ?? sale.stablecoinNetwork}`, `Выбрать токен и сеть, сейчас ${sale.stablecoin} в сети ${selectedStablecoinNetwork?.name ?? sale.stablecoinNetwork}`)} on:click={() => stablecoinPickerOpen = true}><span class="stablecoinNetworkMain"><img src={sale.stablecoin === "USDC" ? "/icons/assets/usdc.png" : "/icons/assets/usdt.png"} alt="" width="28" height="28" /><span><strong>{sale.stablecoin}</strong><small>{selectedStablecoinNetwork?.name ?? sale.stablecoinNetwork}</small></span></span><span class="stablecoinNetworkSide"><span class="assetDot" aria-hidden="true"><img src={networkIcon(selectedStablecoinNetwork?.name ?? sale.stablecoinNetwork)} alt="" width="18" height="18" /></span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></button>{:else}{@render asset(receiveAsset)}{/if}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say(`Total to pay · ${sale.stablecoin}`, `Всего к оплате · ${sale.stablecoin}`) : say(`Total to receive · ${sale.stablecoin}`, `Всего к получению · ${sale.stablecoin}`) : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} />{#if receiveShort}{@render shortfallMark(sale?.stablecoin || "USDT")}{/if}</div></div></div>
   </div>
   <div class="priceField">
     <div class="priceHead">
@@ -147,6 +196,7 @@
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
   <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingEvm || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
+{#if sale}<PaymentMethodPicker open={stablecoinPickerOpen} title={say("Choose token and network", "Выберите токен и сеть")} role="recipient" networks={stablecoinPickerNetworks} paymentMethods={stablecoinMethods} selected={selectedStablecoinMethod} selectedNetwork={selectedStablecoinNetwork} onClose={() => stablecoinPickerOpen = false} onSelect={selectStablecoin} />{/if}
 
 <style>
   .recipientField { display:grid; gap:8px; margin:16px 0 8px; color:var(--color-text-soft); font-size:12px; }
@@ -207,6 +257,14 @@
   .assetCopy { min-width: 0; }
   .assetCopy strong { color: #344235; font-size: 12px; font-weight: 700; line-height: 1; }
   :global(html[data-theme="dark"]) .assetCopy strong { color: var(--color-text); }
+  .stablecoinNetworkPicker { display:flex; width:100%; min-height:44px; align-items:center; justify-content:space-between; gap:10px; padding:0 2px; text-align:left; }
+  .stablecoinNetworkMain,.stablecoinNetworkSide { display:flex; min-width:0; align-items:center; gap:8px; }
+  .stablecoinNetworkMain > img { flex:0 0 auto; border-radius:50%; }
+  .stablecoinNetworkMain > span { display:grid; min-width:0; gap:2px; }
+  .stablecoinNetworkMain strong { color:var(--color-text); font-size:14px; }
+  .stablecoinNetworkMain small { overflow:hidden; color:var(--color-text-faint); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+  .stablecoinNetworkSide { flex:0 0 auto; color:var(--color-text-faint); }
+  .stablecoinNetworkPicker:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   .cta { display: flex; width: 100%; min-height: 50px; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 12px 16px; border: 1px solid var(--color-accent-strong); border-radius: 5px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: left; transition: background .18s ease, opacity .18s ease; }
   .cta:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 82%, #fff); }
   .cta span { flex: 0 0 auto; font-size: 18px; }
