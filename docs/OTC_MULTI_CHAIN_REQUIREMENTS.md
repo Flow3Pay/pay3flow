@@ -181,8 +181,8 @@ identifies a network.
   quote and immutable trade terms before the user commits.
 - Fee destinations were supplied for TRON, NEAR, Bitcoin, Ethereum, Solana,
   Avalanche C-Chain, Sei, Polygon PoS, TON, BNB Smart Chain, Arbitrum One,
-  Base, and Aptos. The address values belong in the deployment environment,
-  not in this requirements document or tests.
+  Base, Aptos, and Sui. The address values belong in the deployment
+  environment, not in this requirements document or tests.
 
 - Fee destinations are enabled only when the configured chain/address pair is
   valid, six-decimal USDT exists in the provider catalog, and the required
@@ -251,20 +251,32 @@ identifies a network.
 
 ## Current implementation context
 
-The current implementation is an incomplete intermediate step, not a claim
-that multi-chain OTC is complete. It includes USDT/USDC offer support, explicit
-production EVM network selection in the wallet flow, and an OTC cross-network
-payment preparation path using the existing NEAR Intents provider. The OTC
-interface describes this generically as a payment route and does not expose
-provider branding.
+The OTC principal-payment path supports cross-network USDT and USDC settlement
+through NEAR Intents when the selected assets and route are present in the
+provider catalog. This does not mean every catalog network or asset pair is
+available: overall multi-chain OTC remains limited to the wallet and settlement
+paths listed below. Production live-route checks are deployment validation,
+not missing application implementation. The OTC interface describes this
+generically as a payment route and does not expose provider branding.
 
 Implemented so far:
 
+- Sell offers persist their selected receiving network and exact asset ID.
+  When accepting a buy offer, the counterparty selects the receiving network,
+  asset ID, and address; the backend validates and freezes those terms into the
+  deal before preparing a route.
 - The P2P taker can select a source token/network from the live provider token
   catalog and review the calculated source amount, exact net quote output,
   expiry, deposit address, and memo before wallet submission. The source
   stablecoin may differ from the deal stablecoin, enabling a USDC-to-USDT or
   USDT-to-USDC principal conversion through the route.
+- The end-to-end cross-network principal-payment path is implemented for both
+  USDT and USDC deal assets: the backend prepares an exact-output quote bound to
+  the exact source/destination asset IDs, recipient, and source refund address;
+  the matching wallet signs and submits the deposit; the backend notifies and
+  polls NEAR Intents. The deal advances only on the exact required output, while
+  a provider-confirmed refund marks the attempt failed and permits an explicit
+  retry. This shared path does not promise that every catalog pair is routable.
 - The backend validates the selected source asset against its exact catalog
   asset ID and the selected OTC stablecoin. Quote creation binds exact source
   and destination asset IDs to avoid resolving duplicate tickers to a different
@@ -300,41 +312,41 @@ Implemented so far:
   collection.
 - Destination choices are filtered by the configured fee address, wallet
   executor support, a six-decimal USDT token, and available payment/fee routes.
-  Ethereum, supported EVM networks, NEAR, and TRON are the wallet-executable
-  network families; a configured address for Bitcoin, Solana, Sei, TON, or
-  Aptos does not make those networks OTC-enabled.
+  Ethereum, supported EVM networks, NEAR, TRON, Solana, Sui, TON, and Aptos
+  have wallet executors. Sei is handled as EVM chain ID 1329 and requires an
+  EVM-format fee address plus two configured RPC endpoints for direct
+  settlement; the example config now includes two independent mainnet
+  endpoints. The Sui fee recipient is now configured; Sui is still offered as
+  a destination only when the live token catalog and payment/fee routes pass
+  the backend filters.
 
 Still incomplete and not to be presented as supported:
 
-- Sell offers choose a stablecoin receiving network from the routable provider
-  catalog. When accepting a buy offer, the counterparty chooses a supported
-  stablecoin receiving network and supplies its address; the backend validates
-  the exact token identity and that Ethereum can route to it. Those immutable
-  deal terms drive the cross-network quote destination.
-- Wallet-executable source networks are limited to the supported EVM, NEAR,
-  and TRON paths. In particular, address validation alone does not provide
-  signing/submission support for Solana, Sei, Sui, TON, or Aptos. The catalog
-  and UI must not imply these paths are executable.
-- Memo handling is currently accepted only for NEAR source transfers; other
-  memo/tag-dependent source networks must remain unavailable until their
-  wallet executors support the required instruction.
+- The browser wallet adapters and backend OTC gates now include Solana, Sui,
+  TON, Aptos, and Sei (EVM). Solana, Sui, Aptos, and TON require their public
+  RPC/API environment settings; TON also requires a production TON Connect
+  manifest and wallet. Their production wallet/provider combinations still
+  need deployment validation.
+- Memo handling is implemented for NEAR, Solana, and TON deposits. Memo-bearing
+  routes for other networks are rejected rather than sent without the memo.
 - Direct same-network settlement on non-EVM networks is still unsupported;
   those cases must not be presented as working direct transfers. The OTC asset
   endpoint excludes those pairs because the current direct-transfer observers
   do not verify their chains. Direct EVM settlement is also excluded unless
   the network has two configured HTTPS RPCs and the exact stablecoin token is
   unambiguous. Cross-network principal and fee routes use exact-output quotes
-  and status verification; transaction-level real-network testing remains a
-  separate validation task.
+  and status verification.
 - Fee-routing availability is amount-dependent: a quote can still fail after
   the catalog shows a route, for example if the provider applies a minimum
   amount. The UI surfaces that failure and does not permit seller payout until
   the exact fee output is verified. The 3% USDT fee on USDC offers uses the
   explicitly agreed nominal 1:1 calculation, not a live USDC/USDT conversion.
 
-The worktree changes are not a finished production multi-chain feature.
-Networks must not be exposed as supported unless their complete wallet,
-settlement, status, and refund paths are implemented.
+The application paths are implemented, but not every target has been
+production-validated. A network is offered only when the live token catalog,
+configured fee recipient, and payment/fee routes pass the backend filters.
+Wallet provider behavior, RPC/API configuration, token identities, and
+provider-reported refunds still require deployment verification.
 
 ## Items to verify during implementation
 
@@ -342,14 +354,12 @@ settlement, status, and refund paths are implemented.
   including whether multiple assets share a symbol/network pair.
 - Whether each target network has a usable refund-address format and whether
   its transfer requires a memo/tag.
-- Which requested wallets can be supported by existing dependencies and which
-  require new, maintained wallet SDKs.
+- Whether the configured wallet extensions and RPC/API endpoints support the
+  signing and submission behavior used by each new adapter.
 - Production verification of provider-reported output amounts and exact-output
-  behavior across every enabled token/network pair.
-- How destination network/address terms can be added to offers and persisted
-  immutably without weakening account or trade authorization.
-- Whether the supported source-wallet executors safely support memo/tag
-  requirements and refunds for each catalog network.
+  behavior across every enabled token/network pair (post-deployment validation).
+- Whether each catalog network's provider assets, refund addresses, and memo
+  requirements match the implemented wallet and status flow.
 - Which configured fee destinations have a live USDT token and reliable
   exact-output route at the smallest applicable fee amount.
 - What “confidential swap” is intended to mean technically; until specified,

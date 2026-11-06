@@ -25,8 +25,13 @@
     { family: "evm", network: "linea", label: "Linea", icon: "/icons/assets/eth.webp", keywords: "EVM" },
     { family: "evm", network: "plasma", label: "Plasma", icon: "/icons/assets/eth.webp", keywords: "EVM" },
     { family: "evm", network: "ink", label: "Ink", icon: "/icons/assets/eth.webp", keywords: "Kraken EVM" },
+    { family: "evm", network: "sei", label: "Sei", icon: "/icons/assets/eth.webp", keywords: "SEI EVM" },
     { family: "near", network: "near", label: "NEAR", icon: assetIcon("near"), keywords: "NEAR Protocol нир" },
     { family: "tron", network: "tron", label: "TRON", icon: "/icons/assets/trx.webp", keywords: "TRX трон" },
+    { family: "solana", network: "solana", label: "Solana", icon: "/icons/assets/sol.png", keywords: "SOL Solana солана" },
+    { family: "sui", network: "sui", label: "Sui", icon: "/icons/assets/sui.webp", keywords: "SUI sui" },
+    { family: "aptos", network: "aptos", label: "Aptos", icon: "/icons/assets/apt.webp", keywords: "APT aptos" },
+    { family: "ton", network: "ton", label: "TON", icon: "/icons/assets/any.svg", keywords: "Toncoin TON telegram" },
     { family: "everscale", network: "everscale", label: "Everscale", icon: "/icons/assets/ever.svg", keywords: "EVER эверскейл" },
   ];
   $: open = $walletDialogMode !== null;
@@ -153,7 +158,7 @@
     error = "";
     // Selector UIs mount outside our dialog. Let them receive focus and input
     // while keeping the underlying application locked until they return.
-    providerHandoff = family === "near" || (family === "evm" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()));
+    providerHandoff = family === "near" || family === "ton" || (family === "evm" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()));
     try { await connectWallet(network); }
     catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
     finally { busy = null; providerHandoff = false; void focusChoice(network); }

@@ -1,3 +1,4 @@
+use base64::Engine;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -825,8 +826,13 @@ fn supported_wallet_network(network: &str) -> bool {
             | "avalanche-c"
             | "bnb-smart-chain"
             | "optimism"
+            | "sei"
             | "near"
             | "tron"
+            | "solana"
+            | "sui"
+            | "ton"
+            | "aptos"
     )
 }
 
@@ -835,6 +841,35 @@ fn validate_wallet_address(network: &str, address: &str) -> Result<(), RouteExec
         "solana" => bs58::decode(address)
             .into_vec()
             .is_ok_and(|bytes| bytes.len() == 32 && bytes.iter().any(|byte| *byte != 0)),
+        "sui" => {
+            let value = address.strip_prefix("0x").unwrap_or(address);
+            value.len() == 64
+                && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+                && value.bytes().any(|byte| byte != b'0')
+        }
+        "aptos" => {
+            let value = address.strip_prefix("0x").unwrap_or(address);
+            (1..=64).contains(&value.len())
+                && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+                && value.bytes().any(|byte| byte != b'0')
+        }
+        "ton" => {
+            if let Some((workchain, hash)) = address.split_once(':') {
+                matches!(workchain, "0" | "-1")
+                    && hash.len() == 64
+                    && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            } else {
+                use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+                let decoded = URL_SAFE_NO_PAD.decode(address).ok();
+                decoded.is_some_and(|bytes| {
+                    if bytes.len() != 36 || !matches!(bytes[0], 0x11 | 0x51) {
+                        return false;
+                    }
+                    let expected = u16::from_be_bytes([bytes[34], bytes[35]]);
+                    ton_crc16(&bytes[..34]) == expected
+                })
+            }
+        }
         "near" => {
             (2..=64).contains(&address.len())
                 && address.bytes().all(|byte| {
@@ -861,6 +896,21 @@ fn validate_wallet_address(network: &str, address: &str) -> Result<(), RouteExec
     } else {
         Err(RouteExecutionError::InvalidAddress)
     }
+}
+
+fn ton_crc16(bytes: &[u8]) -> u16 {
+    let mut crc = 0u16;
+    for byte in bytes {
+        crc ^= u16::from(*byte) << 8;
+        for _ in 0..8 {
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
+        }
+    }
+    crc
 }
 
 pub(crate) fn supports_otc_wallet_network(network: &str) -> bool {
@@ -991,6 +1041,14 @@ mod tests {
     }
 
     #[test]
+    fn otc_wallet_gate_includes_requested_production_networks() {
+        for network in ["sei", "solana", "sui", "ton", "aptos"] {
+            assert!(supports_otc_wallet_network(network), "{network}");
+        }
+        assert!(!supports_otc_wallet_network("sepolia"));
+    }
+
+    #[test]
     fn wallet_addresses_are_checked_against_the_actual_chain() {
         for (network, address, valid) in [
             (
@@ -1018,6 +1076,17 @@ mod tests {
             ),
             ("solana", "11111111111111111111111111111111", false),
             ("solana", "alice.near", false),
+            (
+                "sui",
+                "0x1111111111111111111111111111111111111111111111111111111111111111",
+                true,
+            ),
+            ("sui", "alice.near", false),
+            ("aptos", "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true),
+            ("aptos", "0x1", true),
+            ("ton", "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ", true),
+            ("ton", "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true),
+            ("ton", "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", false),
             ("unsupported", "alice.near", false),
         ] {
             assert_eq!(

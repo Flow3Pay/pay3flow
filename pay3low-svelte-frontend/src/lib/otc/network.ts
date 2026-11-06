@@ -13,6 +13,7 @@ const EVM_NETWORKS: Record<number, { name: string; label: string }> = {
   8453: { name: "base", label: "Base" },
   42161: { name: "arbitrum-one", label: "Arbitrum One" },
   43114: { name: "avalanche-c", label: "Avalanche C-Chain" },
+  1329: { name: "sei", label: "Sei" },
 };
 
 /**

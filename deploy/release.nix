@@ -20,6 +20,11 @@ let
     user="''${PAY3FLOW_DEPLOY_USER:-root}"
     namespace="''${PAY3FLOW_NAMESPACE:-pay3flow}"
     public_url="''${PAY3FLOW_PUBLIC_URL:-https://pay3flow.lefine.pro}"
+    solana_rpc="''${PAY3FLOW_PUBLIC_SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}"
+    sui_rpc="''${PAY3FLOW_PUBLIC_SUI_RPC_URL:-https://fullnode.mainnet.sui.io:443}"
+    aptos_rpc="''${PAY3FLOW_PUBLIC_APTOS_RPC_URL:-https://fullnode.mainnet.aptoslabs.com/v1}"
+    ton_api="''${PAY3FLOW_PUBLIC_TON_API_URL:-https://tonapi.io}"
+    ton_manifest="''${PAY3FLOW_PUBLIC_TONCONNECT_MANIFEST_URL:-$public_url/tonconnect-manifest.json}"
     image_tag="''${PAY3FLOW_IMAGE_TAG:-}"
     revision="''${PAY3FLOW_SOURCE_REVISION:-}"
     reuse_images=false
@@ -41,6 +46,9 @@ let
     done
     [[ "$host" =~ ^[A-Za-z0-9.:-]+$ && "$user" =~ ^[a-z_][a-z0-9_-]*$ ]]
     [[ "$namespace" =~ ^[a-z0-9-]+$ && "$public_url" =~ ^https://[A-Za-z0-9.:-]+$ ]]
+    [[ "$solana_rpc" =~ ^https://[A-Za-z0-9._:/-]+$ && "$sui_rpc" =~ ^https://[A-Za-z0-9._:/-]+$ ]]
+    [[ "$aptos_rpc" =~ ^https://[A-Za-z0-9._:/-]+$ && "$ton_api" =~ ^https://[A-Za-z0-9._:/-]+$ ]]
+    [[ "$ton_manifest" =~ ^https://[A-Za-z0-9._:/-]+$ ]]
     [[ -z "$revision" || "$revision" =~ ^[a-f0-9]{7,40}$ ]]
     [[ -z "$image_tag" || "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
     remote() {
@@ -81,7 +89,7 @@ in {
       remote "cd '$release' && nerdctl --address /run/k3s/containerd/containerd.sock --namespace k8s.io build --progress plain -f backend/Dockerfile -t 'localhost/pay3flow/backend:$image_tag' ."
       remote "cd '$release/pay3low-svelte-frontend' && nerdctl --address /run/k3s/containerd/containerd.sock --namespace k8s.io build --progress plain -f '../deploy/frontend-runtime/Dockerfile' -t 'localhost/pay3flow/frontend:$image_tag' ."
     fi
-    remote "namespace='$namespace' public_url='$public_url' image_tag='$image_tag' revision='$revision' bash -s" <<'REMOTE'
+    remote "namespace='$namespace' public_url='$public_url' image_tag='$image_tag' revision='$revision' solana_rpc='$solana_rpc' sui_rpc='$sui_rpc' aptos_rpc='$aptos_rpc' ton_api='$ton_api' ton_manifest='$ton_manifest' bash -s" <<'REMOTE'
     set -euo pipefail
     umask 077
     ${verifyHttp}
@@ -111,7 +119,9 @@ in {
     trap restore EXIT
     for service in backend frontend; do
       patch=$(jq -n --arg service "$service" --arg tag "$image_tag" --arg revision "$revision" \
-        '{spec:{template:{metadata:{annotations:{"pay3flow.io/source-revision":$revision}},spec:{containers:[{name:$service,image:("localhost/pay3flow/"+$service+":"+$tag),imagePullPolicy:"IfNotPresent"}]}}}}')
+        --arg solana_rpc "$solana_rpc" --arg sui_rpc "$sui_rpc" --arg aptos_rpc "$aptos_rpc" \
+        --arg ton_api "$ton_api" --arg ton_manifest "$ton_manifest" \
+        '{spec:{template:{metadata:{annotations:{"pay3flow.io/source-revision":$revision}},spec:{containers:[({name:$service,image:("localhost/pay3flow/"+$service+":"+$tag),imagePullPolicy:"IfNotPresent"} + (if $service == "frontend" then {env:[{name:"PUBLIC_SOLANA_RPC_URL",value:$solana_rpc},{name:"PUBLIC_SUI_RPC_URL",value:$sui_rpc},{name:"PUBLIC_APTOS_RPC_URL",value:$aptos_rpc},{name:"PUBLIC_TON_API_URL",value:$ton_api},{name:"PUBLIC_TONCONNECT_MANIFEST_URL",value:$ton_manifest}]} else {} end))]}}}}')
       kube patch deployment "pay3flow-$service" --type=strategic -p "$patch"
       kube rollout status "deployment/pay3flow-$service" --timeout=8m
       curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 30 "$public_url/health/ready" >/dev/null

@@ -24,11 +24,15 @@ test("TRON validates the checksum, not just the shape", async () => {
   assert.equal(await isTronAddress("0x0000000000000000000000000000000000000001"), false);
 });
 
-test("hex wallet identities ignore letter case while NEAR and TRON do not", () => {
+test("hex wallet identities ignore letter case while NEAR, TRON, Solana, and TON do not", () => {
   assert.equal(sameWalletAddress("evm", "0xAbC", "0xabc"), true);
   assert.equal(sameWalletAddress("everscale", `0:${"A".repeat(64)}`, `0:${"a".repeat(64)}`), true);
+  assert.equal(sameWalletAddress("sui", `0x${"A".repeat(64)}`, `0x${"a".repeat(64)}`), true);
+  assert.equal(sameWalletAddress("aptos", `0x${"A".repeat(64)}`, `0x${"a".repeat(64)}`), true);
   assert.equal(sameWalletAddress("tron", "TR7N", "Tr7n"), false);
   assert.equal(sameWalletAddress("near", "alice.near", "ALICE.NEAR"), false);
+  assert.equal(sameWalletAddress("solana", "So1111", "so1111"), false);
+  assert.equal(sameWalletAddress("ton", "0:ABC", "0:abc"), false);
 });
 
 test("Everscale addresses require a supported workchain and a complete hash", () => {

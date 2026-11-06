@@ -38,6 +38,11 @@ module Pay3flow
       "PAY3FLOW_FMATCH_INBOX" => "https://lefine.pro/inbox/actra",
       "PAY3FLOW_FMATCH_ACTOR_ID" => "https://lefine.pro/actors/actra",
       "PAY3FLOW_PUBLIC_API_URL" => "",
+      "PAY3FLOW_PUBLIC_SOLANA_RPC_URL" => "https://api.mainnet-beta.solana.com",
+      "PAY3FLOW_PUBLIC_SUI_RPC_URL" => "https://fullnode.mainnet.sui.io:443",
+      "PAY3FLOW_PUBLIC_APTOS_RPC_URL" => "https://fullnode.mainnet.aptoslabs.com/v1",
+      "PAY3FLOW_PUBLIC_TON_API_URL" => "https://tonapi.io",
+      "PAY3FLOW_PUBLIC_TONCONNECT_MANIFEST_URL" => "",
       "PAY3FLOW_FX_SOURCE" => "mock",
       "PAY3FLOW_P2P_SEARCH_ENABLED" => "true",
       "PAY3FLOW_P2P_FMATCH_STALE_SECS" => "900",
@@ -57,6 +62,10 @@ module Pay3flow
       values["PAY3FLOW_AP_ORIGIN"] = environment.fetch(
         "PAY3FLOW_AP_ORIGIN",
         "https://#{values.fetch("PAY3FLOW_INGRESS_HOST")}"
+      )
+      values["PAY3FLOW_PUBLIC_TONCONNECT_MANIFEST_URL"] = environment.fetch(
+        "PAY3FLOW_PUBLIC_TONCONNECT_MANIFEST_URL",
+        "https://#{values.fetch("PAY3FLOW_INGRESS_HOST")}/tonconnect-manifest.json"
       )
 
       if values.fetch("PAY3FLOW_DATABASE_MODE") == "external"

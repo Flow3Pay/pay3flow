@@ -212,6 +212,22 @@ Local development uses ignored `pay3low-svelte-frontend/.env.local`. These files
 are excluded from the frontend image build context. Merely copying such a file
 to a release directory does not configure the running production process.
 
+## Multi-chain wallet endpoints
+
+The production image-patch deploy configures the frontend runtime with
+`PUBLIC_SOLANA_RPC_URL`, `PUBLIC_SUI_RPC_URL`, `PUBLIC_APTOS_RPC_URL`,
+`PUBLIC_TON_API_URL`, and `PUBLIC_TONCONNECT_MANIFEST_URL`. Defaults match the
+frontend example environment and the manifest is served from
+`/tonconnect-manifest.json`. Override them with the corresponding
+`PAY3FLOW_PUBLIC_*` variables when invoking `nix run .#deploy`; these are
+public endpoints, not credentials.
+
+The rendered Kubernetes manifest provides the same defaults and can be
+overridden with `PAY3FLOW_PUBLIC_*` variables when rendering it. The bundled
+TON Connect manifest uses `https://pay3flow.lefine.pro`; for another public
+domain, serve an updated manifest whose `url` and `iconUrl` match that domain
+and set `PAY3FLOW_PUBLIC_TONCONNECT_MANIFEST_URL` accordingly.
+
 ## Frontend build behavior
 
 For GNK/USDT trading, see [HEX Gonka setup](../docs/hex-gonka.md). Execution

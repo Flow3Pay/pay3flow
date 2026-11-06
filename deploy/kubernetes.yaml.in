@@ -455,6 +455,16 @@ spec:
               value: "3000"
             - name: PUBLIC_API_URL
               value: "$PAY3FLOW_PUBLIC_API_URL"
+            - name: PUBLIC_SOLANA_RPC_URL
+              value: "$PAY3FLOW_PUBLIC_SOLANA_RPC_URL"
+            - name: PUBLIC_SUI_RPC_URL
+              value: "$PAY3FLOW_PUBLIC_SUI_RPC_URL"
+            - name: PUBLIC_APTOS_RPC_URL
+              value: "$PAY3FLOW_PUBLIC_APTOS_RPC_URL"
+            - name: PUBLIC_TON_API_URL
+              value: "$PAY3FLOW_PUBLIC_TON_API_URL"
+            - name: PUBLIC_TONCONNECT_MANIFEST_URL
+              value: "$PAY3FLOW_PUBLIC_TONCONNECT_MANIFEST_URL"
             - name: PUBLIC_HOT_KIT_API_KEY
               valueFrom:
                 secretKeyRef:

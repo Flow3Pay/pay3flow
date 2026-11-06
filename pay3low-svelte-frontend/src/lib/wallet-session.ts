@@ -69,7 +69,7 @@ export function restoreWallets(): Promise<void> {
     let families: unknown;
     try { families = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]"); } catch { return; }
     if (!Array.isArray(families)) return;
-    await Promise.all(families.filter((family): family is WalletFamily => ["evm", "near", "tron", "everscale"].includes(family)).map(async family => {
+    await Promise.all(families.filter((family): family is WalletFamily => ["evm", "near", "tron", "everscale", "solana", "sui", "aptos", "ton"].includes(family)).map(async family => {
       const generation = generations.get(family) ?? 0;
       generations.set(family, generation);
       try {

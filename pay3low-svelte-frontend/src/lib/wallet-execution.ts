@@ -2,15 +2,28 @@ import { env } from "$env/dynamic/public";
 import type { RouteExecution, RouteExecutionAction } from "$lib/exchange";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import type { EIP1193Provider } from "viem";
+import { sei } from "viem/chains";
 import { decimalToAtomic, atomicToDecimal, sameWalletAddress } from "./wallet-amount";
 import { SAFE_NETWORKS } from "./otc/production-safe";
 import { TRON_CHAIN_ID, connectTronProvider, ensureTronMainnet, tronProvider, tronAddress, broadcastTron, type TronProvider } from "./tron-wallet";
 import { connectEverscale, restoreEverscale, observeEverscale, isEverscaleAddress, type EverscaleConnection } from "./everscale-wallet";
+import {
+  assertExtraWalletCurrent,
+  connectExtraWallet,
+  disconnectExtraWallet,
+  executeExtraDeposit,
+  hasExtraExecutionFunds,
+  isExtraNetwork,
+  observeExtraWallet,
+  restoreExtraWallet,
+  validateExtraRecipient,
+  type ExtraWallet,
+} from "./wallet-multichain";
 
 type Hex = `0x${string}`;
 type Address = `0x${string}`;
 
-export type ConnectedWallet = EvmConnection | NearConnection | TronConnection | EverscaleConnection;
+export type ConnectedWallet = EvmConnection | NearConnection | TronConnection | EverscaleConnection | ExtraWallet;
 export type WalletFamily = ConnectedWallet["family"];
 
 export interface EvmConnection {
@@ -90,6 +103,7 @@ const CHAIN_NAMES: Record<string, number> = {
   linea: 59144,
   plasma: 9745,
   ink: 57073,
+  sei: 1329,
 };
 
 const erc20Abi = [
@@ -198,7 +212,17 @@ export function walletFamily(network: string): ConnectedWallet["family"] | null 
   if (network.toLowerCase() === "near") return "near";
   if (network.toLowerCase() === "tron") return "tron";
   if (network.toLowerCase() === "everscale") return "everscale";
-  return CHAIN_NAMES[network.toLowerCase()] ? "evm" : null;
+  const normalized = network.toLowerCase();
+  if (isExtraNetwork(normalized)) return normalized;
+  return CHAIN_NAMES[normalized] ? "evm" : null;
+}
+
+function isExtraWallet(wallet: ConnectedWallet): wallet is ExtraWallet {
+  return isExtraNetwork(wallet.family);
+}
+
+function isExtraFamily(family: WalletFamily): family is ExtraWallet["family"] {
+  return isExtraNetwork(family);
 }
 
 export function chainIdForNetwork(network: string): number | null {
@@ -226,7 +250,7 @@ async function appKit() {
       import("@reown/appkit-adapter-wagmi"),
       import("@reown/appkit/networks"),
     ]);
-    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink];
+    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei];
     const adapter = new WagmiAdapter({ projectId, networks: supported });
     const modal = createAppKit({
       adapters: [adapter],
@@ -276,7 +300,7 @@ async function injectedApp() {
           import("wagmi/connectors"),
           import("@reown/appkit/networks"),
         ]);
-        const supported = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink] as const;
+        const supported = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei] as const;
         const connector = injected({ target: injectedWalletTarget });
         const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
         const config = createConfig({
@@ -366,6 +390,7 @@ export async function connectForNetwork(network: string): Promise<ConnectedWalle
   if (family === "near") return connectNear();
   if (family === "everscale") return connectEverscale();
   if (family === "evm") return connectEvm(network);
+  if (isExtraNetwork(network)) return connectExtraWallet(network);
   throw new Error(`Wallet execution is not available for ${network}`);
 }
 
@@ -395,6 +420,10 @@ function isNativeToken(token?: string): boolean {
 export async function hasExecutionFunds(execution: RouteExecution, wallet: ConnectedWallet): Promise<boolean> {
   await assertExecutionWallet(execution, wallet);
   const action = execution.action;
+  if (isExtraWallet(wallet)) {
+    if (action.kind !== "near_deposit") throw new Error("This action is not available for the selected wallet");
+    return hasExtraExecutionFunds(action, wallet, requiredAtomic(action));
+  }
   if (wallet.family === "tron") {
     const web = await ensureTronMainnet(wallet.provider);
     const token = sourceToken(action);
@@ -516,6 +545,7 @@ async function submitNonCowAction(execution: RouteExecution, wallet: ConnectedWa
   if (action.kind === "near_deposit") {
     if (wallet.family === "tron") return executeTronDeposit(action, wallet);
     if (action.network === "near") return executeNearDeposit(action, asNear(wallet), execution.id);
+    if (isExtraWallet(wallet)) return { reference: await executeExtraDeposit(action, wallet, requiredAtomic(action)), kind: "transaction_hash" as const };
     return executeEvmDeposit(action, asEvm(wallet));
   }
   if (action.kind === "symbiosis_transaction") {
@@ -657,6 +687,8 @@ export async function validateRecipient(network: string, address: string): Promi
     if (!await isTronAddress(address)) throw new Error("Invalid TRON recipient address");
   } else if (network === "everscale") {
     if (!isEverscaleAddress(address)) throw new Error("Invalid Everscale recipient address");
+  } else if (isExtraNetwork(network)) {
+    await validateExtraRecipient(network, address);
   } else {
     throw new Error(`Recipient validation is unavailable for ${network}`);
   }
@@ -673,6 +705,8 @@ async function assertExecutionWallet(execution: RouteExecution, wallet: Connecte
   } else if (wallet.family === "near") {
     const account = wallet.selector.store.getState().accounts.find(item => item.active);
     if (account?.accountId !== wallet.address) throw new Error("NEAR wallet account changed or disconnected");
+  } else if (isExtraWallet(wallet)) {
+    await assertExtraWalletCurrent(wallet);
   } else {
     const web = await ensureTronMainnet(wallet.provider);
     if (web.defaultAddress.base58 !== wallet.address) throw new Error("TRON wallet account changed");
@@ -738,6 +772,7 @@ async function executeTronSymbiosis(action: Extract<RouteExecutionAction, { kind
 /** Restore only sessions authorized in a previous visit, without wallet prompts. */
 export async function restoreWallet(family: WalletFamily): Promise<ConnectedWallet | null> {
   if (family === "everscale") return restoreEverscale();
+  if (isExtraFamily(family)) return restoreExtraWallet(family);
   if (family === "near") {
     const selector = await nearSelector();
     const account = selector.store.getState().accounts.find(item => item.active);
@@ -758,6 +793,7 @@ export async function restoreWallet(family: WalletFamily): Promise<ConnectedWall
 
 export async function observeWallet(wallet: ConnectedWallet, changed: (value: ConnectedWallet | null) => void): Promise<() => void> {
   if (wallet.family === "everscale") return observeEverscale(wallet, changed);
+  if (isExtraWallet(wallet)) return observeExtraWallet(wallet, changed);
   if (wallet.family === "near") {
     const subscription = wallet.selector.store.observable.subscribe(state => {
       const account = state.accounts.find(item => item.active);
@@ -795,6 +831,7 @@ export async function observeWallet(wallet: ConnectedWallet, changed: (value: Co
 export async function disconnectWallet(wallet: ConnectedWallet): Promise<void> {
   if (wallet.family === "everscale") await wallet.provider.request({ method: "disconnect" });
   if (wallet.family === "near") await (await wallet.selector.wallet()).signOut();
+  if (isExtraWallet(wallet)) await disconnectExtraWallet(wallet);
   if (wallet.family === "evm") {
     const { disconnect } = await import("@wagmi/core");
     await disconnect(wallet.config as Parameters<typeof disconnect>[0]);

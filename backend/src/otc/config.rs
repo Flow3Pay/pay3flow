@@ -219,6 +219,7 @@ pub(crate) fn evm_chain_id(network: &str) -> Option<u64> {
         "avalanche-c" => Some(43114),
         "arbitrum-one" => Some(42161),
         "base" => Some(8453),
+        "sei" => Some(1329),
         _ => None,
     }
 }
@@ -258,6 +259,7 @@ fn valid_fee_recipient(network: &str, address: &str) -> bool {
             | "arbitrum-one"
             | "base"
             | "optimism"
+            | "sei"
     );
     if evm {
         return address.len() == 42
@@ -288,25 +290,8 @@ fn valid_fee_recipient(network: &str, address: &str) -> bool {
                     .bytes()
                     .all(|byte| b"023456789acdefghjklmnpqrstuvwxyz".contains(&byte))
         }),
-        "solana" => {
-            (32..=44).contains(&address.len())
-                && address.bytes().all(|byte| {
-                    b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(&byte)
-                })
-        }
-        "sei" => {
-            address.starts_with("sei1")
-                && (8..=90).contains(&address.len())
-                && address
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
-        }
-        "ton" => {
-            address.len() == 48
-                && (address.starts_with("EQ") || address.starts_with("UQ"))
-                && address
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        "solana" | "sui" | "ton" => {
+            crate::route_execution::validate_otc_wallet_address(network, address).is_ok()
         }
         "aptos" => {
             address.len() == 66
@@ -439,11 +424,12 @@ mod config_tests {
             "near=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "bitcoin=bc1qaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "ethereum=0x1111111111111111111111111111111111111111",
-            "solana=11111111111111111111111111111111",
+            "solana=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
             "avalanche-c=0x1111111111111111111111111111111111111111",
-            "sei=sei1aaaaaaaaaaaaaaaaaaaa",
+            "sei=0x1111111111111111111111111111111111111111",
+            "sui=0x1111111111111111111111111111111111111111111111111111111111111111",
             "polygon-pos=0x1111111111111111111111111111111111111111",
-            "ton=UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "ton=UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ",
             "bnb-smart-chain=0x1111111111111111111111111111111111111111",
             "arbitrum-one=0x1111111111111111111111111111111111111111",
             "base=0x1111111111111111111111111111111111111111",
@@ -451,7 +437,7 @@ mod config_tests {
             "aptos=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ]"#;
         let recipients = parse_fee_recipients(entries).unwrap();
-        assert_eq!(recipients.len(), 14);
+        assert_eq!(recipients.len(), 15);
         assert_eq!(
             recipients.get("tron").map(String::as_str),
             Some("T111111111111111111111111111111111")
@@ -524,6 +510,7 @@ mod config_tests {
             ("avalanche-c", 43114),
             ("arbitrum-one", 42161),
             ("base", 8453),
+            ("sei", 1329),
         ] {
             assert_eq!(evm_chain_id(network), Some(chain_id));
         }

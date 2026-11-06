@@ -9,7 +9,12 @@
   "p2p_ethereum_chain_id": null,
   "p2p_usdt_contract": null,
   "p2p_ethereum_rpc": [],
-  "p2p_evm_rpcs": {},
+  "p2p_evm_rpcs": {
+    "sei": [
+      "https://evm-rpc.sei-apis.com",
+      "https://sei-evm-rpc.publicnode.com"
+    ]
+  },
   "origin": "https://app.example",
   "relay_origin": "https://relay.example",
   "matcher_actor": "https://relay.example/actors/fmatch",
@@ -21,7 +26,7 @@
   "everscale_multisig_backend": null,
   "ever_resource": "https://assets.example/everscale-42-native-ever",
   "usdt_resource": "https://assets.example/ethereum-1-usdt-dac17f958d2ee523a2206206994597c13d831ec7",
-  "ever_wallet": "",
+  "ever_wallet": "0:be686885c3bb2e1c958a9ddfded8ada3f940e858779a0760e80462b68d224c84",
   "usdt_wallet": "",
   "ever_gas_reserve": "1",
   "eth_gas_reserve": "0.01",

@@ -1176,7 +1176,7 @@ impl Service {
         }
         let deposit_memo =
             crate::route_engine::first_string(&quote.raw, &["depositMemo", "deposit_memo"]);
-        if deposit_memo.is_some() && network != "near" {
+        if deposit_memo.is_some() && !matches!(network, "near" | "solana" | "ton") {
             return Err(invalid(
                 "This payment requires a wallet instruction that is not supported on the selected network",
             ));
@@ -1406,6 +1406,13 @@ impl Service {
             ));
         }
         let source_amount = quote.input.value.clone();
+        let deposit_memo =
+            crate::route_engine::first_string(&quote.raw, &["depositMemo", "deposit_memo"]);
+        if deposit_memo.is_some() && !matches!(network, "near" | "solana" | "ton") {
+            return Err(invalid(
+                "This service-fee route requires a memo that is not supported on the selected network",
+            ));
+        }
         let leg = super::model::Leg {
             chain: network.to_string(),
             amount: amount::units(&source_amount, u32::from(decimals))?.to_string(),
@@ -1449,6 +1456,7 @@ impl Service {
             })),
             "minimum_output": fee_amount,
             "deposit_address": deposit_address,
+            "deposit_memo": deposit_memo,
             "quote_expires_at": expires_at,
             "quote": quote.raw,
             "attempt_id": attempt,
@@ -1493,12 +1501,10 @@ impl Service {
             return Err(Error::Conflict("original reference is immutable".into()));
         }
         if chain == "near-intents" {
-            if reference.is_empty()
-                || reference.len() > 160
-                || !reference
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
-            {
+            if !valid_near_intents_reference(
+                instructions["source_network"].as_str().unwrap_or_default(),
+                reference,
+            ) {
                 return Err(invalid("invalid NEAR Intents transaction reference"));
             }
         } else {
@@ -1965,6 +1971,21 @@ fn provider_amount_units(value: &str, decimals: u32) -> Option<u128> {
     }
 }
 
+fn valid_near_intents_reference(network: &str, reference: &str) -> bool {
+    let decoded = bs58::decode(reference).into_vec();
+    match network {
+        "near" | "sui" => decoded.is_ok_and(|bytes| bytes.len() == 32),
+        "solana" => decoded.is_ok_and(|bytes| bytes.len() == 64),
+        "ethereum" | "gnosis" | "arbitrum-one" | "base" | "polygon-pos" | "avalanche-c"
+        | "bnb-smart-chain" | "optimism" | "sei" | "aptos" => {
+            reference.starts_with("0x")
+                && wallet::unhex(reference).is_ok_and(|bytes| bytes.len() == 32)
+        }
+        "tron" | "ton" => wallet::unhex(reference).is_ok_and(|bytes| bytes.len() == 32),
+        _ => false,
+    }
+}
+
 fn fee_leg(network: &str, fee_units: &str, sender: &str, recipient: &str) -> Result<Leg> {
     let units = amount::integer(fee_units)?;
     if units == 0 || sender == recipient {
@@ -2052,6 +2073,27 @@ fn near_status_outcome(
 #[cfg(test)]
 mod route_status_tests {
     use super::*;
+
+    #[test]
+    fn near_intents_references_use_the_source_chain_encoding() {
+        assert!(valid_near_intents_reference(
+            "ethereum",
+            &format!("0x{}", "a".repeat(64))
+        ));
+        assert!(!valid_near_intents_reference("ethereum", &"a".repeat(64)));
+        assert!(valid_near_intents_reference(
+            "solana",
+            &bs58::encode([1u8; 64]).into_string()
+        ));
+        assert!(valid_near_intents_reference(
+            "sui",
+            &bs58::encode([1u8; 32]).into_string()
+        ));
+        assert!(valid_near_intents_reference(
+            "near",
+            &bs58::encode([2u8; 32]).into_string()
+        ));
+    }
 
     #[test]
     fn buy_offer_acceptance_binds_a_valid_destination_and_exact_asset() {
