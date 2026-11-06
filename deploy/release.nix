@@ -8,10 +8,11 @@ let
           "$public_url/api/reference-rates?from=USD&to=$currency&market=noncash" \
           | jq -e '.rates | length > 0' >/dev/null
       done
-      curl --fail --silent --show-error --max-time 30 \
+      curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
         "$public_url/api/reference-rates?from=RUB&to=AMD&market=noncash" \
         | jq -e '(.rates | length == 2) and (.unavailable_sources | length == 0)' >/dev/null
-      curl --fail --silent --show-error --max-time 30 "$public_url/" >/dev/null
+      curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+        "$public_url/" >/dev/null
       echo "Verified $public_url: readiness, fiat benchmarks and frontend"
     }
   '';
