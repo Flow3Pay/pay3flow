@@ -86,9 +86,7 @@
           : !/^0x[0-9a-fA-F]{40}$/.test(receivingAddress.trim())
             ? say("Enter a valid receiving address.", "Укажите корректный адрес получения.") : "";
   $: valid = !blockingReason;
-  $: stablecoinNetworks = direction === "buy"
-    ? [{ network: "ethereum", assetId: "" }]
-    : [
+  $: stablecoinNetworks = [
         { network: "ethereum", assetId: "" },
         ...stablecoinAssets
           .filter(item => item.symbol === stablecoin && item.network !== "ethereum")
@@ -156,7 +154,7 @@
     key ||= crypto.randomUUID();
     const selectedAsset = stablecoinAssets.find(item => item.symbol === stablecoin && item.network === stablecoinNetwork);
     if (stablecoinNetwork !== "ethereum" && !selectedAsset) {
-      error = say("That receiving network is no longer available. Select it again.", "Эта сеть получения больше недоступна. Выберите её снова.");
+      error = say("That network is no longer available. Select it again.", "Эта сеть больше недоступна. Выберите её снова.");
       return;
     }
     const body = { direction, stablecoin, ever_amount: offerDecimal(everAmount,9)!, usdt_amount: offerDecimal(usdtAmount,6)!, usdt_address: receivingAddress.trim(), stablecoin_network: stablecoinNetwork, stablecoin_asset_id: selectedAsset?.asset_id };

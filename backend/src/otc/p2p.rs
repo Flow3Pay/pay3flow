@@ -166,8 +166,9 @@ impl Service {
         actor: &str,
         offer_id: Uuid,
         key: &str,
+        request: AcceptOfferRequest,
     ) -> Result<Value> {
-        self.accept_offer_with_destination(actor, offer_id, key, AcceptOfferRequest::default())
+        self.accept_offer_with_destination(actor, offer_id, key, request)
             .await
     }
 
@@ -245,7 +246,7 @@ impl Service {
             .get("fee_policy")
             .filter(|policy| policy.is_object())
             .cloned()
-            .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis));
+            .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis, stablecoin.symbol()));
         fee_policy["version"] = json!(super::public_offers::P2P_FEE_VERSION);
         fee_policy["asset"] = json!("USDT");
         fee_policy["payer"] = json!("stablecoin_sender");
@@ -266,16 +267,19 @@ impl Service {
             ));
         }
         let (usdt_payer, default_usdt_payee, ever_payer, ever_payee) = match direction {
-            Direction::Sell => (
-                taker_eth,
-                usdt_address.clone(),
-                seller_ever.clone(),
-                taker_ever,
-            ),
-            Direction::Buy => (usdt_address.clone(), taker_eth, taker_ever, seller_ever),
+            Direction::Sell => (taker_eth, usdt_address.clone(), seller_ever, taker_ever),
+            Direction::Buy => (usdt_address, taker_eth, taker_ever, seller_ever),
         };
         let (output_network, output_asset_id, usdt_payee) =
             accepted_destination(direction, &terms, &default_usdt_payee, destination)?;
+        let (payer_network, payer_asset_id) = if direction == Direction::Buy {
+            (
+                offer_network.to_string(),
+                terms["stablecoin_asset_id"].as_str().map(str::to_string),
+            )
+        } else {
+            ("ethereum".to_string(), None)
+        };
         let mut output_contract = token_contract.to_string();
         let mut fee_usdt_contract = if output_network == "ethereum" {
             Some(self.cfg.p2p_usdt().to_string())
@@ -360,6 +364,7 @@ impl Service {
             "usdt_payer": usdt_payer, "usdt_payee": usdt_payee,
             "stablecoin_network": output_network,
             "stablecoin_asset_id": output_asset_id,
+            "payer_network": payer_network, "payer_asset_id": payer_asset_id,
             "ever_payer": ever_payer, "ever_payee": ever_payee,
             "fee_payer_actor": fee_payer_actor,
             "usdt_contract": output_contract,
@@ -1928,12 +1933,21 @@ impl Service {
                 .get("fee_policy")
                 .filter(|policy| policy.is_object())
                 .cloned()
-                .unwrap_or_else(|| super::public_offers::fee_policy(basis));
+                .unwrap_or_else(|| {
+                    let stablecoin = super::public_offers::Stablecoin::from_terms(&body)
+                        .map(|stablecoin| stablecoin.symbol())
+                        .unwrap_or("USDT");
+                    super::public_offers::fee_policy(basis, stablecoin)
+                });
             let fee_asset = policy
                 .get("asset")
                 .and_then(Value::as_str)
                 .filter(|asset| matches!(*asset, "USDT" | "USDC"))
                 .ok_or_else(|| invalid("deal fee asset is malformed"))?;
+            let basis_asset = policy
+                .get("basis_asset")
+                .and_then(Value::as_str)
+                .unwrap_or(fee_asset);
             let payer_actor = body
                 .get("fee_payer_actor")
                 .and_then(Value::as_str)
@@ -1946,8 +1960,8 @@ impl Service {
                     .to_string())
             };
             tx.execute(
-                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,6,$5::text::numeric,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9,'accrued',$10) ON CONFLICT (trade_id) DO NOTHING",
-                    &[&Uuid::new_v4(), &id, &offer_id, &fee_asset, &text("basis_units")?, &text("fee_units")?, &text("net_units")?, &text("rate")?, &text("version")?, &payer_actor],
+                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,basis_asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,$5,6,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9::text::numeric,$10,'accrued',$11) ON CONFLICT (trade_id) DO NOTHING",
+                    &[&Uuid::new_v4(), &id, &offer_id, &fee_asset, &basis_asset, &text("basis_units")?, &text("fee_units")?, &text("net_units")?, &text("rate")?, &text("version")?, &payer_actor],
             )
             .await?;
         }
@@ -2340,7 +2354,12 @@ fn deal(row: &Row, actor: &str) -> Value {
             body["usdt_units"]
                 .as_str()
                 .and_then(|units| units.parse::<u128>().ok())
-                .map(super::public_offers::fee_policy)
+                .map(|basis| {
+                    let stablecoin = super::public_offers::Stablecoin::from_terms(&body)
+                        .map(|stablecoin| stablecoin.symbol())
+                        .unwrap_or("USDT");
+                    super::public_offers::fee_policy(basis, stablecoin)
+                })
         })
         .unwrap_or(Value::Null);
     let fee_accrued = matches!(state.as_str(), "delivery_pending" | "completed");

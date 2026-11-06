@@ -226,4 +226,7 @@ require `p2p_evm_rpcs` in that private JSON file. It maps a canonical network
 ID to two independently operated HTTPS RPC endpoints; supported IDs are
 `base`, `arbitrum-one`, `optimism`, `bnb-smart-chain`, `gnosis`, `polygon-pos`
 and `avalanche-c`. A missing pair keeps that direct network unavailable; it
-does not disable routed cross-network settlement.
+does not disable routed cross-network settlement. Direct same-network
+settlement on NEAR and TRON is not implemented. Routed fee costs are quoted
+before the principal payment is signed and quoted again when preparing fee
+collection.

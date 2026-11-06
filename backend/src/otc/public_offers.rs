@@ -51,14 +51,18 @@ impl Stablecoin {
 const MAX_HISTORY_ROWS: i64 = 500;
 
 /// Fee basis uses the six-decimal stablecoin amount; the obligation is always USDT.
-/// Rounding up ensures the service never accrues less than three percent.
-pub(crate) fn fee_policy(basis: u128) -> Value {
+/// USDC counts at a nominal 1:1 USDT rate, so the fee is the same three percent
+/// of the deal in either token. Rounding up ensures the service never accrues
+/// less than three percent.
+pub(crate) fn fee_policy(basis: u128, basis_asset: &str) -> Value {
     let fee = basis.saturating_mul(3).saturating_add(99) / 100;
     json!({
         "version": P2P_FEE_VERSION, "rate": P2P_FEE_RATE, "floor": "0",
         "basis_units": basis.to_string(), "fee_units": fee.to_string(),
         "net_units": basis.saturating_sub(fee).to_string(), "precision": P2P_FEE_PRECISION,
-        "asset": "USDT", "payer": "stablecoin_sender", "withheld": true,
+        "asset": "USDT", "basis_asset": basis_asset,
+        "conversion": {"from": basis_asset, "to": "USDT", "rate": "1"},
+        "payer": "stablecoin_sender", "withheld": true,
     })
 }
 
@@ -127,10 +131,7 @@ impl PublicOfferDraft {
         {
             return Err(invalid("stablecoin asset identity is required"));
         }
-        let mut policy = fee_policy(usdt);
-        if self.stablecoin == Stablecoin::Usdc {
-            policy["conversion"] = json!("nominal_usdc_usdt_1_to_1");
-        }
+        let policy = fee_policy(usdt, self.stablecoin.symbol());
         Ok(json!({
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
             "stablecoin":self.stablecoin.symbol(),
@@ -378,6 +379,18 @@ mod tests {
         assert_eq!(terms["fee_policy"]["fee_units"], "150000");
         assert_eq!(terms["fee_policy"]["net_units"], "4850000");
         assert_eq!(terms["fee_policy"]["asset"], "USDT");
+        assert_eq!(terms["fee_policy"]["basis_asset"], "USDT");
+        assert_eq!(terms["fee_policy"]["conversion"]["rate"], "1");
+        assert_eq!(terms["fee_policy"]["conversion"]["from"], "USDT");
+        let mut usdc = draft();
+        usdc.stablecoin = Stablecoin::Usdc;
+        let usdc_terms = usdc.terms(&cfg).unwrap();
+        assert_eq!(usdc_terms["stablecoin"], "USDC");
+        assert_eq!(usdc_terms["fee_policy"]["asset"], "USDT");
+        assert_eq!(usdc_terms["fee_policy"]["basis_asset"], "USDC");
+        assert_eq!(usdc_terms["fee_policy"]["fee_units"], "150000");
+        assert_eq!(usdc_terms["fee_policy"]["conversion"]["rate"], "1");
+        assert_eq!(terms["fee_policy"]["asset"], "USDT");
         assert_eq!(terms["fee_policy"]["payer"], "stablecoin_sender");
         assert_eq!(terms["fee_policy"]["withheld"], true);
         for value in ["0", "-1", "0.0000000001", "1000000000001", "NaN"] {
@@ -422,10 +435,18 @@ mod tests {
 
     #[test]
     fn p2p_fee_policy_rounds_up_at_six_decimals_without_a_floor() {
-        let tiny = fee_policy(1);
+        let tiny = fee_policy(1, "USDT");
         assert_eq!(tiny["fee_units"], "1");
         assert_eq!(tiny["net_units"], "0");
-        let policy = fee_policy(11_889_000);
+        let usdc = fee_policy(11_889_000, "USDC");
+        assert_eq!(usdc["asset"], "USDT");
+        assert_eq!(usdc["basis_asset"], "USDC");
+        assert_eq!(usdc["fee_units"], "356670");
+        assert_eq!(
+            usdc["conversion"],
+            json!({"from": "USDC", "to": "USDT", "rate": "1"})
+        );
+        let policy = fee_policy(11_889_000, "USDT");
         assert_eq!(policy["basis_units"], "11889000");
         assert_eq!(policy["fee_units"], "356670");
         assert_eq!(policy["net_units"], "11532330");
@@ -464,7 +485,7 @@ mod tests {
         assert_eq!(usdc.terms(&cfg).unwrap()["fee_policy"]["asset"], "USDT");
         assert_eq!(
             usdc.terms(&cfg).unwrap()["fee_policy"]["conversion"],
-            "nominal_usdc_usdt_1_to_1"
+            json!({"from": "USDC", "to": "USDT", "rate": "1"})
         );
         assert_eq!(
             usdc.terms(&cfg).unwrap()["fee_policy"]["fee_units"],

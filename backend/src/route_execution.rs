@@ -1120,7 +1120,7 @@ mod tests {
         for (provider, from, to, executable) in [
             ("near-intents", "USDT@tron", "USDC@near", true),
             ("near-intents", "USDT@near", "USDC@ethereum", true),
-            ("near-intents", "USDT@solana", "USDC@ethereum", false),
+            ("near-intents", "USDT@solana", "USDC@ethereum", true),
             ("symbiosis", "USDT@tron", "USDC@ethereum", true),
             ("symbiosis", "USDT@tron", "SOL@solana", true),
             ("symbiosis", "USDT@ethereum", "TRX@tron", false),

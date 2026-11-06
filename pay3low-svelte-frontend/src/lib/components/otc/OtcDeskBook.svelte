@@ -43,7 +43,6 @@
   $: askLevels = buildLevels(publicOffers, "sell", ownIds);
   $: bidLevels = buildLevels(publicOffers, "buy", ownIds);
   const avatar = (offer: PublicOffer) => offer.seller_avatar || identiconDataUri(offerOwner(offer));
-
   function buildLevels(source: PublicOffer[], side: Direction, own: string[]): BookLevel[] {
     return source
       .filter(offer => offerDirection(offer) === side)
@@ -330,6 +329,10 @@
   .settlementNote svg { flex:0 0 auto; color:var(--color-accent-strong); }
   .acceptRow { display:grid; gap:12px; margin:0; padding:14px 22px 18px; border-top:1px solid var(--color-border); }
   .acceptRow p { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
+  .acceptDestination { display:grid; gap:8px; }
+  .acceptDestination label { display:grid; gap:5px; color:var(--color-text-soft); font-size:11px; }
+  .acceptDestination select, .acceptDestination input { width:100%; min-width:0; min-height:38px; padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:var(--color-text); font:inherit; }
+  .acceptError { margin:0; color:var(--color-danger); font-size:11px; line-height:1.5; }
   .acceptOffer { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--color-accent-strong); border-radius:8px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
