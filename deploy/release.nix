@@ -121,7 +121,7 @@ in {
       patch=$(jq -n --arg service "$service" --arg tag "$image_tag" --arg revision "$revision" \
         --arg solana_rpc "$solana_rpc" --arg sui_rpc "$sui_rpc" --arg aptos_rpc "$aptos_rpc" \
         --arg ton_api "$ton_api" --arg ton_manifest "$ton_manifest" \
-        '{spec:{template:{metadata:{annotations:{"pay3flow.io/source-revision":$revision}},spec:{containers:[({name:$service,image:("localhost/pay3flow/"+$service+":"+$tag),imagePullPolicy:"IfNotPresent"} + (if $service == "frontend" then {env:[{name:"PUBLIC_SOLANA_RPC_URL",value:$solana_rpc},{name:"PUBLIC_SUI_RPC_URL",value:$sui_rpc},{name:"PUBLIC_APTOS_RPC_URL",value:$aptos_rpc},{name:"PUBLIC_TON_API_URL",value:$ton_api},{name:"PUBLIC_TONCONNECT_MANIFEST_URL",value:$ton_manifest}]} else {} end))]}}}}')
+        '{spec:{template:{metadata:{annotations:{"pay3flow.io/source-revision":$revision}},spec:{containers:[({name:$service,image:("localhost/pay3flow/"+$service+":"+$tag),imagePullPolicy:"IfNotPresent"} + (if $service == "frontend" then {env:[{name:"PUBLIC_SOLANA_RPC_URL",value:$solana_rpc},{name:"PUBLIC_SUI_RPC_URL",value:$sui_rpc},{name:"PUBLIC_APTOS_RPC_URL",value:$aptos_rpc},{name:"PUBLIC_TON_API_URL",value:$ton_api},{name:"PUBLIC_TONCONNECT_MANIFEST_URL",value:$ton_manifest}]} elif $service == "backend" then {env:[{name:"OTC_FEE_RECIPIENTS",valueFrom:{secretKeyRef:{name:"pay3flow-secrets",key:"OTC_FEE_RECIPIENTS"}}}]} else {} end))]}}}}')
       kube patch deployment "pay3flow-$service" --type=strategic -p "$patch"
       kube rollout status "deployment/pay3flow-$service" --timeout=8m
       curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 30 "$public_url/health/ready" >/dev/null
