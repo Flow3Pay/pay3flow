@@ -18,6 +18,9 @@
   export let paymentMethods: PaymentMethod[];
   export let selected: PaymentMethod | null;
   export let selectedNetwork: CryptoNetwork | undefined;
+  /** Open straight on the network list of this asset instead of the currency list. */
+  export let initialStage: PickerStage = "currency";
+  export let initialCurrency = "";
   export let onClose: () => void;
   export let onSelect: (method: PaymentMethod, network?: CryptoNetwork) => void;
 
@@ -71,7 +74,9 @@
     if (open === wasOpen) return;
     wasOpen = open;
     if (open) {
-      stage = "currency"; activeCurrency = ""; query = "";
+      if (initialStage === "detail" && initialCurrency) { stage = "detail"; activeCurrency = initialCurrency.toUpperCase(); }
+      else { stage = "currency"; activeCurrency = ""; }
+      query = "";
       unlockPage = lockPageScroll(); window.addEventListener("keydown", onKeyDown);
       focusTimer = window.setTimeout(() => input?.focus(), 80);
     } else {

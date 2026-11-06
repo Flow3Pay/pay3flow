@@ -4,6 +4,7 @@
   import { getBalances, request, otcP2pNetwork, walletNetwork, type Session, type Direction, type WalletBalance } from "$lib/otc/service";
   import { connectWallet, wallets } from "$lib/wallet-session";
   import { sameWalletAddress } from "$lib/wallet-amount";
+  import { isValidWalletAddress } from "$lib/wallet-address";
   import { fetchMarketPrices } from "$lib/exchange";
   import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState, type Stablecoin } from "$lib/otc/public-offers";
   export let session: Session | null;
@@ -18,11 +19,12 @@
   let amountSource: "ever" | "usdt" = "ever";
   let stablecoin: Stablecoin = "USDT";
   let priceInput = "", priceMode = false, loadedDirection: Direction = "sell";
-  let marketRate = "", marketUsdRate = "", marketPrice = false;
+  let marketRate = "", marketUsdRate = "", marketPrice = true;
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
   let stablecoinNetwork = "ethereum";
   let stablecoinAssets: Array<{ asset: string; symbol: Stablecoin; network: string; asset_id: string }> = [];
   let linkingEvm = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
+  let marketAbort: AbortController | null = null;
   let balances: WalletBalance[] = [], balanceGeneration = 0;
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: seller = session?.wallets?.find(wallet => wallet.chain === "everscale")?.address || "";
@@ -30,7 +32,7 @@
   $: if (mounted && (session?.actor || "") !== loadedActor) {
     const previousActor = loadedActor;
     loadedActor = session?.actor || ""; loadedDirection = direction; mine = []; reviewing = false; error = ""; message = "";
-    if (previousActor || !loadedActor) { everAmount = ""; usdtAmount = ""; stablecoin = "USDT"; receivingAddress = ""; key = ""; priceInput = ""; priceMode = false; marketPrice = false; }
+    if (previousActor || !loadedActor) { everAmount = ""; usdtAmount = ""; stablecoin = "USDT"; receivingAddress = ""; key = ""; priceInput = ""; priceMode = false; marketPrice = true; }
     try {
       const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
       if (draft && (draft.direction || "sell") === direction && [draft.ever_amount, draft.usdt_amount, draft.usdt_address, draft.key].every(value => typeof value === "string")) {
@@ -38,6 +40,7 @@
         stablecoin = draft.stablecoin === "USDC" ? "USDC" : "USDT";
         stablecoinNetwork = typeof draft.stablecoin_network === "string" ? draft.stablecoin_network : "ethereum";
         if (typeof draft.market_price === "boolean") marketPrice = draft.market_price;
+        else marketPrice = true;
       }
     } catch { /* An unreadable draft is not submitted. */ }
     if (marketPrice && marketRate) applyMarketRate(marketRate);
@@ -74,17 +77,11 @@
     ? say(`Enter a positive ${stablecoin} total.`, `Укажите положительную сумму ${stablecoin}.`)
     : usdtUnits > MAX_OFFER_USDT_UNITS
     ? say(`One offer can total at most 1,000,000 ${stablecoin}.`, `Общая сумма одного предложения не может превышать 1 000 000 ${stablecoin}.`)
-    : stablecoinNetwork === "ethereum"
-      ? !/^0x[0-9a-fA-F]{40}$/.test(receivingAddress.trim()) || /^0x0{40}$/i.test(receivingAddress.trim())
-        ? say("Enter your Ethereum wallet address, or use the wallet button.", "Укажите адрес Ethereum-кошелька или нажмите кнопку кошелька.") : ""
-      : stablecoinNetwork === "near"
-        ? !/^(?=.{2,64}$)[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(receivingAddress.trim())
-          ? say("Enter a valid NEAR account ID.", "Укажите корректный NEAR account ID.") : ""
-        : stablecoinNetwork === "tron"
-          ? !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(receivingAddress.trim())
-            ? say("Enter a valid TRON address.", "Укажите корректный TRON-адрес.") : ""
-          : !/^0x[0-9a-fA-F]{40}$/.test(receivingAddress.trim())
-            ? say("Enter a valid receiving address.", "Укажите корректный адрес получения.") : "";
+    : !isValidWalletAddress(stablecoinNetwork, receivingAddress)
+      ? say(`Enter a valid receiving ${stablecoin} address for ${networkLabel(stablecoinNetwork)}.`, `Укажите корректный адрес получения ${stablecoin} в сети ${networkLabel(stablecoinNetwork)}.`)
+      : "";
+  const networkLabels: Record<string, string> = { ethereum: "Ethereum", sei: "Sei", "bnb-smart-chain": "BNB Smart Chain", "polygon-pos": "Polygon", "avalanche-c": "Avalanche", "arbitrum-one": "Arbitrum One", base: "Base", optimism: "Optimism", gnosis: "Gnosis", near: "NEAR", tron: "TRON", solana: "Solana", ton: "TON", sui: "Sui", aptos: "Aptos" };
+  const networkLabel = (network: string) => networkLabels[network] ?? network;
   $: valid = !blockingReason;
   $: if (direction !== loadedDirection) resetDirection(direction);
   function resetDirection(next: Direction) { loadedDirection = next; amountSource = next === "buy" ? "usdt" : "ever"; stablecoinNetwork = "ethereum"; receivingAddress = ""; reviewing = false; key = ""; message = ""; }
@@ -208,8 +205,8 @@
   }
   function applyMarketRate(rate: string) {
     priceInput = rate; priceMode = true;
-    if (amountSource === "ever") usdtAmount = offerTotal(everAmount, rate)?.amount || usdtAmount;
-    else everAmount = offerEver(usdtAmount, rate)?.amount || everAmount;
+    if (amountSource === "ever") usdtAmount = offerTotal(everAmount, rate)?.amount || "";
+    else everAmount = offerEver(usdtAmount, rate)?.amount || "";
   }
   function useMarketPrice(checked: boolean) {
     marketPrice = checked;
@@ -222,18 +219,29 @@
       .catch(() => { stablecoinAssets = []; });
     const timer = setInterval(() => { if (enabled && !posting && !busy) void refresh(); }, 5000);
     const controller = new AbortController();
+    marketAbort = controller;
     void refreshMarket(controller.signal);
     const marketTimer = setInterval(() => { if (enabled && !posting && !busy) void refreshMarket(controller.signal); }, 60_000);
     const balanceTimer = setInterval(() => { if (enabled && session && !posting && !busy) void refreshBalances(); }, 20_000);
-    return () => { mounted = false; generation++; clearInterval(timer); clearInterval(marketTimer); clearInterval(balanceTimer); controller.abort(); };
+    return () => { mounted = false; generation++; clearInterval(timer); clearInterval(marketTimer); clearInterval(balanceTimer); controller.abort(); marketAbort = null; };
   });
 
   let started = false;
   $: if (mounted && enabled && !started) { started = true; void refresh(); void refreshBalances(); }
   function changePrice(value: string) { priceInput = value; priceMode = true; if (amountSource === "ever") usdtAmount = offerTotal(everAmount,priceInput)?.amount || ""; else everAmount = offerEver(usdtAmount,priceInput)?.amount || ""; edited(); }
-  function changeEver(value: string) { everAmount = value; amountSource = "ever"; if (priceMode) usdtAmount = offerTotal(everAmount,priceInput)?.amount || ""; edited(); }
-  function changeUsdt(value: string) { usdtAmount = value; amountSource = "usdt"; if (priceMode) everAmount = offerEver(usdtAmount,priceInput)?.amount || ""; edited(); }
-  function changeStablecoin(value: Stablecoin) { stablecoin = value; stablecoinNetwork = "ethereum"; receivingAddress = ""; edited(); }
+  function changeEver(value: string) {
+    everAmount = value; amountSource = "ever";
+    if (!priceMode && marketPrice && marketRate) { priceInput = marketRate; priceMode = true; }
+    if (priceMode) usdtAmount = offerTotal(everAmount, priceInput)?.amount || "";
+    edited();
+  }
+  function changeUsdt(value: string) {
+    usdtAmount = value; amountSource = "usdt";
+    if (!priceMode && marketPrice && marketRate) { priceInput = marketRate; priceMode = true; }
+    if (priceMode) everAmount = offerEver(usdtAmount, priceInput)?.amount || "";
+    edited();
+  }
+  function changeStablecoin(value: Stablecoin) { stablecoin = value; stablecoinNetwork = "ethereum"; receivingAddress = ""; edited(); if (marketAbort) void refreshMarket(marketAbort.signal); }
   function changeAddress(value: string) { receivingAddress = value; edited(); }
   function changeStablecoinNetwork(value: string) {
     if (stablecoinNetwork === value) return;
