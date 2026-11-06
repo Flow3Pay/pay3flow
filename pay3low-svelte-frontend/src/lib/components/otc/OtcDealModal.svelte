@@ -6,8 +6,8 @@
   import type { RouteExecution } from "$lib/exchange";
   import { identiconDataUri } from "$lib/otc/identicon";
   import {
-    p2pAction, p2pActive, p2pBothConfirmed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
-    p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
+    p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+    p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
     type P2pDeal, type P2pLeg,
   } from "$lib/otc/p2p";
 
@@ -32,9 +32,11 @@
   let autoTried = new Set<string>();
   let reportedActive = -1;
   let reportedActiveIds = "";
-  let sourceAssets: Array<{ asset: string; symbol: "USDT" | "USDC"; network: string; asset_id: string; decimals: number; contract_address: string | null }> = [];
+  type RouteAsset = { asset: string; symbol: "USDT" | "USDC"; network: string; asset_id: string; decimals: number; contract_address: string | null; destination_asset_ids: string[] };
+  type DestinationAsset = Omit<RouteAsset, "destination_asset_ids">;
+  let sourceAssets: RouteAsset[] = [];
+  let destinationAssets: DestinationAsset[] = [];
   let selectedSourceAsset = "";
-  let sourceAmount = "";
   let routePickerOpen = false;
   let assetLoadError = "";
 
@@ -72,20 +74,21 @@
   $: actionAsset = actionKind ? p2pLegAsset(actionKind, deal?.terms.stablecoin) : "";
   $: outputNetwork = deal?.terms.stablecoin_network || "ethereum";
   $: outputAsset = `${deal?.terms.stablecoin || "USDT"}@${outputNetwork}`;
-  $: directPaymentAvailable = outputNetwork === "ethereum";
-  $: buyDeal = deal?.terms.direction === "buy";
-  $: payerAsset = deal ? `${deal.terms.stablecoin || "USDT"}@${deal.terms.payer_network || "ethereum"}` : "";
-  $: sourceOptions = sourceAssets.filter(item => buyDeal
-    ? item.asset === payerAsset && (!deal?.terms.payer_asset_id || item.asset_id === deal.terms.payer_asset_id)
-    : directPaymentAvailable || item.asset !== outputAsset);
+  $: outputAssetId = deal?.terms.stablecoin_asset_id
+    || destinationAssets.find(item => item.asset === outputAsset)?.asset_id
+    || "";
+  $: compatibleSourceAssets = p2pCompatibleSources(sourceAssets, outputAssetId);
+  $: directPaymentAvailable = p2pDirectAssetMatch(selectedSource, outputAsset, outputAssetId, outputNetwork);
   $: selectedSource = sourceAssets.find(item => item.asset === selectedSourceAsset) || null;
   $: intentQuote = deal?.attempts?.find(attempt => attempt.kind === "payment" && !!attempt.instructions.source_asset && attempt.state !== "failed") || null;
+  $: directPaymentAttempt = deal?.attempts?.find(attempt => attempt.kind === "payment" && !attempt.instructions.source_asset && attempt.state !== "failed") || null;
   $: actionLabel = action === "retry"
     ? actionKind === "payment" && deal && !p2pOpenAttempt(deal, "payment") ? say("Choose payment network", "Выбрать сеть оплаты")
       : actionAsset ? say(`Retry ${actionAsset}`, `Повторить ${actionAsset}`) : say("Retry", "Повторить")
     : action === "send"
       ? actionKind === "payment" && deal && !p2pOpenAttempt(deal, "payment") ? say("Choose payment network", "Выбрать сеть оплаты")
-        : intentQuote ? say("Review quote and send", "Проверить котировку и отправить")
+        : directPaymentAttempt ? say("Review transfer and send", "Проверить перевод и отправить")
+          : intentQuote ? say("Review quote and send", "Проверить котировку и отправить")
           : actionAsset ? say(`Send ${actionAsset}`, `Отправить ${actionAsset}`) : say("Send", "Отправить")
       : say("Confirm", "Подтвердить");
   $: legs = deal ? p2pViewerLegs(deal) : null;
@@ -99,6 +102,8 @@
         ? say("Your leg is complete. Waiting for the counterparty.", "Ваша часть выполнена. Ожидаем контрагента.")
         : waitingForChain
           ? say("Waiting for the transfer to confirm.", "Ожидаем подтверждения перевода.")
+          : deal.state === "delivery_pending" && feeStatus !== "collected"
+            ? say("Waiting for the service fee to be confirmed.", "Ожидаем подтверждения комиссии сервиса.")
           : say("Waiting for the counterparty.", "Ожидаем контрагента.");
   $: {
     const active = deals.filter(p2pActive);
@@ -119,6 +124,13 @@
   $: counterpartyAvatar = deal?.counterparty_avatar || (counterpartyEver ? identiconDataUri(counterpartyEver) : "");
   $: paymentDone = deal ? p2pLegDone(deal, "payment") : false;
   $: payoutDone = deal ? p2pLegDone(deal, "payout") : false;
+  $: feeStatus = deal ? p2pFeeStatus(deal) : "not_due";
+  $: feeAttempts = deal?.attempts?.filter(attempt => attempt.kind === "fee") || [];
+  $: feeAttempt = feeAttempts[feeAttempts.length - 1] || null;
+  $: feeAmount = deal?.fee_policy ? p2pFormatUnits(deal.fee_policy.fee_units, deal.fee_policy.precision) : "";
+  $: netAmount = deal?.fee_policy ? p2pFormatUnits(deal.fee_policy.net_units, deal.fee_policy.precision) : deal?.terms.usdt_amount || "";
+  $: isFeePayer = !!deal && deal.terms.fee_payer_actor === session?.actor;
+  $: canPrepareFee = isFeePayer && feeStatus === "accrued";
   $: flowActive = deal ? p2pLegActive(deal, "payment") || p2pLegActive(deal, "payout") : false;
   $: canCancel = !!deal && deal.state === "payment_pending";
   $: canCloseMine = !!deal && deal.state === "delivery_pending" && !!deal.my_confirmed && !deal.counterparty_confirmed;
@@ -135,7 +147,6 @@
       configReady = false;
       routePickerOpen = false;
       selectedSourceAsset = "";
-      sourceAmount = "";
       error = "";
       if (dialog?.open) dialog.close();
     }
@@ -147,8 +158,12 @@
   }
 
   onMount(() => {
-    void request<{ assets: typeof sourceAssets }>("/p2p/assets")
-      .then(result => { sourceAssets = result.assets || []; })
+    void request<{ assets: RouteAsset[]; destination_assets: DestinationAsset[] }>("/p2p/assets")
+      .then(result => {
+        sourceAssets = result.assets || [];
+        destinationAssets = result.destination_assets || [];
+        if (routePickerOpen && deal && !selectedSourceAsset) selectedSourceAsset = defaultSourceAsset(deal);
+      })
       .catch(() => { assetLoadError = say("Payment networks are temporarily unavailable.", "Сети оплаты временно недоступны."); });
     const timer = setInterval(() => { if (!busy && !locked) void refresh(); }, 4500);
     return () => clearInterval(timer);
@@ -198,6 +213,16 @@
 
   function sortNewest(items: P2pDeal[]) {
     return [...items].sort((a, b) => Date.parse(b.created_at || "") - Date.parse(a.created_at || ""));
+  }
+
+  function defaultSourceAsset(current: P2pDeal) {
+    const destination = `${current.terms.stablecoin || "USDT"}@${current.terms.stablecoin_network || "ethereum"}`;
+    const destinationId = current.terms.stablecoin_asset_id
+      || destinationAssets.find(item => item.asset === destination)?.asset_id
+      || "";
+    return sourceAssets.find(item => item.asset === destination && item.asset_id === destinationId)?.asset
+      || sourceAssets.find(item => item.destination_asset_ids.includes(destinationId))?.asset
+      || "";
   }
 
   export async function refresh() {
@@ -290,13 +315,15 @@
         { kind },
         crypto.randomUUID(),
       );
+      const preparedAttempt = { ...prepared.attempt, kind };
       const withAttempt = {
         ...current,
-        attempts: [...(current.attempts || []), prepared.attempt],
+        attempts: [...(current.attempts || []), preparedAttempt],
       };
       applyDeal(prepared, withAttempt);
-      attempt = prepared.attempt;
+      attempt = preparedAttempt;
     }
+
     if (attempt.state !== "prepared") return;
     // A previous wallet signature may have produced a reference whose POST was
     // lost. Reuse it instead of asking the wallet to sign a second transfer.
@@ -308,15 +335,54 @@
     await sendAttempt(session.token, attempt);
   }
 
-  /** The payer of a buy offer is fixed to the offer's wallet and network. */
-  function defaultSourceAsset(current: P2pDeal) {
-    const stablecoin = current.terms.stablecoin || "USDT";
-    if (current.terms.direction === "buy") {
-      const asset = `${stablecoin}@${current.terms.payer_network || "ethereum"}`;
-      return sourceAssets.find(item => item.asset === asset && (!current.terms.payer_asset_id || item.asset_id === current.terms.payer_asset_id))?.asset || "";
-    }
-    const output = `${stablecoin}@${current.terms.stablecoin_network || "ethereum"}`;
-    return sourceAssets.find(item => item.asset === output && (current.terms.stablecoin_network || "ethereum") === "ethereum")?.asset || sourceAssets.find(item => item.asset !== output)?.asset || "";
+  async function prepareFee() {
+    const current = deal;
+    const owner = session;
+    if (!current || !owner) return;
+    await run(async () => {
+      const paymentAttempt = current.attempts?.find(attempt => attempt.kind === "payment" && attempt.state === "verified");
+      const paymentSource = paymentAttempt?.instructions.source_asset
+        || paymentAttempt?.instructions.fee_source_asset
+        || `${current.terms.stablecoin || "USDT"}@${outputNetwork}`;
+      const paymentSourceId = paymentAttempt?.instructions.source_asset_id
+        || paymentAttempt?.instructions.fee_source_asset_id;
+      const directFee = paymentSource === `USDT@${outputNetwork}`
+        && (!current.terms.fee_usdt_asset_id || paymentSourceId === current.terms.fee_usdt_asset_id);
+      const needsRoute = !directFee;
+      const storageKey = `pay3flow.otc.fee-key.${current.id}`;
+      const key = sessionStorage.getItem(storageKey) || crypto.randomUUID();
+      sessionStorage.setItem(storageKey, key);
+      const prepared = await request<P2pDeal & { attempt: Attempt }>(
+        `/p2p/trades/${current.id}/prepare`,
+        owner.token,
+        { kind: needsRoute ? "near-intents-fee" : "fee" },
+        key,
+      );
+      sessionStorage.removeItem(storageKey);
+      const feeTransfer = { ...prepared.attempt, kind: "fee" };
+      applyDeal(prepared, {
+        ...current,
+        attempts: [
+          ...(current.attempts || []).filter(attempt => attempt.kind !== "fee" || attempt.state === "failed"),
+          feeTransfer,
+        ],
+      });
+    });
+  }
+
+  async function sendFee() {
+    const current = deal;
+    const owner = session;
+    const attempt = feeAttempt;
+    if (!current || !owner || !attempt || attempt.state !== "prepared") return;
+    await run(async () => {
+      const original = sessionStorage.getItem(`pay3flow.otc.reference.${attempt.id}`);
+      if (original) {
+        await request(attempt.instructions.submit_path || `/attempts/${attempt.id}/reference`, owner.token, { reference: original });
+      } else {
+        await sendAttempt(owner.token, attempt);
+      }
+    });
   }
 
   async function confirmDeal() {
@@ -336,7 +402,6 @@
         if (kind === "payment" && !p2pOpenAttempt(merged, kind)) {
           routePickerOpen = true;
           selectedSourceAsset = defaultSourceAsset(merged);
-          sourceAmount = merged.terms.usdt_amount;
           return;
         }
         markAuto(merged, kind, settleKey(merged, kind));
@@ -353,7 +418,6 @@
     if (kind === "payment" && !p2pOpenAttempt(current, kind)) {
       routePickerOpen = true;
       selectedSourceAsset = defaultSourceAsset(current);
-      sourceAmount = current.terms.usdt_amount;
       return;
     }
     markAuto(current, kind, settleKey(current, kind));
@@ -387,11 +451,24 @@
     if (!current || !owner || !source) return;
     await run(async () => {
       if (source.asset === outputAsset && directPaymentAvailable) {
+        const storageKey = `pay3flow.otc.direct-key.${current.id}`;
+        const key = sessionStorage.getItem(storageKey) || crypto.randomUUID();
+        sessionStorage.setItem(storageKey, key);
+        const prepared = await request<P2pDeal & { attempt: Attempt }>(
+          `/p2p/trades/${current.id}/prepare`,
+          owner.token,
+          { kind: "payment" },
+          key,
+        );
+        sessionStorage.removeItem(storageKey);
+        const paymentAttempt = { ...prepared.attempt, kind: "payment" };
+        applyDeal(prepared, {
+          ...current,
+          attempts: [...(current.attempts || []), paymentAttempt],
+        });
         routePickerOpen = false;
-        await sendLeg(current, "payment");
         return;
       }
-      if (!sourceAmount.trim()) throw new Error(say("Enter the amount to send.", "Введите сумму отправки."));
       const connected = await connectWallet(walletNetwork(source.network, otcP2pNetwork()));
       const storageKey = `pay3flow.otc.quote-key.${current.id}`;
       const quoteKey = sessionStorage.getItem(storageKey) || crypto.randomUUID();
@@ -403,16 +480,16 @@
           kind: "near-intents",
           source_asset: source.asset,
           source_asset_id: source.asset_id,
-          source_amount: sourceAmount.trim(),
           source_address: connected.address,
           slippage_bps: 100,
         },
         quoteKey,
       );
       sessionStorage.removeItem(storageKey);
+      const paymentAttempt = { ...prepared.attempt, kind: "payment" };
       applyDeal(prepared, {
         ...current,
-        attempts: [...(current.attempts || []), prepared.attempt],
+        attempts: [...(current.attempts || []), paymentAttempt],
       });
       routePickerOpen = false;
     });
@@ -463,13 +540,17 @@
     <div class="flow" class:active={flowActive} class:done={paymentDone && payoutDone}>
       <span class="token usdt" class:done={paymentDone} class:active={p2pLegActive(deal, "payment")} class:failed={p2pLegFailed(deal, "payment")}>
         <img src={deal.terms.stablecoin === "USDC" ? "/icons/assets/usdc.png" : "/icons/assets/usdt.png"} alt="" width="24" height="24" />
-        <b>{deal.terms.usdt_amount}</b>
+        <b>{netAmount}</b>
       </span>
       <span class="rail" aria-hidden="true"><span></span></span>
       <span class="token ever" class:done={payoutDone} class:active={p2pLegActive(deal, "payout")} class:failed={p2pLegFailed(deal, "payout")}>
         <img src="/icons/assets/ever.svg" alt="" width="24" height="24" />
         <b>{deal.terms.ever_amount}</b>
       </span>
+    </div>
+    <div class="destination" data-testid="otc-stablecoin-destination">
+      <span>{say(`${deal.terms.stablecoin || "USDT"} recipient · ${outputNetwork}`, `Получатель ${deal.terms.stablecoin || "USDT"} · ${outputNetwork}`)}</span>
+      <code>{deal.terms.usdt_payee}</code>
     </div>
 
     {#if legs}
@@ -485,6 +566,42 @@
       </div>
     {/if}
 
+    {#if deal.fee_accrued}
+      <section class="feeBox" data-testid="otc-p2p-fee">
+        <strong>{say(`Seller receives ${netAmount} ${deal.terms.stablecoin || "USDT"}; service fee ${feeAmount} USDT`, `Продавец получает ${netAmount} ${deal.terms.stablecoin || "USDT"}; комиссия сервиса ${feeAmount} USDT`)}</strong>
+        {#if feeStatus === "collected"}
+          <small>{say(`Payment confirmed on ${outputNetwork}.`, `Платёж подтверждён в сети ${outputNetwork}.`)}</small>
+        {:else if isFeePayer && feeAttempt?.state === "prepared"}
+          {#if feeAttempt.instructions.source_asset}
+            <small>{feeAttempt.instructions.source_amount} {feeAttempt.instructions.source_asset} → {feeAttempt.instructions.minimum_output} {feeAttempt.instructions.destination_asset}</small>
+            {#if feeAttempt.instructions.expected_fee}
+              <small>{say("Route fee", "Комиссия маршрута")}: {feeAttempt.instructions.expected_fee.amount} {feeAttempt.instructions.expected_fee.asset}</small>
+            {/if}
+            {#if feeAttempt.instructions.quote_expires_at}
+              <small>{say("Quote expires", "Котировка действует до")}: {new Date(feeAttempt.instructions.quote_expires_at).toLocaleString($locale === "ru" ? "ru-RU" : "en-US")}</small>
+            {/if}
+          {:else}
+            <small>{`USDT · ${outputNetwork}`}</small>
+          {/if}
+          <small>{feeAttempt.instructions.source_asset ? say("Route deposit address", "Адрес депозита маршрута") : say("Fee recipient", "Получатель комиссии")}</small>
+          <code>{feeAttempt.instructions.leg.recipient}</code>
+          <button type="button" class="confirmButton" disabled={busy || locked} on:click={() => void sendFee()}>
+            {say(`Send ${feeAmount} USDT`, `Отправить ${feeAmount} USDT`)}
+          </button>
+        {:else if canPrepareFee}
+          <small>{say(`Paid to the configured ${outputNetwork} address by the agreed fee payer.`, `Комиссия переводится на настроенный адрес в сети ${outputNetwork} согласованным плательщиком.`)}</small>
+          <button type="button" class="confirmButton" disabled={busy || locked} on:click={() => void prepareFee()}>
+            {#if busy}<span class="spinner" aria-hidden="true"></span>{/if}
+            {say("Prepare fee transfer", "Подготовить перевод комиссии")}
+          </button>
+        {:else if feeStatus === "pending"}
+          <small>{say("Waiting for the fee transfer to confirm.", "Ожидаем подтверждения перевода комиссии.")}</small>
+        {:else}
+          <small>{say("The agreed fee is paid separately by the designated payer.", "Согласованная комиссия оплачивается отдельно назначенным плательщиком.")}</small>
+        {/if}
+      </section>
+    {/if}
+
     {#if overdue}
       <p class="notice" role="status">{say("The nominal delivery window has passed. You can still complete this transfer.", "Номинальный срок доставки прошёл. Вы всё ещё можете выполнить этот перевод.")}</p>
     {/if}
@@ -495,7 +612,7 @@
       <section class="routePicker" aria-label={say("Choose payment network", "Выбрать сеть оплаты")} data-testid="otc-payment-network-picker">
         <label>{say("Pay with", "Оплатить активом")}
           <select bind:value={selectedSourceAsset} disabled={busy || locked}>
-            {#each sourceOptions as source}
+            {#each compatibleSourceAssets as source}
               <option value={source.asset}>{source.symbol} · {source.network}</option>
             {/each}
           </select>
@@ -503,10 +620,7 @@
         {#if selectedSource && selectedSource.asset === outputAsset && directPaymentAvailable}
           <p class="routeNote">{say("Same token and network: this payment is sent directly, without conversion.", "Токен и сеть совпадают: платёж отправляется напрямую, без конвертации.")}</p>
         {:else if selectedSource}
-          <label>{say(`Amount to send (${selectedSource.symbol})`, `Сумма отправки (${selectedSource.symbol})`)}
-            <input bind:value={sourceAmount} inputmode="decimal" autocomplete="off" disabled={busy || locked} data-testid="otc-source-amount" />
-          </label>
-          <p class="routeNote">{say(`The quote must deliver exactly ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} to the recipient on ${outputNetwork}.`, `Котировка должна доставить получателю ровно ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} в сети ${outputNetwork}.`)}</p>
+          <p class="routeNote">{say(`The quote delivers ${netAmount} ${deal?.terms.stablecoin || "USDT"} to the seller; ${feeAmount} USDT is routed separately to the service-fee address on ${outputNetwork}.`, `Котировка доставит продавцу ${netAmount} ${deal?.terms.stablecoin || "USDT"}; ${feeAmount} USDT отдельно переводится на адрес комиссии в сети ${outputNetwork}.`)}</p>
         {:else}
           <p class="routeNote">{assetLoadError || say("No compatible production payment networks are available.", "Нет доступных production-сетей для оплаты.")}</p>
         {/if}
@@ -536,6 +650,27 @@
           <small>{say("Required payment memo", "Обязательное сообщение платежа")}: <code>{intentQuote.instructions.deposit_memo}</code></small>
         {/if}
         <small class="depositAddress">{say("Deposit address", "Адрес депозита")}: <code>{intentQuote.instructions.deposit_address}</code></small>
+        {#if intentQuote.instructions.fee_preflight}
+          <strong>{say("Service-fee route estimate", "Расчёт маршрута комиссии")}</strong>
+          <p>{intentQuote.instructions.fee_preflight.source_amount} {intentQuote.instructions.fee_preflight.source_asset} → {intentQuote.instructions.fee_preflight.expected_output} {intentQuote.instructions.fee_preflight.destination_asset}</p>
+          {#if intentQuote.instructions.fee_preflight.expected_fee}
+            <small>{say("Additional route fee estimate", "Оценка дополнительной комиссии маршрута")}: {intentQuote.instructions.fee_preflight.expected_fee.amount} {intentQuote.instructions.fee_preflight.expected_fee.asset}</small>
+          {/if}
+        {/if}
+      </section>
+    {/if}
+    {#if directPaymentAttempt && actionKind === "payment"}
+      <section class="routeQuote" aria-label={say("Direct payment review", "Проверка прямого платежа")} data-testid="otc-direct-payment-review">
+        <strong>{say("Direct payment", "Прямой платёж")}</strong>
+        <p>{netAmount} {deal.terms.stablecoin || "USDT"} · {outputNetwork}</p>
+        <small>{say("Seller receives", "Продавец получает")}: <code>{directPaymentAttempt.instructions.leg.recipient}</code></small>
+        {#if directPaymentAttempt.instructions.fee_preflight}
+          <strong>{say("Service-fee route estimate", "Расчёт маршрута комиссии")}</strong>
+          <p>{directPaymentAttempt.instructions.fee_preflight.source_amount} {directPaymentAttempt.instructions.fee_preflight.source_asset} → {directPaymentAttempt.instructions.fee_preflight.expected_output} {directPaymentAttempt.instructions.fee_preflight.destination_asset}</p>
+          {#if directPaymentAttempt.instructions.fee_preflight.expected_fee}
+            <small>{say("Additional route fee estimate", "Оценка дополнительной комиссии маршрута")}: {directPaymentAttempt.instructions.fee_preflight.expected_fee.amount} {directPaymentAttempt.instructions.fee_preflight.expected_fee.asset}</small>
+          {/if}
+        {/if}
       </section>
     {/if}
 
@@ -587,7 +722,14 @@
   .rail span { position:absolute; top:50%; left:50%; width:7px; height:7px; border-radius:50%; background:var(--color-text-faint); transform:translate(-50%,-50%); }
   .flow.active .rail span { background:var(--color-accent-strong); animation:travel 1.4s ease-in-out infinite; }
   .flow.done .rail span { background:var(--color-good-ink); }
+  .destination { display:grid; gap:5px; margin:14px 26px 0; padding:10px 12px; border:1px solid var(--color-border); border-radius:9px; background:var(--color-panel); }
+  .destination span { color:var(--color-text-soft); font-size:10px; }
+  .destination code { overflow-wrap:anywhere; color:var(--color-text); font-family:var(--font-mono); font-size:10px; line-height:1.5; }
   .legs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:18px 26px 0; }
+  .feeBox { display:grid; gap:8px; margin:14px 26px 0; padding:12px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-panel); }
+  .feeBox strong { font-size:11px; }
+  .feeBox small { color:var(--color-text-faint); font-size:10px; line-height:1.45; }
+  .feeBox code { overflow-wrap:anywhere; color:var(--color-text); font-family:var(--font-mono); font-size:10px; }
   .leg { display:grid; min-width:0; gap:2px; padding:9px 10px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-panel); }
   .leg.done { border-color:color-mix(in srgb, var(--color-good-ink) 38%, var(--color-border)); background:var(--otc-buy-soft); }
   .leg small { color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; }

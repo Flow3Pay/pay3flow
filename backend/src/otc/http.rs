@@ -250,13 +250,18 @@ async fn accept_offer(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
-    Json(request): Json<AcceptOfferRequest>,
+    destination: Option<Json<AcceptOfferRequest>>,
 ) -> Result<Json<Value>> {
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     Ok(Json(
         state
             .otc
-            .accept_offer(&actor, id, key(&headers)?, request)
+            .accept_offer_with_destination(
+                &actor,
+                id,
+                key(&headers)?,
+                destination.map(|Json(request)| request).unwrap_or_default(),
+            )
             .await?,
     ))
 }
@@ -266,12 +271,13 @@ async fn p2p_trades(State(state): State<AppState>, headers: HeaderMap) -> Result
 }
 async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
     let Some(provider) = state.otc.near_intents.as_ref() else {
-        return Json(json!({"assets":[]}));
+        return Json(json!({"assets":[],"destination_assets":[],"buy_destination_assets":[]}));
     };
     let tokens = provider.supported_tokens().await;
-    let mut assets = Vec::new();
+    let mut candidates = Vec::new();
     for token in tokens {
         let symbol = token.symbol.to_ascii_uppercase();
+        let network = crate::route_engine::canonical_network_id(&token.blockchain);
         if !matches!(symbol.as_str(), "USDT" | "USDC")
             || token.decimals.is_none()
             || token
@@ -284,6 +290,21 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         {
             continue;
         }
+        if network == "ethereum" {
+            let expected = if symbol == "USDT" {
+                super::config::USDT
+            } else {
+                super::config::USDC
+            };
+            if token.decimals != Some(6)
+                || token
+                    .contract_address
+                    .as_deref()
+                    .is_none_or(|address| !address.eq_ignore_ascii_case(expected))
+            {
+                continue;
+            }
+        }
         let Ok(asset) = token.asset() else {
             continue;
         };
@@ -294,47 +315,182 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         {
             continue;
         }
-        let output = match crate::route_engine::Asset::new(&symbol, Some("ethereum")) {
-            Ok(output) => output,
-            Err(_) => continue,
+        candidates.push((asset, token));
+    }
+
+    let mut assets = Vec::new();
+    let mut destination_assets = Vec::new();
+    let mut buy_destination_assets = Vec::new();
+    for (destination, token) in &candidates {
+        if token.decimals != Some(6) {
+            continue;
+        }
+        let symbol = token.symbol.to_ascii_uppercase();
+        let network = destination.location.as_deref().unwrap_or_default();
+        let Some(fee_recipient) = state.otc.cfg.fee_recipients.get(network) else {
+            continue;
         };
-        if let Ok(destination) = provider.token_for_asset(&output).await {
+        if crate::route_execution::validate_otc_wallet_address(network, fee_recipient).is_err() {
+            continue;
+        }
+        let Ok(fee_asset) = crate::route_engine::Asset::new("USDT", Some(network)) else {
+            continue;
+        };
+        let Ok(fee_token) = provider.unique_token_for_asset(&fee_asset).await else {
+            continue;
+        };
+        if fee_token.decimals != Some(6)
+            || fee_token
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| address.trim().is_empty())
+        {
+            continue;
+        }
+        let direct_network = state.otc.p2p_direct_evm_network_available(network);
+        let is_ethereum = network == "ethereum";
+        if is_ethereum {
             let expected = if symbol == "USDT" {
                 super::config::USDT
             } else {
                 super::config::USDC
             };
-            if destination
+            if token
                 .contract_address
                 .as_deref()
                 .is_none_or(|address| !address.eq_ignore_ascii_case(expected))
             {
                 continue;
             }
-        } else {
-            continue;
         }
-        let cross_network = asset != output;
-        if cross_network && !provider.route_available(&asset, &output).await {
-            continue;
-        }
-        assets.push(json!({
-            "asset": asset,
+        let output = json!({
+            "asset": destination,
             "symbol": symbol,
-            "network": crate::route_engine::canonical_network_id(&token.blockchain),
+            "network": destination.location,
             "asset_id": token.asset_id,
             "decimals": token.decimals,
             "contract_address": token.contract_address,
-            "cross_network": cross_network,
+        });
+        let mut any_route = false;
+        for (source, source_token) in &candidates {
+            let payment_route = (direct_network
+                && source == destination
+                && source_token.asset_id == token.asset_id)
+                || (source != destination && provider.route_available(source, destination).await);
+            if !payment_route {
+                continue;
+            }
+            let fee_route = if source == &fee_asset && source_token.asset_id == fee_token.asset_id {
+                direct_network
+            } else {
+                provider.route_available(source, &fee_asset).await
+            };
+            if fee_route {
+                any_route = true;
+                break;
+            }
+        }
+        if any_route {
+            destination_assets.push(output.clone());
+        }
+        let buy_source = match crate::route_engine::Asset::new("USDT", Some("ethereum")) {
+            Ok(source) => source,
+            Err(_) => continue,
+        };
+        let Ok(buy_source_token) = provider.unique_token_for_asset(&buy_source).await else {
+            continue;
+        };
+        let buy_payment_route = (direct_network
+            && &buy_source == destination
+            && symbol == "USDT"
+            && buy_source_token.asset_id == token.asset_id)
+            || (&buy_source != destination
+                && provider.route_available(&buy_source, destination).await);
+        let buy_fee_route =
+            if buy_source == fee_asset && buy_source_token.asset_id == fee_token.asset_id {
+                direct_network
+            } else {
+                provider.route_available(&buy_source, &fee_asset).await
+            };
+        let buy_route = buy_payment_route && buy_fee_route;
+        if buy_route {
+            buy_destination_assets.push(output);
+        }
+    }
+
+    for (source, token) in &candidates {
+        let mut destination_asset_ids = Vec::new();
+        for (destination, destination_token) in &candidates {
+            if destination_token.decimals != Some(6) {
+                continue;
+            }
+            let network = destination.location.as_deref().unwrap_or_default();
+            let Some(fee_recipient) = state.otc.cfg.fee_recipients.get(network) else {
+                continue;
+            };
+            if crate::route_execution::validate_otc_wallet_address(network, fee_recipient).is_err()
+            {
+                continue;
+            }
+            let Ok(fee_asset) = crate::route_engine::Asset::new("USDT", Some(network)) else {
+                continue;
+            };
+            let Ok(fee_token) = provider.unique_token_for_asset(&fee_asset).await else {
+                continue;
+            };
+            if fee_token.decimals != Some(6)
+                || fee_token
+                    .contract_address
+                    .as_deref()
+                    .is_none_or(|address| address.trim().is_empty())
+            {
+                continue;
+            }
+            let direct_network = state.otc.p2p_direct_evm_network_available(network);
+            let is_exact_direct = direct_network
+                && source == destination
+                && token.asset_id == destination_token.asset_id;
+            let payment_route = is_exact_direct
+                || (source != destination && provider.route_available(source, destination).await);
+            let fee_route = if source == &fee_asset && token.asset_id == fee_token.asset_id {
+                direct_network
+            } else {
+                provider.route_available(source, &fee_asset).await
+            };
+            if payment_route && fee_route {
+                destination_asset_ids.push(destination_token.asset_id.clone());
+            }
+        }
+        if destination_asset_ids.is_empty() {
+            continue;
+        }
+        assets.push(json!({
+            "asset": source,
+            "symbol": token.symbol.to_ascii_uppercase(),
+            "network": source.location,
+            "asset_id": token.asset_id,
+            "decimals": token.decimals,
+            "contract_address": token.contract_address,
+            "destination_asset_ids": destination_asset_ids,
         }));
     }
-    assets.sort_by(|left, right| {
-        left["symbol"]
-            .as_str()
-            .cmp(&right["symbol"].as_str())
-            .then_with(|| left["network"].as_str().cmp(&right["network"].as_str()))
-    });
-    Json(json!({"assets": assets}))
+    let sort_assets = |items: &mut Vec<Value>| {
+        items.sort_by(|left, right| {
+            left["symbol"]
+                .as_str()
+                .cmp(&right["symbol"].as_str())
+                .then_with(|| left["network"].as_str().cmp(&right["network"].as_str()))
+                .then_with(|| left["asset_id"].as_str().cmp(&right["asset_id"].as_str()))
+        })
+    };
+    sort_assets(&mut assets);
+    sort_assets(&mut destination_assets);
+    sort_assets(&mut buy_destination_assets);
+    Json(json!({
+        "assets":assets,
+        "destination_assets":destination_assets,
+        "buy_destination_assets":buy_destination_assets
+    }))
 }
 async fn p2p_deal(
     State(state): State<AppState>,

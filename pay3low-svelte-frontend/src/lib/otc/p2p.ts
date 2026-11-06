@@ -1,6 +1,32 @@
 import type { Attempt } from "./service";
 
 export type P2pLeg = "payment" | "payout";
+const directEvmNetworks = new Set([
+  "ethereum", "optimism", "bnb-smart-chain", "gnosis",
+  "polygon-pos", "avalanche-c", "arbitrum-one", "base",
+]);
+
+export function p2pCompatibleSources<T extends { destination_asset_ids: string[] }>(
+  sources: T[],
+  destinationAssetId: string,
+): T[] {
+  return destinationAssetId
+    ? sources.filter(source => source.destination_asset_ids.includes(destinationAssetId))
+    : [];
+}
+
+export function p2pDirectAssetMatch(
+  source: { asset: string; asset_id: string } | null,
+  destinationAsset: string,
+  destinationAssetId: string,
+  destinationNetwork: string,
+): boolean {
+  return !!source
+    && source.asset === destinationAsset
+    && source.asset_id === destinationAssetId
+    && directEvmNetworks.has(destinationNetwork)
+    && source.asset.split("@")[1] === destinationNetwork;
+}
 
 export interface P2pFeePolicy {
   version: string;
@@ -16,6 +42,7 @@ export interface P2pDealTerms {
   direction: "buy" | "sell";
   stablecoin?: "USDT" | "USDC";
   stablecoin_network?: string;
+  stablecoin_asset_id?: string | null;
   ever_amount: string;
   usdt_amount: string;
   ever_units: string;
@@ -27,6 +54,8 @@ export interface P2pDealTerms {
   payer_asset_id?: string | null;
   ever_payer: string;
   ever_payee: string;
+  fee_payer_actor?: string;
+  fee_usdt_asset_id?: string | null;
   fee_policy?: P2pFeePolicy;
 }
 
@@ -95,6 +124,7 @@ export function p2pAction(deal: P2pDeal): "confirm" | "send" | "retry" | null {
   if (!p2pBothConfirmed(deal)) return null;
   const kind = p2pKind(deal);
   if (!kind) return null;
+  if (kind === "payout" && p2pFeeStatus(deal) !== "collected") return null;
   const open = p2pOpenAttempt(deal, kind);
   if (open) return open.state === "prepared" ? "send" : null;
   if (p2pFailedAttempt(deal, kind)) return "retry";
@@ -128,12 +158,15 @@ export interface P2pViewerLegs {
 /** The exact token amounts this viewer sends and receives in the deal. */
 export function p2pViewerLegs(deal: P2pDeal): P2pViewerLegs | null {
   if (!deal.my_leg) return null;
+  const netAmount = deal.fee_policy
+    ? p2pFormatUnits(deal.fee_policy.net_units, deal.fee_policy.precision)
+    : deal.terms.usdt_amount;
   const send = deal.my_leg === "payment"
-    ? { asset: p2pLegAsset("payment", deal.terms.stablecoin), amount: deal.terms.usdt_amount }
+    ? { asset: p2pLegAsset("payment", deal.terms.stablecoin), amount: netAmount }
     : { asset: p2pLegAsset("payout"), amount: deal.terms.ever_amount };
   const receive = deal.my_leg === "payment"
     ? { asset: p2pLegAsset("payout"), amount: deal.terms.ever_amount }
-    : { asset: p2pLegAsset("payment", deal.terms.stablecoin), amount: deal.terms.usdt_amount };
+    : { asset: p2pLegAsset("payment", deal.terms.stablecoin), amount: netAmount };
   return { send, receive };
 }
 
@@ -159,4 +192,21 @@ export function p2pShortAddress(value: string | undefined, head = 6, tail = 4): 
   if (!value) return "";
   if (value.length <= head + tail + 1) return value;
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
+export function p2pFeeStatus(deal: P2pDeal): "not_due" | "accrued" | "pending" | "collected" {
+  if (!deal.fee_accrued) return "not_due";
+  const feeAttempts = (deal.attempts || []).filter(attempt => attempt.kind === "fee");
+  if (feeAttempts.some(attempt => attempt.state === "verified")) return "collected";
+  if (feeAttempts.some(attempt => attempt.state !== "failed")) return "pending";
+  return "accrued";
+}
+
+export function p2pFormatUnits(units: string, precision = 6): string {
+  if (!/^\d+$/.test(units) || !Number.isInteger(precision) || precision < 0) return "";
+  const digits = units.padStart(precision + 1, "0");
+  if (precision === 0) return digits;
+  const whole = digits.slice(0, -precision);
+  const fraction = digits.slice(-precision).replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole;
 }

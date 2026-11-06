@@ -60,9 +60,7 @@ pub(crate) fn fee_policy(basis: u128, basis_asset: &str) -> Value {
         "version": P2P_FEE_VERSION, "rate": P2P_FEE_RATE, "floor": "0",
         "basis_units": basis.to_string(), "fee_units": fee.to_string(),
         "net_units": basis.saturating_sub(fee).to_string(), "precision": P2P_FEE_PRECISION,
-        "asset": "USDT", "basis_asset": basis_asset,
-        "conversion": {"from": basis_asset, "to": "USDT", "rate": "1"},
-        "payer": "stablecoin_sender", "withheld": false,
+        "asset": "USDT", "payer": "stablecoin_sender", "withheld": true,
     })
 }
 
@@ -131,6 +129,10 @@ impl PublicOfferDraft {
         {
             return Err(invalid("stablecoin asset identity is required"));
         }
+        let mut policy = fee_policy(usdt);
+        if self.stablecoin == Stablecoin::Usdc {
+            policy["conversion"] = json!("nominal_usdc_usdt_1_to_1");
+        }
         Ok(json!({
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
             "stablecoin":self.stablecoin.symbol(),
@@ -141,7 +143,7 @@ impl PublicOfferDraft {
             "ever_network_id":42, "ethereum_chain_id":1,
             "usdt_contract":self.stablecoin.contract(),
             "stablecoin_contract":self.stablecoin.contract(),
-            "fee_policy":fee_policy(usdt, self.stablecoin.symbol()),
+            "fee_policy":policy,
         }))
     }
 }
@@ -170,7 +172,7 @@ impl Service {
         let client = self.pool.get().await?;
         let rows = match owner {
             Some(actor) => client.query("SELECT * FROM otc_public_offers WHERE actor=$1 ORDER BY created_at DESC LIMIT 100", &[&actor]).await?,
-            None => client.query("SELECT * FROM otc_public_offers WHERE state='open' AND expires_at>now() AND body->>'ethereum_chain_id'='1' AND COALESCE(body->>'stablecoin_contract',body->>'usdt_contract') IN ($1,$2) ORDER BY created_at DESC LIMIT 100", &[&super::config::USDT,&super::config::USDC]).await?,
+            None => client.query("SELECT * FROM otc_public_offers WHERE state='open' AND expires_at>now() AND body->>'ethereum_chain_id'='1' AND COALESCE(body->>'stablecoin','USDT') IN ('USDT','USDC') ORDER BY created_at DESC LIMIT 100", &[]).await?,
         };
         Ok(Value::Array(rows.iter().map(offer).collect()))
     }
@@ -214,36 +216,104 @@ impl Service {
         if !self.public_offers_available() {
             return Err(Error::Disabled);
         }
-        let terms = draft.terms(&self.cfg)?;
+        let mut terms = draft.terms(&self.cfg)?;
         let receiving_network = terms["stablecoin_network"]
             .as_str()
-            .ok_or_else(|| invalid("offer receiving network is malformed"))?;
-        let asset_id = terms["stablecoin_asset_id"].as_str();
-        if receiving_network != "ethereum" || asset_id.is_some() {
-            let provider = self.near_intents.as_ref().ok_or(Error::RouteUnavailable)?;
-            let asset = crate::route_engine::Asset::new(
-                terms["stablecoin"].as_str().unwrap_or("USDT"),
-                Some(receiving_network),
-            )?;
-            let token_result = match asset_id {
-                Some(asset_id) => provider.token_for_asset_id(&asset, asset_id).await,
-                None => provider.token_for_asset(&asset).await,
-            };
-            let token = token_result
-                .map_err(|_| invalid("stablecoin is unavailable on the selected network"))?;
-            if !token
-                .symbol
-                .eq_ignore_ascii_case(terms["stablecoin"].as_str().unwrap_or_default())
-                || token.decimals != Some(6)
-                || (receiving_network == "ethereum"
-                    && token.contract_address.as_deref().is_none_or(|address| {
-                        !address.eq_ignore_ascii_case(
-                            terms["stablecoin_contract"].as_str().unwrap_or_default(),
-                        )
-                    }))
+            .ok_or_else(|| invalid("offer receiving network is malformed"))?
+            .to_string();
+        let asset_id = terms["stablecoin_asset_id"].as_str().map(str::to_string);
+        let provider = self.near_intents.as_ref().ok_or(Error::RouteUnavailable)?;
+        let asset = crate::route_engine::Asset::new(
+            terms["stablecoin"].as_str().unwrap_or("USDT"),
+            Some(&receiving_network),
+        )?;
+        let token_result = match asset_id {
+            Some(asset_id) => provider.token_for_asset_id(&asset, &asset_id).await,
+            None => provider.unique_token_for_asset(&asset).await,
+        };
+        let token = token_result.map_err(|_| {
+            invalid("stablecoin is unavailable or ambiguous on the selected network")
+        })?;
+        if !token
+            .symbol
+            .eq_ignore_ascii_case(terms["stablecoin"].as_str().unwrap_or_default())
+            || token.decimals != Some(6)
+            || (receiving_network == "ethereum"
+                && token.contract_address.as_deref().is_none_or(|address| {
+                    !address.eq_ignore_ascii_case(
+                        terms["stablecoin_contract"].as_str().unwrap_or_default(),
+                    )
+                }))
+        {
+            return Err(invalid("selected network token does not match the offer"));
+        }
+        let contract = token
+            .contract_address
+            .as_deref()
+            .filter(|contract| !contract.trim().is_empty())
+            .ok_or_else(|| invalid("selected network token has no wallet transfer contract"))?;
+        if super::config::evm_chain_id(&receiving_network).is_some()
+            && crate::route_execution::validate_otc_wallet_address(&receiving_network, contract)
+                .is_err()
+        {
+            return Err(invalid("selected network token contract is invalid"));
+        }
+        terms["stablecoin_contract"] = json!(contract);
+        terms["usdt_contract"] = json!(contract);
+        terms["stablecoin_asset_id"] = json!(token.asset_id);
+
+        let fee_recipient = self
+            .cfg
+            .fee_recipients
+            .get(&receiving_network)
+            .ok_or_else(|| invalid("service-fee recipient is not configured for this network"))?;
+        crate::route_execution::validate_otc_wallet_address(&receiving_network, fee_recipient)
+            .map_err(|_| invalid("invalid service-fee recipient for the offer network"))?;
+        let fee_asset = crate::route_engine::Asset::new("USDT", Some(&receiving_network))?;
+        let fee_token = provider
+            .unique_token_for_asset(&fee_asset)
+            .await
+            .map_err(|_| Error::RouteUnavailable)?;
+        if fee_token.decimals != Some(6)
+            || fee_token
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| address.trim().is_empty())
+        {
+            return Err(Error::RouteUnavailable);
+        }
+        let direct_network = self.p2p_direct_evm_network_available(&receiving_network);
+        let mut route_available = false;
+        for source_token in provider.supported_tokens().await {
+            let source_network =
+                crate::route_engine::canonical_network_id(&source_token.blockchain);
+            if !matches!(
+                source_token.symbol.to_ascii_uppercase().as_str(),
+                "USDT" | "USDC"
+            ) || !crate::route_execution::supports_otc_wallet_network(&source_network)
             {
-                return Err(invalid("selected network token does not match the offer"));
+                continue;
             }
+            let Ok(source) = source_token.asset() else {
+                continue;
+            };
+            let payment_route =
+                (source == asset && source_token.asset_id == token.asset_id && direct_network)
+                    || (source != asset && provider.route_available(&source, &asset).await);
+            let fee_route = if source == fee_asset && source_token.asset_id == fee_token.asset_id {
+                direct_network
+            } else {
+                provider.route_available(&source, &fee_asset).await
+            };
+            if payment_route && fee_route {
+                route_available = true;
+                break;
+            }
+        }
+        if !route_available {
+            return Err(invalid(
+                "no supported payment and service-fee route reaches this network",
+            ));
         }
         let seller = self.wallet(actor, "everscale").await?;
         let mut client = self.pool.get().await?;
@@ -323,7 +393,7 @@ mod tests {
         assert_eq!(usdc_terms["fee_policy"]["conversion"]["rate"], "1");
         assert_eq!(terms["fee_policy"]["asset"], "USDT");
         assert_eq!(terms["fee_policy"]["payer"], "stablecoin_sender");
-        assert_eq!(terms["fee_policy"]["withheld"], false);
+        assert_eq!(terms["fee_policy"]["withheld"], true);
         for value in ["0", "-1", "0.0000000001", "1000000000001", "NaN"] {
             let mut item = draft();
             item.ever_amount = value.into();
@@ -414,6 +484,14 @@ mod tests {
             super::super::config::USDC
         );
         assert_eq!(usdc.terms(&cfg).unwrap()["fee_policy"]["asset"], "USDT");
+        assert_eq!(
+            usdc.terms(&cfg).unwrap()["fee_policy"]["conversion"],
+            "nominal_usdc_usdt_1_to_1"
+        );
+        assert_eq!(
+            usdc.terms(&cfg).unwrap()["fee_policy"]["fee_units"],
+            "356670"
+        );
         let mut invalid = body;
         invalid["direction"] = json!("anything");
         assert!(serde_json::from_value::<PublicOfferDraft>(invalid).is_err());

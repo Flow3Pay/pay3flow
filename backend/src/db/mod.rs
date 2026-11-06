@@ -69,10 +69,13 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .batch_execute(include_str!("../../migrations/otc_p2p_fee_payer.sql"))
         .await?;
     client
-        .batch_execute(include_str!("../../migrations/otc_p2p_fee_basis.sql"))
+        .batch_execute(include_str!("../../migrations/otc_p2p_fee_collection.sql"))
         .await?;
     client
         .batch_execute(include_str!("../../migrations/otc_p2p_near_intents.sql"))
+        .await?;
+    client
+        .batch_execute(include_str!("../../migrations/otc_p2p_evm_networks.sql"))
         .await?;
     client
         .batch_execute(include_str!("../../migrations/otc_p2p_ui.sql"))

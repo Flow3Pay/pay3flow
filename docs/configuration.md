@@ -67,10 +67,12 @@ Kubernetes Secret to the backend as `OTC_FEE_RECIPIENTS`. The complete
 operator-provided destination list is in
 [`deploy/external.env.example`](../deploy/external.env.example). The backend
 rejects malformed entries, duplicate networks, and address formats that do
-not match the configured network. This config only records receiving
-destinations; it does not initiate transfers. OTC currently accrues fee
-amounts in its internal ledger, and automated USDT fee collection/payout must
-be implemented separately.
+not match the configured network. For P2P OTC, a destination is offered only
+when the wallet executor, six-decimal USDT token, payment route, and fee route
+are all available for that network. The fee payer signs the fee transfer from
+their wallet; the backend verifies the exact USDT output before marking it
+collected, and the seller's EVER payout remains blocked until then. A configured
+address by itself does not enable settlement on a network.
 
 The optional third address pins the `OnchainGateway` used by same-chain
 Symbiosis swaps; it serves as both transaction destination and ERC-20 spender.
@@ -218,3 +220,10 @@ reference so tracking can resume without signing again.
 ## OTC route
 
 `OTC_CONFIG_FILE` selects a private JSON configuration file; the route is disabled when absent. See [OTC setup](otc-service.md) and `backend/otc.example.json`. Initial booking state is paused. Record the independent RPCs, deployed wallet profile, desk/operator policies, tested alert routes and live-gate evidence before enabling it. Demo and live deployments require separate databases; the database mode and each quote are bound to their original environment.
+
+Direct same-network OTC transfers on non-Ethereum EVM chains additionally
+require `p2p_evm_rpcs` in that private JSON file. It maps a canonical network
+ID to two independently operated HTTPS RPC endpoints; supported IDs are
+`base`, `arbitrum-one`, `optimism`, `bnb-smart-chain`, `gnosis`, `polygon-pos`
+and `avalanche-c`. A missing pair keeps that direct network unavailable; it
+does not disable routed cross-network settlement.

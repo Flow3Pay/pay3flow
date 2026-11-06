@@ -9,6 +9,7 @@
   "p2p_ethereum_chain_id": null,
   "p2p_usdt_contract": null,
   "p2p_ethereum_rpc": [],
+  "p2p_evm_rpcs": {},
   "origin": "https://app.example",
   "relay_origin": "https://relay.example",
   "matcher_actor": "https://relay.example/actors/fmatch",

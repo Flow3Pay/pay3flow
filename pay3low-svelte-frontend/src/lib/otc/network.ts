@@ -6,6 +6,13 @@ export interface OtcEvmNetwork {
 
 const EVM_NETWORKS: Record<number, { name: string; label: string }> = {
   1: { name: "ethereum", label: "Ethereum mainnet" },
+  10: { name: "optimism", label: "Optimism" },
+  56: { name: "bnb-smart-chain", label: "BNB Smart Chain" },
+  100: { name: "gnosis", label: "Gnosis" },
+  137: { name: "polygon-pos", label: "Polygon PoS" },
+  8453: { name: "base", label: "Base" },
+  42161: { name: "arbitrum-one", label: "Arbitrum One" },
+  43114: { name: "avalanche-c", label: "Avalanche C-Chain" },
 };
 
 /**

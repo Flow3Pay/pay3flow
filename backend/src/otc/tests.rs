@@ -313,13 +313,14 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
             include_str!("../../migrations/otc_p2p.sql"),
             include_str!("../../migrations/otc_p2p_fees.sql"),
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
+            include_str!("../../migrations/otc_p2p_fee_collection.sql"),
             include_str!("../../migrations/otc_p2p_near_intents.sql"),
             include_str!("../../migrations/otc_p2p_ui.sql")
         ))
@@ -1023,13 +1024,14 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
             include_str!("../../migrations/otc_p2p.sql"),
             include_str!("../../migrations/otc_p2p_fees.sql"),
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
+            include_str!("../../migrations/otc_p2p_fee_collection.sql"),
             include_str!("../../migrations/otc_p2p_near_intents.sql"),
             include_str!("../../migrations/otc_p2p_ui.sql")
         ))
@@ -1286,7 +1288,7 @@ async fn p2p_prepare_builds_the_payment_handoff_and_blocks_duplicates() {
         .unwrap();
     let instructions = &prepared["attempt"]["instructions"];
     assert_eq!(prepared["attempt"]["state"], json!("prepared"));
-    assert_eq!(instructions["leg"]["transfer_amount"], json!("11889000"));
+    assert_eq!(instructions["leg"]["transfer_amount"], json!("11532330"));
     assert_eq!(instructions["leg"]["chain"], json!("ethereum"));
     assert_eq!(instructions["call"]["chain_id"], json!(1));
     assert_eq!(instructions["call"]["nonce"], json!("0x3"));
@@ -1354,11 +1356,26 @@ async fn p2p_late_delivery_can_still_prepare_after_the_nominal_deadline() {
         .await
         .unwrap();
     assert_eq!(trade_state(&service, id).await, "delivery_pending");
+    let blocked = service
+        .p2p_prepare(&owner, id, "deliver-before-fee", "payout")
+        .await
+        .expect_err("EVER payout must wait for verified fee collection");
+    assert!(
+        matches!(&blocked, super::error::Error::Conflict(message) if message.contains("service fee")),
+        "{blocked:?}"
+    );
     // Simulate a trader returning after the advertised EVER delivery window.
     let client = service.pool.get().await.unwrap();
     client
         .execute(
             "UPDATE otc_p2p_trades SET payout_by=now()-interval '1 hour' WHERE id=$1",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "UPDATE otc_p2p_fees SET state='collected',collected_at=now() WHERE trade_id=$1",
             &[&id],
         )
         .await
@@ -1484,7 +1501,7 @@ async fn p2p_cancel_and_payment_expiry_return_the_offer_to_the_book() {
 }
 #[tokio::test]
 #[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
-async fn p2p_completion_accrues_the_service_fee_once() {
+async fn p2p_payment_verification_accrues_the_service_fee_once() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let mut offer_draft = draft(Direction::Sell, &format!("0x{}", "b".repeat(40)));
     offer_draft.stablecoin = super::public_offers::Stablecoin::Usdc;
@@ -1507,11 +1524,7 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     assert_eq!(deal["fee_accrued"], json!(false));
     assert_eq!(deal["fee_policy"]["asset"], json!("USDT"));
     assert_eq!(deal["fee_policy"]["payer"], json!("stablecoin_sender"));
-    assert_eq!(deal["fee_policy"]["withheld"], json!(false));
-    assert_eq!(deal["fee_policy"]["basis_asset"], json!("USDC"));
-    assert_eq!(deal["fee_policy"]["conversion"]["from"], json!("USDC"));
-    assert_eq!(deal["fee_policy"]["conversion"]["to"], json!("USDT"));
-    assert_eq!(deal["fee_policy"]["conversion"]["rate"], json!("1"));
+    assert_eq!(deal["fee_policy"]["withheld"], json!(true));
     assert_eq!(deal["terms"]["fee_payer_actor"], json!(taker));
     assert_eq!(deal["terms"]["stablecoin"], json!("USDC"));
     assert_eq!(deal["terms"]["usdt_contract"], json!(super::config::USDC));
@@ -1536,6 +1549,18 @@ async fn p2p_completion_accrues_the_service_fee_once() {
         .await
         .unwrap();
     assert_eq!(trade_state(&service, id).await, "delivery_pending");
+    let delivery = service.p2p_deal(&taker, id).await.unwrap();
+    assert_eq!(delivery["deal"]["fee_accrued"], json!(true));
+    let fee_client = service.pool.get().await.unwrap();
+    let accrued_before_payout: i64 = fee_client
+        .query_one(
+            "SELECT count(*) FROM otc_p2p_fees WHERE trade_id=$1 AND state='accrued'",
+            &[&id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(accrued_before_payout, 1);
     service
         .credit_p2p(Uuid::new_v4(), id, "payout", &evidence("everscale"))
         .await

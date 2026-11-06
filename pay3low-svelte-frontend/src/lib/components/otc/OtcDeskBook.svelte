@@ -3,11 +3,11 @@
   import { locale } from "$lib/i18n";
   import { proposalDirection } from "$lib/otc/terminal";
   import { request, type Config, type Direction, type Proposal } from "$lib/otc/service";
-  import { saleRate, compareOfferRates, offerDirection, offerOwner, offerStablecoin, type PublicOffer } from "$lib/otc/public-offers";
+  import { saleRate, compareOfferRates, offerDirection, offerOwner, offerStablecoin, p2pFeeSplit, type PublicOffer } from "$lib/otc/public-offers";
   import { identiconDataUri } from "$lib/otc/identicon";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
-  export let onAccept: (id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string | null; stablecoin_address: string }) => void = () => {};
+  export let onAccept: (id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string }) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
   export let dialogOnly = false;
   export let testId = "otc-public-offer";
@@ -19,8 +19,17 @@
   let selectedOffer: PublicOffer | null = null;
   let dialog: HTMLDialogElement;
   let copied = "";
-  let stablecoinAssets: StablecoinAsset[] = [];
-  let acceptNetwork = "ethereum", acceptAddress = "", acceptError = "";
+  let buyDestinationAssets: Array<{ symbol: "USDT" | "USDC"; network: string; asset_id: string }> = [];
+  let destinationAssetId = "";
+  $: offerToken = selectedOffer ? offerStablecoin(selectedOffer) : "USDT";
+  $: buyDestinationNetworks = buyDestinationAssets.filter(asset => asset.symbol === offerToken);
+  $: selectedBuyDestination = buyDestinationNetworks.find(asset => asset.asset_id === destinationAssetId)
+    || buyDestinationNetworks.find(asset => asset.network === "ethereum")
+    || buyDestinationNetworks[0]
+    || null;
+  $: destinationNetwork = selectedBuyDestination?.network || "ethereum";
+  let destinationAddress = "";
+  let destinationAssetsError = "";
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: offers = listings.map(proposal => ({ proposal, direction: proposalDirection(proposal, config) })).filter(item => item.direction);
   $: sortedOffers = compact ? publicOffers : [...publicOffers].sort((a,b) => {
@@ -67,7 +76,12 @@
   }
 
   async function showOffer(offer: PublicOffer) {
-    selectedOffer = offer; copied = ""; acceptNetwork = "ethereum"; acceptAddress = ""; acceptError = "";
+    selectedOffer = offer;
+    copied = "";
+    destinationAssetId = buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer) && asset.network === "ethereum")?.asset_id
+      || buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer))?.asset_id
+      || "";
+    destinationAddress = "";
     await tick();
     if (dialog && !dialog.open) dialog.showModal();
   }
@@ -80,24 +94,17 @@
     try { await navigator.clipboard.writeText(address); copied = key; }
     catch { copied = ""; }
   }
-  function acceptSelected() {
-    if (!selectedOffer) return;
-    if (offerDirection(selectedOffer) !== "buy") { onAccept(selectedOffer.id); closeOffer(); return; }
-    if (!acceptAddressValid) {
-      acceptError = say("Enter the wallet that receives the stablecoin.", "Укажите кошелёк для получения стейблкоина.");
-      return;
-    }
-    onAccept(selectedOffer.id, {
-      stablecoin_network: acceptNetwork,
-      stablecoin_asset_id: acceptNetwork === "ethereum" ? null : acceptAsset?.asset_id || null,
-      stablecoin_address: acceptAddress.trim(),
-    });
-    closeOffer();
-  }
   onMount(() => {
-    void request<{ assets: StablecoinAsset[] }>("/p2p/assets")
-      .then(result => { stablecoinAssets = result.assets || []; })
-      .catch(() => { stablecoinAssets = []; });
+    void request<{ buy_destination_assets?: typeof buyDestinationAssets }>("/p2p/assets")
+      .then(result => {
+        buyDestinationAssets = result.buy_destination_assets || [];
+        if (selectedOffer && !destinationAssetId) {
+          destinationAssetId = buyDestinationAssets.find(asset => asset.symbol === offerToken && asset.network === "ethereum")?.asset_id
+            || buyDestinationAssets.find(asset => asset.symbol === offerToken)?.asset_id
+            || "";
+        }
+      })
+      .catch(() => { destinationAssetsError = say("Receiving networks are temporarily unavailable.", "Сети получения временно недоступны."); });
     return () => { if (dialog?.open) dialog.close(); };
   });
 </script>
@@ -194,6 +201,7 @@
   {@const selected = selectedOffer}
   {@const side = offerDirection(selected)}
   {@const token = offerStablecoin(selected)}
+  {@const fee = p2pFeeSplit(selected.terms.usdt_amount)}
   {@const isOwn = ownIds.includes(selected.id)}
   {@const offerChain = selected.terms.ethereum_chain_id ?? 1}
   {@const wrongNetwork = !!config?.p2p_usdt_contract && offerChain !== (config.p2p_ethereum_chain_id ?? config.ethereum_chain_id)}
@@ -201,6 +209,7 @@
   <dialog bind:this={dialog} class="offerDialog" aria-labelledby="otc-offer-details-title" on:cancel|preventDefault={closeOffer} on:click={(event) => { if (event.target === dialog) closeOffer(); }}>
     <div class="dialogHead"><div><span class="dialogEyebrow" class:sell={side === "sell"}>{side === "buy" ? say("BUY OFFER", "ОФФЕР НА ПОКУПКУ") : say("SELL OFFER", "ОФФЕР НА ПРОДАЖУ")}</span><h2 id="otc-offer-details-title">{say("Offer details", "Детали оффера")}</h2></div><button type="button" class="iconButton" aria-label={say("Close", "Закрыть")} on:click={closeOffer}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
     <div class="dialogSummary"><div><span>{say("Price", "Цена")}</span><strong>{saleRate(selected.terms.ever_amount,selected.terms.usdt_amount)} <small>{token} / EVER</small></strong></div><div><span>{say("Amount", "Количество")}</span><strong>{selected.terms.ever_amount} <small>EVER</small></strong></div><div><span>{say("Total", "Сумма")}</span><strong>{selected.terms.usdt_amount} <small>{token}</small></strong></div></div>
+    {#if fee}<p class="feeSummary">{say("Separate service fee", "Отдельная комиссия сервиса")}: {fee.fee} USDT (3%). {token === "USDC" ? say("Calculated at nominal 1:1 USDC/USDT parity.", "Рассчитана по номинальному курсу 1:1 USDC/USDT.") : ""} {say("Accounted separately; not deducted from the transfer and not automatically collected.", "Учитывается отдельно; не вычитается из перевода и автоматически не взыскивается.")}</p>{/if}
     <div class="addressList">
       <div class="addressRow"><img src="/icons/assets/ever.svg" alt="" width="22" height="22"><div><span>{side === "buy" ? say("EVER receiving wallet", "Кошелёк получения EVER") : say("Seller EVER wallet", "EVER-кошелёк продавца")}</span><code>{offerOwner(selected)}</code></div><button class="copyButton" type="button" aria-label={say("Copy EVER address", "Копировать EVER-адрес")} on:click={() => copyAddress(offerOwner(selected), "ever")}>{#if copied === "ever"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
       <div class="addressRow"><img src={token === "USDC" ? "/icons/assets/usdc.png" : "/icons/assets/usdt.png"} alt="" width="22" height="22"><div><span>{side === "buy" ? say(`${token} paying wallet · ethereum`, `Кошелёк оплаты ${token} · Ethereum`) : say(`${token} receiving wallet · ${selected.terms.stablecoin_network || "ethereum"}`, `Кошелёк получения ${token} · ${selected.terms.stablecoin_network || "ethereum"}`)}</span><code>{selected.terms.usdt_address}</code></div><button class="copyButton" type="button" aria-label={say("Copy stablecoin address", "Копировать адрес стейблкоина")} on:click={() => copyAddress(selected.terms.usdt_address, "usdt")}>{#if copied === "usdt"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
@@ -208,19 +217,31 @@
     <div class="dialogFoot"><span><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say("Open until", "Действует до")} {new Date(selected.expires_at).toLocaleString($locale)}</span>{#if isOwn && selected.state === "open"}<button type="button" class="cancelOffer" disabled={busy} on:click={() => { onCancel(selected.id); closeOffer(); }}>{say("Cancel offer", "Снять оффер")}</button>{/if}</div>
     {#if canAccept}
       <div class="acceptRow">
+        <p>{say(`Two transfers settle this offer: one side sends ${token}, the other sends EVER. There is no escrow, so verify all addresses before proceeding.`, `Для расчёта оффера нужны два перевода: одна сторона отправляет ${token}, другая — EVER. Эскроу нет, поэтому проверьте все адреса перед отправкой.`)}</p>
         {#if side === "buy"}
-          <div class="acceptDestination">
-            <label>{say(`Where you receive ${token}`, `Где вы получаете ${token}`)}
-              <select bind:value={acceptNetwork} disabled={busy} data-testid="otc-accept-network">{#each acceptNetworks as network}<option value={network}>{network}</option>{/each}</select>
-            </label>
-            <label>{say(`${token} address on ${acceptNetwork}`, `Адрес ${token} в сети ${acceptNetwork}`)}
-              <input bind:value={acceptAddress} autocomplete="off" spellcheck="false" placeholder={acceptNetwork === "ethereum" ? "0x…" : say("Receiving address", "Адрес получения")} disabled={busy} data-testid="otc-accept-recipient" />
-            </label>
-          </div>
+          <label class="buyDestination">{say(`${token} receiving network`, `Сеть получения ${token}`)}
+            <select bind:value={destinationAssetId} disabled={busy || !buyDestinationNetworks.length} data-testid="otc-buy-destination-network">
+              {#each buyDestinationNetworks as destination (destination.asset_id)}<option value={destination.asset_id}>{destination.network} · {destination.asset_id}</option>{/each}
+            </select>
+          </label>
+          {#if !buyDestinationNetworks.length}<p class="settlementNote">{destinationAssetsError || say("No supported receiving network is available for this token.", "Для этого токена нет доступной сети получения.")}</p>{/if}
+          <label class="buyDestination">{say(`${token} receiving address`, `Адрес получения ${token}`)}
+            <input bind:value={destinationAddress} required autocomplete="off" spellcheck="false" placeholder={destinationNetwork === "ethereum" ? "0x…" : say("Address on selected network", "Адрес в выбранной сети")} disabled={busy} data-testid="otc-buy-destination-address" />
+          </label>
+          {#if destinationAssetsError}<p class="settlementNote" role="alert">{destinationAssetsError}</p>{/if}
         {/if}
-        <p>{say(`Two direct transfers between the two wallets: one side sends ${token}, the other sends EVER. There is no escrow, so send only after checking the addresses.`, `Два прямых перевода между кошельками: одна сторона отправляет ${token}, другая — EVER. Эскроу нет, поэтому отправляйте только проверив адреса.`)}</p>
-        {#if acceptError}<p class="acceptError" role="alert">{acceptError}</p>{/if}
-        <button type="button" class="acceptOffer" disabled={busy} data-testid="otc-accept-offer" on:click={acceptSelected}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button>
+        <button type="button" class="acceptOffer" disabled={busy || (side === "buy" && (!selectedBuyDestination || !destinationAddress.trim()))} data-testid="otc-accept-offer" on:click={() => {
+          if (side === "buy" && selectedBuyDestination) {
+            onAccept(selected.id, {
+              stablecoin_network: selectedBuyDestination.network,
+              stablecoin_asset_id: selectedBuyDestination.asset_id,
+              stablecoin_address: destinationAddress.trim(),
+            });
+          } else {
+            onAccept(selected.id);
+          }
+          closeOffer();
+        }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button>
       </div>
     {:else if wrongNetwork}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say(`This offer was published for another Ethereum network (${offerChain}). It has to be reposted before it can be settled wallet to wallet.`, `Этот оффер опубликован для другой сети Ethereum (${offerChain}). Чтобы рассчитать его между кошельками, его нужно перепубликовать.`)}</p>
     {:else if config?.public_offers_available && !config.available}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{say("Settlement through this site is currently unavailable. Verify addresses with the other party before sending funds.", "Расчёты через сайт сейчас недоступны. Перед переводом сверьте адреса с контрагентом.")}</p>{/if}
@@ -302,6 +323,7 @@
   .dialogSummary span,.addressRow > div > span { color:var(--color-text-soft); font-size:11px; }
   .dialogSummary strong { overflow-wrap:anywhere; font-family:var(--font-mono); font-size:14px; font-weight:600; }
   .dialogSummary small { display:block; margin-top:3px; color:var(--color-text-faint); font-family:var(--font-sans,inherit); font-size:10px; font-weight:400; }
+  .feeSummary { margin:0; padding:0 22px 14px; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
   .addressList { display:grid; padding:4px 22px; }
   .addressRow { display:grid; grid-template-columns:22px minmax(0,1fr) 36px; align-items:center; gap:10px; min-width:0; padding:13px 0; border-bottom:1px solid var(--color-border); }
   .addressRow > div { display:grid; min-width:0; gap:5px; }

@@ -28,13 +28,15 @@ pub(crate) struct Config {
     pub usdt_contract: String,
     #[serde(default = "default_ever_fee_reserve")]
     pub p2p_ever_fee_reserve: String,
-    /// Peer settlement network. OTC settlement currently supports Ethereum mainnet only.
+    /// Base peer settlement network; additional EVM networks use `p2p_evm_rpcs`.
     #[serde(default)]
     pub p2p_ethereum_chain_id: Option<u64>,
     #[serde(default)]
     pub p2p_usdt_contract: Option<String>,
     #[serde(default)]
     pub p2p_ethereum_rpc: Vec<String>,
+    #[serde(default)]
+    pub p2p_evm_rpcs: BTreeMap<String, Vec<String>>,
     pub origin: String,
     pub relay_origin: String,
     pub matcher_actor: String,
@@ -87,6 +89,7 @@ impl Default for Config {
             p2p_ethereum_chain_id: None,
             p2p_usdt_contract: None,
             p2p_ethereum_rpc: Vec::new(),
+            p2p_evm_rpcs: BTreeMap::new(),
             origin: String::new(),
             relay_origin: String::new(),
             matcher_actor: String::new(),
@@ -155,14 +158,22 @@ impl Config {
         self.check_evm_network(self.ethereum_chain_id, &self.usdt_contract)?;
         self.check_evm_network(self.p2p_chain(), self.p2p_usdt())?;
         super::amount::units(&self.p2p_ever_fee_reserve, 9)?;
+        for (network, endpoints) in &self.p2p_evm_rpcs {
+            if evm_chain_id(network).is_none()
+                || network == "ethereum"
+                || endpoints.len() < 2
+                || endpoints[0] == endpoints[1]
+                || (!self.demo && endpoints.iter().any(|url| !url.starts_with("https://")))
+            {
+                return Err(invalid("invalid direct OTC EVM network configuration"));
+            }
+        }
         Ok(())
     }
     fn check_evm_network(&self, chain_id: u64, contract: &str) -> Result<()> {
         let canonical = super::wallet::address("ethereum", contract)?;
         if canonical != contract || chain_id != 1 {
-            return Err(invalid(
-                "OTC settlement currently supports Ethereum mainnet only",
-            ));
+            return Err(invalid("OTC base network must be Ethereum mainnet"));
         }
         if canonical != USDT {
             return Err(invalid(
@@ -189,6 +200,27 @@ impl Config {
             &self.p2p_ethereum_rpc
         }
     }
+    pub fn p2p_evm_rpcs(&self, network: &str) -> Option<&[String]> {
+        if network == "ethereum" {
+            Some(self.p2p_rpc())
+        } else {
+            self.p2p_evm_rpcs.get(network).map(Vec::as_slice)
+        }
+    }
+}
+
+pub(crate) fn evm_chain_id(network: &str) -> Option<u64> {
+    match network {
+        "ethereum" => Some(1),
+        "optimism" => Some(10),
+        "bnb-smart-chain" => Some(56),
+        "gnosis" => Some(100),
+        "polygon-pos" => Some(137),
+        "avalanche-c" => Some(43114),
+        "arbitrum-one" => Some(42161),
+        "base" => Some(8453),
+        _ => None,
+    }
 }
 
 fn parse_fee_recipients(raw: &str) -> anyhow::Result<BTreeMap<String, String>> {
@@ -200,7 +232,7 @@ fn parse_fee_recipients(raw: &str) -> anyhow::Result<BTreeMap<String, String>> {
         let (network, address) = entry
             .split_once('=')
             .ok_or_else(|| anyhow::anyhow!("fee recipient must use network=address format"))?;
-        let network = network.trim().to_ascii_lowercase();
+        let network = crate::route_engine::canonical_network_id(network.trim());
         let address = address.trim();
         if !valid_fee_recipient(&network, address) {
             anyhow::bail!("invalid OTC fee recipient for network {network}");
@@ -219,6 +251,7 @@ fn valid_fee_recipient(network: &str, address: &str) -> bool {
     let evm = matches!(
         network,
         "ethereum"
+            | "gnosis"
             | "avalanche-c"
             | "polygon-pos"
             | "bnb-smart-chain"
@@ -397,7 +430,7 @@ impl Config {
 
 #[cfg(test)]
 mod config_tests {
-    use super::{parse_fee_recipients, Config, USDT};
+    use super::{evm_chain_id, parse_fee_recipients, Config, USDT};
 
     #[test]
     fn parses_all_operator_fee_recipients() {
@@ -414,10 +447,11 @@ mod config_tests {
             "bnb-smart-chain=0x1111111111111111111111111111111111111111",
             "arbitrum-one=0x1111111111111111111111111111111111111111",
             "base=0x1111111111111111111111111111111111111111",
+            "gnosis=0x1111111111111111111111111111111111111111",
             "aptos=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ]"#;
         let recipients = parse_fee_recipients(entries).unwrap();
-        assert_eq!(recipients.len(), 13);
+        assert_eq!(recipients.len(), 14);
         assert_eq!(
             recipients.get("tron").map(String::as_str),
             Some("T111111111111111111111111111111111")
@@ -442,6 +476,13 @@ mod config_tests {
     }
 
     #[test]
+    fn canonicalizes_fee_recipient_network_aliases() {
+        let recipients =
+            parse_fee_recipients(r#"["eth=0x1111111111111111111111111111111111111111"]"#).unwrap();
+        assert!(recipients.contains_key("ethereum"));
+    }
+
+    #[test]
     fn rejects_testnet_and_unknown_networks_for_otc_settlement() {
         let mut cfg = Config {
             enabled: true,
@@ -456,6 +497,49 @@ mod config_tests {
 
         cfg.p2p_usdt_contract = Some(USDT.into());
         cfg.p2p_ethereum_chain_id = Some(8453);
+        assert!(cfg.validate_network().is_err());
+    }
+
+    #[test]
+    fn validates_independent_rpc_pairs_for_direct_evm_networks() {
+        let mut cfg = Config {
+            p2p_evm_rpcs: [(
+                "base".into(),
+                vec![
+                    "https://base-a.example".into(),
+                    "https://base-b.example".into(),
+                ],
+            )]
+            .into(),
+            ..Config::default()
+        };
+        assert!(cfg.validate_network().is_ok());
+        assert_eq!(cfg.p2p_evm_rpcs("base").unwrap().len(), 2);
+        for (network, chain_id) in [
+            ("ethereum", 1),
+            ("optimism", 10),
+            ("bnb-smart-chain", 56),
+            ("gnosis", 100),
+            ("polygon-pos", 137),
+            ("avalanche-c", 43114),
+            ("arbitrum-one", 42161),
+            ("base", 8453),
+        ] {
+            assert_eq!(evm_chain_id(network), Some(chain_id));
+        }
+
+        cfg.p2p_evm_rpcs.insert(
+            "base".into(),
+            vec!["https://same.example".into(), "https://same.example".into()],
+        );
+        assert!(cfg.validate_network().is_err());
+        cfg.p2p_evm_rpcs.insert(
+            "sepolia".into(),
+            vec![
+                "https://rpc-a.example".into(),
+                "https://rpc-b.example".into(),
+            ],
+        );
         assert!(cfg.validate_network().is_err());
     }
 }

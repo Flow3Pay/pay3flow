@@ -5,6 +5,8 @@ import { evmNetworkFor, p2pEvmNetworkFor, walletNetworkName } from "../src/lib/o
 test("the OTC wallet follows the Ethereum network published by the backend", () => {
   assert.deepEqual(evmNetworkFor(undefined), { name: "ethereum", label: "Ethereum mainnet", chainId: 1 });
   assert.deepEqual(evmNetworkFor(1), { name: "ethereum", label: "Ethereum mainnet", chainId: 1 });
+  assert.deepEqual(evmNetworkFor(8453), { name: "base", label: "Base", chainId: 8453 });
+  assert.deepEqual(evmNetworkFor(42161), { name: "arbitrum-one", label: "Arbitrum One", chainId: 42161 });
 });
 
 test("testnets and unconfigured Ethereum chains stop OTC instead of signing elsewhere", () => {
@@ -15,6 +17,7 @@ test("testnets and unconfigured Ethereum chains stop OTC instead of signing else
 
 test("only the Ethereum label is remapped, Everscale stays its own network", () => {
   assert.equal(walletNetworkName("ethereum", evmNetworkFor(1)), "ethereum");
+  assert.equal(walletNetworkName("base", evmNetworkFor(8453)), "base");
   assert.equal(walletNetworkName("everscale", evmNetworkFor(1)), "everscale");
 });
 
