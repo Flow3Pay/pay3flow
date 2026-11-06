@@ -14,11 +14,8 @@ WORKDIR /app
 COPY . .
 RUN NODE_OPTIONS=--max-old-space-size=6144 pnpm run build
 
-# Install the production dependencies directly in the final layer. Copying a
-# filtered node_modules from another stage rewrote tens of thousands of small
-# files into a fresh overlay layer and took half an hour on the production disk.
-# The same layer drops files the Node runtime never reads: TypeScript
-# declarations, source maps and build info.
+# Pack production dependencies into one archive so exporting the image does not
+# need to walk and serialize tens of thousands of individual files.
 FROM base AS runner
 RUN apk add --no-cache font-dejavu
 WORKDIR /app
@@ -29,8 +26,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod --ignore-scripts \
     && find node_modules -type f \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \
-         -o -name '*.map' -o -name '*.tsbuildinfo' \) -delete
+         -o -name '*.map' -o -name '*.tsbuildinfo' \) -delete \
+    && tar -czf node_modules.tar.gz node_modules \
+    && rm -rf node_modules
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/server.mjs ./server.mjs
 EXPOSE 3000
-CMD ["node", "server.mjs"]
+CMD ["sh", "-c", "tar -xzf node_modules.tar.gz && exec node server.mjs"]
