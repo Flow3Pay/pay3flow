@@ -15,7 +15,6 @@
   export let listings: Proposal[] = [];
   export let selectedId = "";
   export let onSelect: (proposal: Proposal, direction: Direction) => void;
-  type StablecoinAsset = { asset: string; symbol: "USDT" | "USDC"; network: string; asset_id: string };
   let selectedOffer: PublicOffer | null = null;
   let dialog: HTMLDialogElement;
   let copied = "";
@@ -44,13 +43,6 @@
   $: askLevels = buildLevels(publicOffers, "sell", ownIds);
   $: bidLevels = buildLevels(publicOffers, "buy", ownIds);
   const avatar = (offer: PublicOffer) => offer.seller_avatar || identiconDataUri(offerOwner(offer));
-  $: acceptToken = selectedOffer ? offerStablecoin(selectedOffer) : "USDT";
-  $: acceptNetworks = ["ethereum", ...stablecoinAssets.filter(item => item.symbol === acceptToken && item.network !== "ethereum").map(item => item.network)].filter((network, index, list) => list.indexOf(network) === index);
-  $: acceptAsset = stablecoinAssets.find(item => item.symbol === acceptToken && item.network === acceptNetwork) || null;
-  $: acceptAddressValid = acceptNetwork === "ethereum"
-    ? /^0x[0-9a-fA-F]{40}$/.test(acceptAddress.trim()) && !/^0x0{40}$/i.test(acceptAddress.trim())
-    : acceptAddress.trim().length > 0;
-
   function buildLevels(source: PublicOffer[], side: Direction, own: string[]): BookLevel[] {
     return source
       .filter(offer => offerDirection(offer) === side)
