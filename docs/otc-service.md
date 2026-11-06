@@ -87,14 +87,18 @@ USDT first, EVER after that leg verifies. There is no escrow, no atomic swap and
 no rollback; each payer is responsible for their own leg, and the deal records
 which leg each side still owes.
 
-Each completed deal accrues a 3% service fee exactly once from the gross USDT
+Each P2P deal accrues a 3% service fee exactly once from the gross USDT
 leg (`otc_p2p_fees`; startup also applies `backend/migrations/otc_p2p_fees.sql`).
+The `otc_p2p_fee_basis.sql` migration records whether the deal basis was USDT
+or USDC.
 The policy is frozen into the deal body at acceptance, so republishing the offer
 cannot change it. The stablecoin payment sends `gross - fee` to the seller; the
 fee payer separately authorizes an exact USDT transfer to the configured
 recipient. The fee is not a network cost. It is recorded as `accrued` only after
 payment verification, and the EVER payout remains blocked until fee collection
-is verified.
+is verified. Cross-network fee source amount and provider fee are preflighted
+and displayed before the principal payment is signed; an executable fee quote is
+requested again when the payer prepares the separate fee transfer.
 
 The route deliberately bypasses the desk: it works with `enabled: false`, needs no
 inventory, relay account, RFQ, federation or staffed-hours gate, and the worker
@@ -116,19 +120,20 @@ object mapping canonical network IDs (`base`, `arbitrum-one`, `optimism`,
 operated HTTPS RPC URLs. Ethereum uses `p2p_ethereum_rpc`; other networks with
 no configured pair remain unavailable for direct settlement. The backend
 checks each pair's chain ID before preparing a transfer and observes the exact
-token transfer on that same network. NEAR Intents remains the path for
-cross-network or non-EVM payments.
+token transfer on that same network. NEAR Intents is used for supported routed
+cross-network payments; direct same-network NEAR and TRON settlement is not
+implemented.
 
 The deal stores the receiving network, exact catalog asset identity, token
 contract and EVM chain ID. Direct same-network EVM settlement is enabled only
 when the exact source/destination asset IDs match and the required observer
 pair is configured. A fee transfer is direct only when its source is the exact
 USDT token on the configured recipient network; otherwise it requires an
-exact-output route. `validate_network` keeps the public offer network on
-canonical Ethereum mainnet and requires a usable `p2p_ever_fee_reserve`. The
-EVER leg adds that reserve to the booked amount and accepts a balance increase
-of at least the booked amount, because a receiving contract may take its fee
-from the transfer.
+exact-output route. `validate_network` keeps the base network on canonical
+Ethereum mainnet and requires a usable `p2p_ever_fee_reserve`. The EVER leg adds
+that reserve to the booked amount and accepts a balance increase of at least
+the booked amount, because a receiving contract may take its fee from the
+transfer.
 
 Every direct EVM network needs two independent HTTPS observers, and the EVER
 leg needs two Everscale GraphQL endpoints. Finalized heights and pending nonces

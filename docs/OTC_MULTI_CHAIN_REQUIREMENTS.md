@@ -2,10 +2,10 @@
 
 ## Purpose
 
-This document records the requested OTC product goals and the decisions made
-in the conversation before implementation continues. It is the working
-requirements baseline for extending OTC from its current Ethereum-centric
-USDT flow to multi-chain USDT and USDC flows.
+This document records the requested OTC product goals, decisions, and the
+verified implementation status. It remains the working requirements baseline
+for extending OTC from its Ethereum-centric USDT flow to multi-chain USDT and
+USDC flows; implemented support is narrower than the full target.
 
 The original request was to block Sepolia for OTC offers, add USDC alongside
 USDT, and provide a searchable token picker. The scope was subsequently
@@ -249,108 +249,83 @@ identifies a network.
   USDT.
 - The existing EVER leg and unrelated wallet connections continue to work.
 
-## Current implementation context
+## Implementation status (2026-11-06)
 
-The current implementation is an incomplete intermediate step, not a claim
-that multi-chain OTC is complete. It includes USDT/USDC offer support, explicit
-production EVM network selection in the wallet flow, and an OTC cross-network
-payment preparation path using the existing NEAR Intents provider. The OTC
-interface describes this generically as a payment route and does not expose
-provider branding.
+The implementation below is on `master`. It is a working subset of the
+product goal, not completion of every network in the requested target list.
+Offer and trade APIs constrain selectable assets to configured wallet
+executors, exact provider token identities, fee destinations, and available
+payment/fee routes. The interface does not claim support just because a token
+or address appears in an external catalog.
 
-Implemented so far:
+Implemented:
 
-- The P2P taker can select a source token/network from the live provider token
-  catalog and review the calculated source amount, exact net quote output,
-  expiry, deposit address, and memo before wallet submission. The source
-  stablecoin may differ from the deal stablecoin, enabling a USDC-to-USDT or
-  USDT-to-USDC principal conversion through the route.
-- The backend validates the selected source asset against its exact catalog
-  asset ID and the selected OTC stablecoin. Quote creation binds exact source
-  and destination asset IDs to avoid resolving duplicate tickers to a different
-  token.
-- The backend serializes quote preparation per trade and returns an existing
-  attempt for a repeated idempotency key rather than creating another quote.
-- Provider quote and deposit-notification failures are reported as a generic
-  temporary route outage; provider-specific error details are kept out of the
-  user response.
-- OTC attempt instructions persist the source/destination asset identity and
-  quote/deposit information. Provider status polling advances the trade only
-  when the reported output amount exactly matches the required net amount; a
-  confirmed refund releases the attempt for retry. Exact-output quote creation
-  is covered by a mocked provider test that checks the requested output and
-  decodes the calculated source amount.
-- For identical EVM source and destination assets, the ordinary direct
-  payment path is used without a provider quote only when the exact catalog
-  asset IDs match and two independent RPC endpoints are configured for that
-  receiving network. Ethereum uses the peer Ethereum RPC pair; other supported
-  EVM networks use `p2p_evm_rpcs`. Non-EVM same-network direct payments remain
-  unavailable.
-- A direct EVM USDT fee transfer bypasses route lookup when the payment source
-  is the exact USDT token on the receiving network. This avoids rejecting a
-  valid direct payment because the route provider does not expose a redundant
-  USDT-to-USDT route. Other fee sources require an exact-output route to the
-  configured USDT recipient, and its source amount/route fee are preflighted
-  before the principal transfer is signed.
-- The recorded fee policy is denominated in USDT. For USDC offers, the fee
-  amount is calculated using nominal 1:1 USDC/USDT parity. The stablecoin leg
-  sends only the net principal to the seller; the separate fee leg sends the
-  exact USDT fee to the configured destination. Fee accrual starts after
-  payment verification, and the seller's EVER payout is gated on verified fee
-  collection.
-- Destination choices are filtered by the configured fee address, wallet
-  executor support, a six-decimal USDT token, and available payment/fee routes.
-  Ethereum, supported EVM networks, NEAR, and TRON are the wallet-executable
-  network families; a configured address for Bitcoin, Solana, Sei, TON, or
-  Aptos does not make those networks OTC-enabled.
+- Public offers support USDT and USDC, explicit receiving networks, and exact
+  catalog asset IDs. When taking a buy offer, the taker can select a supported
+  receiving network and enter the destination address; accepted destination
+  terms are bound to the trade. Legacy offers without a stablecoin still mean
+  USDT.
+- Payment sources are selected from the live NEAR Intents token catalog and
+  checked against exact asset IDs. Cross-network principal settlement uses an
+  executable exact-output quote; instructions include source amount, expected
+  output, route fee, expiry, deposit address, and memo when provided.
+- Route attempts are idempotent and persisted for restart-safe polling.
+  Unknown provider state remains pending; only an exact expected output
+  advances the trade, and a confirmed refund permits retry.
+- Same-token direct settlement is supported on Ethereum, Base, Arbitrum One,
+  Optimism, BNB Smart Chain, Gnosis, Polygon PoS, and Avalanche C-Chain when
+  the exact token identities match. Ethereum uses its configured peer RPC pair;
+  every other EVM network requires two independently operated HTTPS RPCs in
+  `p2p_evm_rpcs`. The backend validates chain IDs and observes transfers on
+  the booked network.
+- The fee policy is recorded in USDT; USDC deals use the agreed nominal 1:1
+  fee basis, persisted separately for audit. The seller receives principal net
+  of the fee. The payer separately signs an exact USDT fee transfer or
+  exact-output route. A routed fee amount and provider fee are preflighted and
+  shown before signing the principal payment. The fee is accrued after payment
+  verification and EVER payout is blocked until fee collection is verified.
+- Database migrations include the P2P fee basis, fee collection, and supported
+  EVM chain names.
+- Providerfile validation/tests, OTC unit tests, frontend type checks, and
+  frontend unit tests passed for the merged implementation. On 2026-11-06,
+  OTC unit tests reported 58 passed and 32 database-dependent tests ignored;
+  frontend unit tests reported 149 passed. Providerfile validation passed.
 
-Still incomplete and not to be presented as supported:
+Not implemented or not yet verified:
 
-- Sell offers choose a stablecoin receiving network from the routable provider
-  catalog. When accepting a buy offer, the counterparty chooses a supported
-  stablecoin receiving network and supplies its address; the backend validates
-  the exact token identity and that Ethereum can route to it. Those immutable
-  deal terms drive the cross-network quote destination.
-- Wallet-executable source networks are limited to the supported EVM, NEAR,
-  and TRON paths. In particular, address validation alone does not provide
-  signing/submission support for Solana, Sei, Sui, TON, or Aptos. The catalog
-  and UI must not imply these paths are executable.
-- Memo handling is currently accepted only for NEAR source transfers; other
-  memo/tag-dependent source networks must remain unavailable until their
-  wallet executors support the required instruction.
-- Direct same-network settlement on non-EVM networks is still unsupported;
-  those cases must not be presented as working direct transfers. The OTC asset
-  endpoint excludes those pairs because the current direct-transfer observers
-  do not verify their chains. Direct EVM settlement is also excluded unless
-  the network has two configured HTTPS RPCs and the exact stablecoin token is
-  unambiguous. Cross-network principal and fee routes use exact-output quotes
-  and status verification; transaction-level real-network testing remains a
-  separate validation task.
-- Fee-routing availability is amount-dependent: a quote can still fail after
-  the catalog shows a route, for example if the provider applies a minimum
-  amount. The UI surfaces that failure and does not permit seller payout until
-  the exact fee output is verified. The 3% USDT fee on USDC offers uses the
-  explicitly agreed nominal 1:1 calculation, not a live USDC/USDT conversion.
+- Direct same-network settlement for NEAR, TRON, or any other non-EVM network.
+  Those assets may be used only where an executable routed flow is available.
+- Wallet signing/settlement for Solana, Sei, Sui, TON, Aptos, Bitcoin, and
+  other networks not supported by the current OTC wallet executors. Configured
+  addresses for these networks do not enable OTC.
+- Memo/tag-dependent source flows other than the currently supported NEAR
+  instruction path.
+- Real-network end-to-end payments, fee collection, refund handling, and
+  status observation across production token/network combinations. The
+  successful route tests are automated/mocked; live settlement was not run.
+- Database-backed OTC integration tests: `OTC_TEST_DATABASE_URL` was not
+  available, so 32 such tests were skipped. Browser E2E and real-wallet
+  signing were not validated in this run.
+- A fee route can still be unavailable for a particular amount or provider
+  state even if the asset pair is listed; the UI surfaces preparation errors
+  and payout remains gated on verified fee collection.
+- No confidentiality guarantees or “confidential swap” protocol are
+  implemented or claimed.
 
-The worktree changes are not a finished production multi-chain feature.
-Networks must not be exposed as supported unless their complete wallet,
-settlement, status, and refund paths are implemented.
+These remaining items are release/implementation work, not permission to
+advertise unsupported networks. Before calling the full multi-chain goal
+complete, add wallet execution and durable observation/refund paths for the
+remaining networks, run database-backed tests, and verify real-network
+end-to-end settlements and fee collection.
 
-## Items to verify during implementation
+## Remaining verification checklist
 
-- Exact production USDT/USDC token identities in the live provider catalog,
-  including whether multiple assets share a symbol/network pair.
-- Whether each target network has a usable refund-address format and whether
-  its transfer requires a memo/tag.
-- Which requested wallets can be supported by existing dependencies and which
-  require new, maintained wallet SDKs.
-- Production verification of provider-reported output amounts and exact-output
-  behavior across every enabled token/network pair.
-- How destination network/address terms can be added to offers and persisted
-  immutably without weakening account or trade authorization.
-- Whether the supported source-wallet executors safely support memo/tag
-  requirements and refunds for each catalog network.
-- Which configured fee destinations have a live USDT token and reliable
-  exact-output route at the smallest applicable fee amount.
-- What “confidential swap” is intended to mean technically; until specified,
-  no privacy promise is in scope.
+- Check exact USDT/USDC identities and ambiguity in the live provider catalog
+  for every enabled source/destination pair.
+- Verify amount limits, exact-output behavior, fee route costs, expiry, status,
+  and refund behavior on production routes, including minimum fee amounts.
+- Run the skipped PostgreSQL-backed OTC integration suite with an isolated
+  `OTC_TEST_DATABASE_URL`.
+- Add and validate direct non-EVM settlement only after implementing wallet
+  signing, submission, observer, memo/tag, and refund handling for that chain.
+- Define “confidential swap” technically before making any privacy claim.
