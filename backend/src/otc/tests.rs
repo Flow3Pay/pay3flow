@@ -1113,6 +1113,10 @@ fn draft(direction: Direction, usdt_address: &str) -> super::public_offers::Publ
     }
 }
 
+fn acceptance() -> super::p2p::AcceptOfferRequest {
+    super::p2p::AcceptOfferRequest::default()
+}
+
 async fn published_offer(service: &Service, owner: &str, direction: Direction) -> Uuid {
     let offer = service
         .post_public_offer(
@@ -1154,7 +1158,7 @@ async fn p2p_accept_binds_cross_legs_and_replays_the_key() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Sell).await;
     let deal = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", acceptance())
         .await
         .unwrap();
     assert_eq!(deal["state"], json!("payment_pending"));
@@ -1175,13 +1179,13 @@ async fn p2p_accept_binds_cross_legs_and_replays_the_key() {
     assert_eq!(offer_state(&service, &owner).await, "taken");
     // Replaying the acceptance key returns the same deal instead of a second one.
     let replay = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", acceptance())
         .await
         .unwrap();
     assert_eq!(replay["id"], deal["id"]);
     // A fresh key cannot take an offer that is already reserved.
     let error = service
-        .accept_offer(&taker, offer_id, "second")
+        .accept_offer(&taker, offer_id, "second", acceptance())
         .await
         .expect_err("reserved offer must refuse a second acceptance");
     assert!(
@@ -1191,7 +1195,7 @@ async fn p2p_accept_binds_cross_legs_and_replays_the_key() {
     // Publishing a new offer and accepting it as yourself is refused.
     let own = published_offer(&service, &owner, Direction::Sell).await;
     let error = service
-        .accept_offer(&owner, own, "self")
+        .accept_offer(&owner, own, "self", acceptance())
         .await
         .expect_err("an actor cannot accept their own offer");
     assert!(
@@ -1206,8 +1210,13 @@ async fn p2p_accept_binds_cross_legs_and_replays_the_key() {
 async fn p2p_buy_offer_flips_which_side_pays_usdt() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Buy).await;
+    // The taker of a buy offer names where they receive the stablecoin.
+    let mut destination = acceptance();
+    destination.stablecoin_network = Some("near".into());
+    destination.stablecoin_asset_id = Some("near-usdt".into());
+    destination.stablecoin_address = Some("taker.near".into());
     let deal = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", destination)
         .await
         .unwrap();
     let id = deal_id(&deal).await;
@@ -1217,10 +1226,11 @@ async fn p2p_buy_offer_flips_which_side_pays_usdt() {
         deal["terms"]["usdt_payer"],
         json!(format!("0x{}", "b".repeat(40)))
     );
-    assert_eq!(
-        deal["terms"]["usdt_payee"],
-        json!(format!("0x{}", "d".repeat(40)))
-    );
+    assert_eq!(deal["terms"]["usdt_payee"], json!("taker.near"));
+    assert_eq!(deal["terms"]["stablecoin_network"], json!("near"));
+    assert_eq!(deal["terms"]["stablecoin_asset_id"], json!("near-usdt"));
+    assert_eq!(deal["terms"]["payer_network"], json!("ethereum"));
+    assert_eq!(deal["terms"]["payer_asset_id"], Value::Null);
     assert_eq!(
         deal["terms"]["ever_payer"],
         json!(format!("0:{}", "d".repeat(64)))
@@ -1247,6 +1257,16 @@ async fn p2p_buy_offer_flips_which_side_pays_usdt() {
         matches!(error, super::error::Error::Conflict(_)),
         "{error:?}"
     );
+    // Without a receiving destination a buy offer cannot be accepted.
+    let another = published_offer(&service, &owner, Direction::Buy).await;
+    let error = service
+        .accept_offer(&taker, another, "missing-destination", acceptance())
+        .await
+        .expect_err("a buy acceptance needs the taker's receiving address");
+    assert!(
+        matches!(&error, super::error::Error::Invalid(message) if message.contains("receiving")),
+        "{error:?}"
+    );
     cleanup(service, task).await;
 }
 
@@ -1256,7 +1276,7 @@ async fn p2p_prepare_builds_the_payment_handoff_and_blocks_duplicates() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Sell).await;
     let deal = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", acceptance())
         .await
         .unwrap();
     let id = deal_id(&deal).await;
@@ -1309,7 +1329,7 @@ async fn p2p_late_delivery_can_still_prepare_after_the_nominal_deadline() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Sell).await;
     let deal = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", acceptance())
         .await
         .unwrap();
     let id = deal_id(&deal).await;
@@ -1361,7 +1381,7 @@ async fn p2p_confirm_records_both_sides_once() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Sell).await;
     let deal = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", acceptance())
         .await
         .unwrap();
     let id = deal_id(&deal).await;
@@ -1419,7 +1439,7 @@ async fn p2p_cancel_and_payment_expiry_return_the_offer_to_the_book() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Sell).await;
     let deal = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", acceptance())
         .await
         .unwrap();
     let first = deal_id(&deal).await;
@@ -1428,7 +1448,7 @@ async fn p2p_cancel_and_payment_expiry_return_the_offer_to_the_book() {
     assert_eq!(offer_state(&service, &owner).await, "open");
     // Once the payment handoff exists the deal can no longer be cancelled.
     let again = service
-        .accept_offer(&taker, offer_id, "accept-2")
+        .accept_offer(&taker, offer_id, "accept-2", acceptance())
         .await
         .unwrap();
     let second = deal_id(&again).await;
@@ -1474,7 +1494,7 @@ async fn p2p_completion_accrues_the_service_fee_once() {
         .unwrap();
     let offer_id = Uuid::parse_str(offer["id"].as_str().unwrap()).unwrap();
     let deal = service
-        .accept_offer(&taker, offer_id, "accept")
+        .accept_offer(&taker, offer_id, "accept", acceptance())
         .await
         .unwrap();
     let id = deal_id(&deal).await;
@@ -1488,6 +1508,10 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     assert_eq!(deal["fee_policy"]["asset"], json!("USDT"));
     assert_eq!(deal["fee_policy"]["payer"], json!("stablecoin_sender"));
     assert_eq!(deal["fee_policy"]["withheld"], json!(false));
+    assert_eq!(deal["fee_policy"]["basis_asset"], json!("USDC"));
+    assert_eq!(deal["fee_policy"]["conversion"]["from"], json!("USDC"));
+    assert_eq!(deal["fee_policy"]["conversion"]["to"], json!("USDT"));
+    assert_eq!(deal["fee_policy"]["conversion"]["rate"], json!("1"));
     assert_eq!(deal["terms"]["fee_payer_actor"], json!(taker));
     assert_eq!(deal["terms"]["stablecoin"], json!("USDC"));
     assert_eq!(deal["terms"]["usdt_contract"], json!(super::config::USDC));
@@ -1520,7 +1544,7 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     let client = service.pool.get().await.unwrap();
     let row = client
         .query_one(
-            "SELECT basis_units::text,fee_units::text,net_units::text,rate::text,version,state,asset,payer_actor FROM otc_p2p_fees WHERE trade_id=$1",
+            "SELECT basis_units::text,fee_units::text,net_units::text,rate::text,version,state,asset,basis_asset,payer_actor FROM otc_p2p_fees WHERE trade_id=$1",
             &[&id],
         )
         .await
@@ -1532,7 +1556,8 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     assert_eq!(row.get::<_, String>(4), "p2p-3pct-usdt-v1");
     assert_eq!(row.get::<_, String>(5), "accrued");
     assert_eq!(row.get::<_, String>(6), "USDT");
-    assert_eq!(row.get::<_, String>(7), taker);
+    assert_eq!(row.get::<_, String>(7), "USDC");
+    assert_eq!(row.get::<_, String>(8), taker);
     // Replaying the completing leg is idempotent and never doubles the fee.
     service
         .credit_p2p(Uuid::new_v4(), id, "payout", &evidence("everscale"))

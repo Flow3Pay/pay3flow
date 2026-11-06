@@ -73,6 +73,11 @@
   $: outputNetwork = deal?.terms.stablecoin_network || "ethereum";
   $: outputAsset = `${deal?.terms.stablecoin || "USDT"}@${outputNetwork}`;
   $: directPaymentAvailable = outputNetwork === "ethereum";
+  $: buyDeal = deal?.terms.direction === "buy";
+  $: payerAsset = deal ? `${deal.terms.stablecoin || "USDT"}@${deal.terms.payer_network || "ethereum"}` : "";
+  $: sourceOptions = sourceAssets.filter(item => buyDeal
+    ? item.asset === payerAsset && (!deal?.terms.payer_asset_id || item.asset_id === deal.terms.payer_asset_id)
+    : directPaymentAvailable || item.asset !== outputAsset);
   $: selectedSource = sourceAssets.find(item => item.asset === selectedSourceAsset) || null;
   $: intentQuote = deal?.attempts?.find(attempt => attempt.kind === "payment" && !!attempt.instructions.source_asset && attempt.state !== "failed") || null;
   $: actionLabel = action === "retry"
@@ -303,6 +308,17 @@
     await sendAttempt(session.token, attempt);
   }
 
+  /** The payer of a buy offer is fixed to the offer's wallet and network. */
+  function defaultSourceAsset(current: P2pDeal) {
+    const stablecoin = current.terms.stablecoin || "USDT";
+    if (current.terms.direction === "buy") {
+      const asset = `${stablecoin}@${current.terms.payer_network || "ethereum"}`;
+      return sourceAssets.find(item => item.asset === asset && (!current.terms.payer_asset_id || item.asset_id === current.terms.payer_asset_id))?.asset || "";
+    }
+    const output = `${stablecoin}@${current.terms.stablecoin_network || "ethereum"}`;
+    return sourceAssets.find(item => item.asset === output && (current.terms.stablecoin_network || "ethereum") === "ethereum")?.asset || sourceAssets.find(item => item.asset !== output)?.asset || "";
+  }
+
   async function confirmDeal() {
     const current = deal;
     if (!current) return;
@@ -319,7 +335,7 @@
       if (kind && (next === "send" || next === "retry")) {
         if (kind === "payment" && !p2pOpenAttempt(merged, kind)) {
           routePickerOpen = true;
-          selectedSourceAsset = sourceAssets.find(item => item.asset === `${merged.terms.stablecoin || "USDT"}@${merged.terms.stablecoin_network || "ethereum"}` && (merged.terms.stablecoin_network || "ethereum") === "ethereum")?.asset || sourceAssets.find(item => item.asset !== `${merged.terms.stablecoin || "USDT"}@${merged.terms.stablecoin_network || "ethereum"}`)?.asset || "";
+          selectedSourceAsset = defaultSourceAsset(merged);
           sourceAmount = merged.terms.usdt_amount;
           return;
         }
@@ -336,7 +352,7 @@
     if (!kind) return;
     if (kind === "payment" && !p2pOpenAttempt(current, kind)) {
       routePickerOpen = true;
-      selectedSourceAsset = sourceAssets.find(item => item.asset === `${current.terms.stablecoin || "USDT"}@${current.terms.stablecoin_network || "ethereum"}` && (current.terms.stablecoin_network || "ethereum") === "ethereum")?.asset || sourceAssets.find(item => item.asset !== `${current.terms.stablecoin || "USDT"}@${current.terms.stablecoin_network || "ethereum"}`)?.asset || "";
+      selectedSourceAsset = defaultSourceAsset(current);
       sourceAmount = current.terms.usdt_amount;
       return;
     }
@@ -479,7 +495,7 @@
       <section class="routePicker" aria-label={say("Choose payment network", "Выбрать сеть оплаты")} data-testid="otc-payment-network-picker">
         <label>{say("Pay with", "Оплатить активом")}
           <select bind:value={selectedSourceAsset} disabled={busy || locked}>
-            {#each sourceAssets.filter(item => directPaymentAvailable || item.asset !== outputAsset) as source}
+            {#each sourceOptions as source}
               <option value={source.asset}>{source.symbol} · {source.network}</option>
             {/each}
           </select>

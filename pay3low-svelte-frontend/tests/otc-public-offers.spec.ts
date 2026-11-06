@@ -116,7 +116,7 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   await expect(page.getByTestId("otc-public-offer")).toContainText("10.000000001");
   await expect(page.getByTestId("otc-public-offer")).toContainText("1.000001");
   expect(f.calls.find(call => call.path === "/session/challenge")?.body.chain).toBe("everscale");
-  expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toEqual({ direction:"sell", stablecoin:"USDT", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth });
+  expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toEqual({ direction:"sell", stablecoin:"USDT", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth, stablecoin_network: "ethereum" });
   expect(f.calls.some(call => /rfqs|attempts|prepare|decision/.test(call.path))).toBe(false);
   expect(await page.evaluate(() => (window as any).everCalls)).toContain("signData");
   expect(await page.evaluate(() => (window as any).everCalls)).not.toContain("sendMessage");
@@ -158,7 +158,7 @@ test("the searchable token picker publishes USDC only on Ethereum ERC-20 and kee
   await expect(page.getByTestId("otc-offer-review")).toContainText("USDC / EVER");
   await page.getByTestId("otc-offer-publish").click();
   expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toEqual({
-    direction: "sell", stablecoin: "USDC", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth,
+    direction: "sell", stablecoin: "USDC", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth, stablecoin_network: "ethereum",
   });
   await expect(page.getByTestId("otc-public-offer")).toContainText("USDC");
   await page.getByTestId("otc-offer-take").click();

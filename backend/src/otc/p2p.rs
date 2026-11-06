@@ -41,6 +41,19 @@ impl From<&str> for DealPrepareRequest {
         }
     }
 }
+/// Destination named by the taker of a buy offer. The taker of a sell offer
+/// pays instead and chooses the source when the payment is prepared, so an
+/// empty object is enough there.
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AcceptOfferRequest {
+    #[serde(default)]
+    pub stablecoin_network: Option<String>,
+    #[serde(default)]
+    pub stablecoin_asset_id: Option<String>,
+    #[serde(default)]
+    pub stablecoin_address: Option<String>,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DealSubmitRequest {
@@ -78,6 +91,7 @@ impl Service {
         actor: &str,
         offer_id: Uuid,
         key: &str,
+        request: AcceptOfferRequest,
     ) -> Result<Value> {
         if !self.p2p_available() {
             return Err(Error::Disabled);
@@ -146,7 +160,7 @@ impl Service {
             .get("fee_policy")
             .filter(|policy| policy.is_object())
             .cloned()
-            .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis));
+            .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis, stablecoin.symbol()));
         fee_policy["version"] = json!(super::public_offers::P2P_FEE_VERSION);
         fee_policy["asset"] = json!("USDT");
         fee_policy["payer"] = json!("stablecoin_sender");
@@ -165,21 +179,51 @@ impl Service {
                 "offer was published for a different Ethereum network".into(),
             ));
         }
-        let (usdt_payer, usdt_payee, ever_payer, ever_payee) = match direction {
+        let (output_network, output_asset_id, usdt_payee) = match direction {
             Direction::Sell => (
-                taker_eth,
+                terms["stablecoin_network"]
+                    .as_str()
+                    .unwrap_or("ethereum")
+                    .to_string(),
+                terms["stablecoin_asset_id"].as_str().map(str::to_string),
                 usdt_address.clone(),
-                seller_ever.clone(),
-                taker_ever,
             ),
-            Direction::Buy => (usdt_address.clone(), taker_eth, taker_ever, seller_ever),
+            // The taker of a buy offer receives the stablecoin, so their own
+            // network and address are booked with the acceptance instead of
+            // being assumed to be the offer's Ethereum payer.
+            Direction::Buy => {
+                let network = crate::route_engine::canonical_network_id(
+                    request.stablecoin_network.as_deref().unwrap_or_default(),
+                );
+                let address =
+                    accepted_buy_address(&network, request.stablecoin_address.as_deref())?;
+                let asset_id = request
+                    .stablecoin_asset_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|asset_id| !asset_id.is_empty())
+                    .map(str::to_string);
+                if network == "ethereum" {
+                    if asset_id.is_some() {
+                        return Err(invalid(
+                            "Ethereum stablecoin identity is fixed by the offer",
+                        ));
+                    }
+                } else if asset_id.is_none() {
+                    return Err(invalid("receiving asset identity is required"));
+                }
+                (network, asset_id, address)
+            }
         };
-        let output_network = if direction == Direction::Sell {
-            terms["stablecoin_network"].as_str().unwrap_or("ethereum")
-        } else {
-            "ethereum"
+        let (usdt_payer, ever_payer, ever_payee) = match direction {
+            Direction::Sell => (taker_eth, seller_ever.clone(), taker_ever),
+            Direction::Buy => (usdt_address.clone(), taker_ever, seller_ever),
         };
-        let output_asset_id = if direction == Direction::Sell {
+        // A buy offer already names the wallet its owner pays from. That
+        // network and token identity stay fixed for the whole deal.
+        let payer_network = (direction == Direction::Buy)
+            .then(|| terms["stablecoin_network"].as_str().unwrap_or("ethereum"));
+        let payer_asset_id = if direction == Direction::Buy {
             terms["stablecoin_asset_id"].as_str()
         } else {
             None
@@ -199,6 +243,7 @@ impl Service {
             "usdt_payer": usdt_payer, "usdt_payee": usdt_payee,
             "stablecoin_network": output_network,
             "stablecoin_asset_id": output_asset_id,
+            "payer_network": payer_network, "payer_asset_id": payer_asset_id,
             "ever_payer": ever_payer, "ever_payee": ever_payee,
             "fee_payer_actor": fee_payer_actor,
             "usdt_contract": token_contract,
@@ -658,6 +703,32 @@ impl Service {
             .filter(|contract| !contract.trim().is_empty())
             .ok_or_else(|| invalid("source token wallet transfer is unavailable"))?;
         amount::units(source_amount, u32::from(decimals))?;
+        // A buy offer fixes which network and token its owner pays with; the
+        // prepared route may not silently change those terms.
+        if body["direction"].as_str() == Some("buy") {
+            let payer_network = body["payer_network"].as_str().unwrap_or("ethereum");
+            if network != payer_network {
+                return Err(invalid("selected payment network does not match the offer"));
+            }
+            match body["payer_asset_id"].as_str() {
+                Some(asset_id) if asset_id != source_token.asset_id.as_str() => {
+                    return Err(invalid("selected payment asset does not match the offer"));
+                }
+                None if payer_network != "ethereum" => {
+                    return Err(invalid("selected payment asset does not match the offer"));
+                }
+                _ => {}
+            }
+            let payer = body["usdt_payer"].as_str().unwrap_or_default();
+            let same_wallet = if network == "ethereum" {
+                source_address.eq_ignore_ascii_case(payer)
+            } else {
+                source_address == payer
+            };
+            if !same_wallet {
+                return Err(invalid("payment must be sent from the offer wallet"));
+            }
+        }
         let destination_token_result = match body["stablecoin_asset_id"].as_str() {
             Some(asset_id) => provider.token_for_asset_id(&to, asset_id).await,
             None => provider.token_for_asset(&to).await,
@@ -1204,12 +1275,21 @@ impl Service {
                 .get("fee_policy")
                 .filter(|policy| policy.is_object())
                 .cloned()
-                .unwrap_or_else(|| super::public_offers::fee_policy(basis));
+                .unwrap_or_else(|| {
+                    let stablecoin = super::public_offers::Stablecoin::from_terms(&body)
+                        .map(|stablecoin| stablecoin.symbol())
+                        .unwrap_or("USDT");
+                    super::public_offers::fee_policy(basis, stablecoin)
+                });
             let fee_asset = policy
                 .get("asset")
                 .and_then(Value::as_str)
                 .filter(|asset| matches!(*asset, "USDT" | "USDC"))
                 .ok_or_else(|| invalid("deal fee asset is malformed"))?;
+            let basis_asset = policy
+                .get("basis_asset")
+                .and_then(Value::as_str)
+                .unwrap_or(fee_asset);
             let payer_actor = body
                 .get("fee_payer_actor")
                 .and_then(Value::as_str)
@@ -1222,8 +1302,8 @@ impl Service {
                     .to_string())
             };
             tx.execute(
-                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,6,$5::text::numeric,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9,'accrued',$10) ON CONFLICT (trade_id) DO NOTHING",
-                    &[&Uuid::new_v4(), &id, &offer_id, &fee_asset, &text("basis_units")?, &text("fee_units")?, &text("net_units")?, &text("rate")?, &text("version")?, &payer_actor],
+                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,basis_asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,$5,6,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9::text::numeric,$10,'accrued',$11) ON CONFLICT (trade_id) DO NOTHING",
+                    &[&Uuid::new_v4(), &id, &offer_id, &fee_asset, &basis_asset, &text("basis_units")?, &text("fee_units")?, &text("net_units")?, &text("rate")?, &text("version")?, &payer_actor],
             )
             .await?;
         }
@@ -1311,6 +1391,20 @@ mod route_status_tests {
     }
 
     #[test]
+    fn buy_destination_is_validated_on_its_own_network() {
+        let ethereum = format!("0x{}", "a".repeat(40));
+        assert_eq!(
+            accepted_buy_address("ethereum", Some(&ethereum)).unwrap(),
+            ethereum
+        );
+        assert!(accepted_buy_address("ethereum", None).is_err());
+        assert!(accepted_buy_address("ethereum", Some(&format!("0x{}", "0".repeat(40)))).is_err());
+        assert!(accepted_buy_address("near", Some("taker.near")).is_ok());
+        assert!(accepted_buy_address("near", None).is_err());
+        assert!(accepted_buy_address("sepolia", Some("taker.near")).is_err());
+    }
+
+    #[test]
     fn provider_output_amounts_are_compared_at_token_precision() {
         let expected = 1_234_567_u128;
         assert_eq!(provider_amount_units("1.234567", 6), Some(expected));
@@ -1373,6 +1467,28 @@ mod route_status_tests {
     }
 }
 
+/// Validate the receiving side named by the taker of a buy offer with the
+/// same address rules used for an offer recipient.
+fn accepted_buy_address(network: &str, address: Option<&str>) -> Result<String> {
+    if !crate::route_execution::supports_otc_wallet_network(network) {
+        return Err(invalid("unsupported stablecoin receiving network"));
+    }
+    let address = address
+        .map(str::trim)
+        .filter(|address| !address.is_empty())
+        .ok_or_else(|| invalid("stablecoin receiving address is required"))?;
+    if network == "ethereum" {
+        let canonical = wallet::address("ethereum", address)?;
+        if canonical == format!("0x{}", "0".repeat(40)) {
+            return Err(invalid("Ethereum wallet address must be nonzero"));
+        }
+        return Ok(canonical);
+    }
+    crate::route_execution::validate_otc_wallet_address(network, address)
+        .map_err(|_| invalid("invalid stablecoin receiving address"))?;
+    Ok(address.to_string())
+}
+
 fn deal(row: &Row, actor: &str) -> Value {
     let body: Value = row.get("body");
     let state: String = row.get("state");
@@ -1418,7 +1534,12 @@ fn deal(row: &Row, actor: &str) -> Value {
             body["usdt_units"]
                 .as_str()
                 .and_then(|units| units.parse::<u128>().ok())
-                .map(super::public_offers::fee_policy)
+                .map(|basis| {
+                    let stablecoin = super::public_offers::Stablecoin::from_terms(&body)
+                        .map(|stablecoin| stablecoin.symbol())
+                        .unwrap_or("USDT");
+                    super::public_offers::fee_policy(basis, stablecoin)
+                })
         })
         .unwrap_or(Value::Null);
     let fee_accrued = state == "completed";

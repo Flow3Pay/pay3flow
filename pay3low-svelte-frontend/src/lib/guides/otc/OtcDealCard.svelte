@@ -35,12 +35,12 @@
     } catch { return null; }
   }
   function toTerminal() { location.hash = otcTerminalHash(step).replace(/^#/, ""); }
-  async function accept(id: string) {
+  async function accept(id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string | null; stablecoin_address: string }) {
     const owner = signedIn();
     if (!owner) { toTerminal(); return; }
     busy = true; failure = ""; notice = "";
     try {
-      await request(`/offers/${id}/accept`, owner.token, {}, crypto.randomUUID());
+      await request(`/offers/${id}/accept`, owner.token, destination || {}, crypto.randomUUID());
       notice = say("Offer accepted. Open the terminal to send the first transfer.", "Оффер принят. Откройте терминал, чтобы отправить первый перевод.");
       await tick();
     } catch (reason) { failure = reason instanceof Error ? reason.message : String(reason); }

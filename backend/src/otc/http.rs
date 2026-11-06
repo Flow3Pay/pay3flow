@@ -2,7 +2,7 @@ use super::{
     booking::{QuoteRequest, RfqRequest},
     error::{invalid, Error, Result},
     operations::IncidentAction,
-    p2p::{DealPrepareRequest, DealSubmitRequest},
+    p2p::{AcceptOfferRequest, DealPrepareRequest, DealSubmitRequest},
     transfers::{PrepareRequest, SubmitRequest},
     wallet::{ChallengeRequest, LinkRequest, ProofRequest},
 };
@@ -250,10 +250,14 @@ async fn accept_offer(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
+    Json(request): Json<AcceptOfferRequest>,
 ) -> Result<Json<Value>> {
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     Ok(Json(
-        state.otc.accept_offer(&actor, id, key(&headers)?).await?,
+        state
+            .otc
+            .accept_offer(&actor, id, key(&headers)?, request)
+            .await?,
     ))
 }
 async fn p2p_trades(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>> {

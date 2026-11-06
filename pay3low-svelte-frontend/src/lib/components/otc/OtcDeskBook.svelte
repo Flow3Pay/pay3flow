@@ -2,12 +2,12 @@
   import { onMount, tick } from "svelte";
   import { locale } from "$lib/i18n";
   import { proposalDirection } from "$lib/otc/terminal";
-  import type { Config, Direction, Proposal } from "$lib/otc/service";
+  import { request, type Config, type Direction, type Proposal } from "$lib/otc/service";
   import { saleRate, compareOfferRates, offerDirection, offerOwner, offerStablecoin, type PublicOffer } from "$lib/otc/public-offers";
   import { identiconDataUri } from "$lib/otc/identicon";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
-  export let onAccept: (id: string) => void = () => {};
+  export let onAccept: (id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string | null; stablecoin_address: string }) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
   export let dialogOnly = false;
   export let testId = "otc-public-offer";
@@ -15,9 +15,12 @@
   export let listings: Proposal[] = [];
   export let selectedId = "";
   export let onSelect: (proposal: Proposal, direction: Direction) => void;
+  type StablecoinAsset = { asset: string; symbol: "USDT" | "USDC"; network: string; asset_id: string };
   let selectedOffer: PublicOffer | null = null;
   let dialog: HTMLDialogElement;
   let copied = "";
+  let stablecoinAssets: StablecoinAsset[] = [];
+  let acceptNetwork = "ethereum", acceptAddress = "", acceptError = "";
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: offers = listings.map(proposal => ({ proposal, direction: proposalDirection(proposal, config) })).filter(item => item.direction);
   $: sortedOffers = compact ? publicOffers : [...publicOffers].sort((a,b) => {
@@ -32,6 +35,12 @@
   $: askLevels = buildLevels(publicOffers, "sell", ownIds);
   $: bidLevels = buildLevels(publicOffers, "buy", ownIds);
   const avatar = (offer: PublicOffer) => offer.seller_avatar || identiconDataUri(offerOwner(offer));
+  $: acceptToken = selectedOffer ? offerStablecoin(selectedOffer) : "USDT";
+  $: acceptNetworks = ["ethereum", ...stablecoinAssets.filter(item => item.symbol === acceptToken && item.network !== "ethereum").map(item => item.network)].filter((network, index, list) => list.indexOf(network) === index);
+  $: acceptAsset = stablecoinAssets.find(item => item.symbol === acceptToken && item.network === acceptNetwork) || null;
+  $: acceptAddressValid = acceptNetwork === "ethereum"
+    ? /^0x[0-9a-fA-F]{40}$/.test(acceptAddress.trim()) && !/^0x0{40}$/i.test(acceptAddress.trim())
+    : acceptAddress.trim().length > 0;
 
   function buildLevels(source: PublicOffer[], side: Direction, own: string[]): BookLevel[] {
     return source
@@ -58,7 +67,7 @@
   }
 
   async function showOffer(offer: PublicOffer) {
-    selectedOffer = offer; copied = "";
+    selectedOffer = offer; copied = ""; acceptNetwork = "ethereum"; acceptAddress = ""; acceptError = "";
     await tick();
     if (dialog && !dialog.open) dialog.showModal();
   }
@@ -71,7 +80,26 @@
     try { await navigator.clipboard.writeText(address); copied = key; }
     catch { copied = ""; }
   }
-  onMount(() => () => { if (dialog?.open) dialog.close(); });
+  function acceptSelected() {
+    if (!selectedOffer) return;
+    if (offerDirection(selectedOffer) !== "buy") { onAccept(selectedOffer.id); closeOffer(); return; }
+    if (!acceptAddressValid) {
+      acceptError = say("Enter the wallet that receives the stablecoin.", "Укажите кошелёк для получения стейблкоина.");
+      return;
+    }
+    onAccept(selectedOffer.id, {
+      stablecoin_network: acceptNetwork,
+      stablecoin_asset_id: acceptNetwork === "ethereum" ? null : acceptAsset?.asset_id || null,
+      stablecoin_address: acceptAddress.trim(),
+    });
+    closeOffer();
+  }
+  onMount(() => {
+    void request<{ assets: StablecoinAsset[] }>("/p2p/assets")
+      .then(result => { stablecoinAssets = result.assets || []; })
+      .catch(() => { stablecoinAssets = []; });
+    return () => { if (dialog?.open) dialog.close(); };
+  });
 </script>
 
 {#snippet levelRow(level: BookLevel)}
@@ -179,7 +207,21 @@
     </div>
     <div class="dialogFoot"><span><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say("Open until", "Действует до")} {new Date(selected.expires_at).toLocaleString($locale)}</span>{#if isOwn && selected.state === "open"}<button type="button" class="cancelOffer" disabled={busy} on:click={() => { onCancel(selected.id); closeOffer(); }}>{say("Cancel offer", "Снять оффер")}</button>{/if}</div>
     {#if canAccept}
-      <div class="acceptRow"><p>{say(`Two direct transfers between the two wallets: one side sends ${token}, the other sends EVER. There is no escrow, so send only after checking the addresses.`, `Два прямых перевода между кошельками: одна сторона отправляет ${token}, другая — EVER. Эскроу нет, поэтому отправляйте только проверив адреса.`)}</p><button type="button" class="acceptOffer" disabled={busy} data-testid="otc-accept-offer" on:click={() => { onAccept(selected.id); closeOffer(); }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button></div>
+      <div class="acceptRow">
+        {#if side === "buy"}
+          <div class="acceptDestination">
+            <label>{say(`Where you receive ${token}`, `Где вы получаете ${token}`)}
+              <select bind:value={acceptNetwork} disabled={busy} data-testid="otc-accept-network">{#each acceptNetworks as network}<option value={network}>{network}</option>{/each}</select>
+            </label>
+            <label>{say(`${token} address on ${acceptNetwork}`, `Адрес ${token} в сети ${acceptNetwork}`)}
+              <input bind:value={acceptAddress} autocomplete="off" spellcheck="false" placeholder={acceptNetwork === "ethereum" ? "0x…" : say("Receiving address", "Адрес получения")} disabled={busy} data-testid="otc-accept-recipient" />
+            </label>
+          </div>
+        {/if}
+        <p>{say(`Two direct transfers between the two wallets: one side sends ${token}, the other sends EVER. There is no escrow, so send only after checking the addresses.`, `Два прямых перевода между кошельками: одна сторона отправляет ${token}, другая — EVER. Эскроу нет, поэтому отправляйте только проверив адреса.`)}</p>
+        {#if acceptError}<p class="acceptError" role="alert">{acceptError}</p>{/if}
+        <button type="button" class="acceptOffer" disabled={busy} data-testid="otc-accept-offer" on:click={acceptSelected}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button>
+      </div>
     {:else if wrongNetwork}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say(`This offer was published for another Ethereum network (${offerChain}). It has to be reposted before it can be settled wallet to wallet.`, `Этот оффер опубликован для другой сети Ethereum (${offerChain}). Чтобы рассчитать его между кошельками, его нужно перепубликовать.`)}</p>
     {:else if config?.public_offers_available && !config.available}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{say("Settlement through this site is currently unavailable. Verify addresses with the other party before sending funds.", "Расчёты через сайт сейчас недоступны. Перед переводом сверьте адреса с контрагентом.")}</p>{/if}
   </dialog>
@@ -273,6 +315,10 @@
   .settlementNote svg { flex:0 0 auto; color:var(--color-accent-strong); }
   .acceptRow { display:grid; gap:12px; margin:0; padding:14px 22px 18px; border-top:1px solid var(--color-border); }
   .acceptRow p { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
+  .acceptDestination { display:grid; gap:8px; }
+  .acceptDestination label { display:grid; gap:5px; color:var(--color-text-soft); font-size:11px; }
+  .acceptDestination select, .acceptDestination input { width:100%; min-width:0; min-height:38px; padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:var(--color-text); font:inherit; }
+  .acceptError { margin:0; color:var(--color-danger); font-size:11px; line-height:1.5; }
   .acceptOffer { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--color-accent-strong); border-radius:8px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }

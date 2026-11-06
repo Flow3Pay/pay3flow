@@ -255,6 +255,12 @@ Implemented so far:
   address, and memo before wallet submission. The source stablecoin may differ
   from the deal stablecoin, enabling a USDC-to-USDT or USDT-to-USDC principal
   conversion through the route.
+- Buy offers now name the stablecoin paying network in their terms, and the
+  taker chooses the stablecoin receiving network and address when accepting.
+  The backend validates that destination on its own network, stores it in the
+  immutable deal terms, and keeps the owner's paying network and exact asset
+  identity next to it. A cross-network buy therefore pays from the offer's
+  wallet and network and delivers to the taker's chosen network and address.
 - The backend validates the selected source asset against its exact catalog
   asset ID and the selected OTC stablecoin. Quote creation binds exact source
   and destination asset IDs to avoid resolving duplicate tickers to a different
@@ -272,17 +278,20 @@ Implemented so far:
   payment path is used without a provider quote, and only when the exact
   catalog asset IDs match. Direct payment on identical non-Ethereum networks
   is not implemented yet.
-- The recorded fee policy is denominated in USDT. This does not yet implement
-  conversion/collection of a USDT fee when the trade settles in USDC or when a
-  source route uses another token. The added cross-stablecoin payment route
-  converts the deal principal; it does not collect the service fee.
+- The fee policy is denominated in USDT. USDC is counted at a nominal 1:1
+  USDT rate, so the same three-percent fee applies to both tokens. The policy
+  records the fee asset, the original basis asset, and the 1:1 conversion. The
+  fee ledger always accrues USDT and retains the source basis asset for audit.
+  Actual collection/transfer of the accrued fee is still outstanding; the
+  cross-stablecoin payment route converts only the deal principal.
 
 Still incomplete and not to be presented as supported:
 
-- Sell offers can choose a stablecoin receiving network from the supported
-  provider catalog; buy offers still receive stablecoins on Ethereum. The
-  selected sell-offer network and exact asset ID are bound into accepted deal
-  terms and used as the cross-network quote destination.
+- Sell and buy offers can each choose their stablecoin network from the
+  supported provider catalog. A sell offer binds the owner's receiving network
+  and asset ID; a buy offer binds the owner's paying network and asset ID, while
+  the taker's receiving network and address are added at acceptance. Both sides'
+  identities are stored in accepted deal terms.
 - Wallet-executable source networks are limited to the supported EVM, NEAR,
   and TRON paths. In particular, address validation alone does not provide
   signing/submission support for Solana, Sei, Sui, TON, or Aptos. The catalog
@@ -294,10 +303,10 @@ Still incomplete and not to be presented as supported:
   Status handling has focused unit coverage for exact output, missing or
   mismatched output, pending/unknown states, and refunds. The provider's
   amount-unit encoding still needs authoritative confirmation.
-- Fee conversion and actual collection, buy-offer destination-network choice,
-  and complete cross-network payout/refund handling remain outstanding. The
-  offer preview labels the 3% amount as indicative for USDC offers because no
-  live USDC/USDT conversion is yet applied.
+- Actual fee collection/transfer and complete cross-network payout/refund
+  handling remain outstanding. USDC conversion is the explicit nominal 1:1
+  policy, not a live market rate; a future change to the conversion rule must
+  version the fee policy rather than silently repricing existing deals.
 
 The worktree changes are not a finished production multi-chain feature.
 Networks must not be exposed as supported unless their complete wallet,
@@ -317,7 +326,8 @@ settlement, status, and refund paths are implemented.
   immutably without weakening account or trade authorization.
 - Whether the supported source-wallet executors safely support memo/tag
   requirements and refunds for each catalog network.
-- How USDT-denominated fees are converted and collected for USDC and
-  cross-network settlement, including supported fee destinations.
+- How the accrued USDT fee is collected and transferred for USDC and
+  cross-network settlement, including supported fee destinations. The
+  conversion rule itself is settled as a nominal 1:1 USDT/USDC rate.
 - What “confidential swap” is intended to mean technically; until specified,
   no privacy promise is in scope.

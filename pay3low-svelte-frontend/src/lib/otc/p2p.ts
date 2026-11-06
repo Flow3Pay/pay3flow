@@ -22,6 +22,9 @@ export interface P2pDealTerms {
   usdt_units: string;
   usdt_payer: string;
   usdt_payee: string;
+  /** Network and exact asset identity the stablecoin payer sends from. */
+  payer_network?: string;
+  payer_asset_id?: string | null;
   ever_payer: string;
   ever_payee: string;
   fee_policy?: P2pFeePolicy;
