@@ -97,7 +97,7 @@ fn components() -> Value {
                 "type": "object",
                 "required": ["source", "stale", "values"],
                 "properties": {
-                    "source": { "type": "string", "example": "DefiLlama" },
+                    "source": { "type": "string", "example": "Gate.io" },
                     "stale": { "type": "boolean" },
                     "values": { "type": "array", "items": { "type": "object", "required": ["asset", "amount", "price_usd", "value_usd", "price_timestamp"], "properties": {
                         "asset": { "type": "string" }, "amount": { "type": "string" },
@@ -113,7 +113,7 @@ fn components() -> Value {
                 "type": "object",
                 "required": ["source", "stale", "updated_at", "prices"],
                 "properties": {
-                    "source": { "type": "string", "example": "DefiLlama" },
+                    "source": { "type": "string", "example": "Gate.io" },
                     "stale": { "type": "boolean" },
                     "updated_at": { "type": "integer", "format": "int64", "nullable": true, "description": "Unix time of the last successful server refresh." },
                     "prices": { "type": "object", "additionalProperties": { "type": "number", "format": "double" }, "description": "USD price per one unit of each supported asset." }

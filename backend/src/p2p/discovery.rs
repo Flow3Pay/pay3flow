@@ -478,7 +478,7 @@ pub async fn run(state: &AppState, mut query: DiscoveryQuery, updates: Option<mp
     // Valuation is indicative only, and never uses the payments service's mock FX table.
     let currencies = indices.iter().flat_map(|&i| { let j=job_at(i,&source_endpoints,&target_endpoints,query.mode); [j.source.currency,j.target.currency] }).collect::<BTreeSet<_>>();
     let mut prices = HashMap::new();
-    for (asset, price, timestamp) in state.market_prices.discovery_prices().await { prices.insert(asset, Valuation { price_usd: price, observed_at: timestamp, source: "DefiLlama".into() }); }
+    for (asset, price, timestamp) in state.market_prices.discovery_prices().await { prices.insert(asset, Valuation { price_usd: price, observed_at: timestamp, source: "Gate.io".into() }); }
     let fiats = currencies.into_iter().filter(|c| is_fiat_currency(c)).collect::<Vec<_>>();
     let fiat_jobs = fiats.into_iter().map(|currency| {
         let service = state.p2p.clone();

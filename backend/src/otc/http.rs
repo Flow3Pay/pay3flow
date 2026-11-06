@@ -209,7 +209,7 @@ async fn history(
             "candles": market_candles,
         },
         "spot": {
-            "source": "DefiLlama",
+            "source": "Gate.io",
             "stale": stale,
             "bucket_seconds": bucket_seconds,
             "points": points,

@@ -1,7 +1,9 @@
 //! Indicative USD values for the crypto assets in the public picker.
 //!
-//! A single cached DefiLlama request serves all visitors. Symbols are mapped
-//! explicitly because looking up a token by ticker can select a different coin.
+//! One cached Gate.io tickers request serves every visitor and every asset.
+//! Symbols are mapped to explicit pairs because looking a token up by ticker
+//! alone can select a different coin. DefiLlama is only kept as a chart
+//! fallback for the rare case where Gate has no candles for an asset.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,15 +24,59 @@ const MAX_STALE_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 const MAX_PROVIDER_PRICE_AGE_SECS: i64 = 15 * 60;
 const DEFILLAMA_ROOT: &str = "https://coins.llama.fi/";
 const GATE_ROOT: &str = "https://api.gateio.ws/api/v4/";
+/// The legacy public tickers feed returns every listed pair, keyed by a
+/// lowercase `asset_quote` name, with the last trade in the `last` field.
+const GATE_TICKERS: &str = "https://data.gateapi.io/api2/1/tickers";
 const HISTORY_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const EMPTY_TTL: Duration = Duration::from_secs(60);
 /// The OTC chart polls once a minute, so a short candle cache keeps the
 /// provider load bounded without making the newest candle visibly late.
 const CANDLE_TTL: Duration = Duration::from_secs(60);
 
-// The Open Network's CoinGecko ID now reports GRAM, the renamed native TON.
-// MATIC's legacy ticker is priced through its wrapped Ethereum contract.
-const GATE_PAIRS: &[(&str, &str)] = &[("EVER", "EVER_USDT")];
+// Gate pairs are listed lowercase here because the tickers feed lowercases its
+// keys; the candle endpoint gets them uppercased. The first pair with a
+// positive last trade wins, which also covers delisted quotes.
+//
+// TON maps to GRAM because the native coin was renamed and Gate's own TON_USDT
+// is a different token. WETH has no pair of its own and trades 1:1 with ETH.
+// MATIC's delisted USDT quote is replaced by POL, the token it migrated to.
+const GATE_PAIRS: &[(&str, &[&str])] = &[
+    ("AAVE", &["aave_usdt"]),
+    ("ADA", &["ada_usdt"]),
+    ("APT", &["apt_usdt"]),
+    ("ATOM", &["atom_usdt"]),
+    ("AVAX", &["avax_usdt"]),
+    ("BCH", &["bch_usdt"]),
+    ("BNB", &["bnb_usdt"]),
+    ("BTC", &["btc_usdt"]),
+    ("DAI", &["dai_usdt"]),
+    ("DOGE", &["doge_usdt"]),
+    ("DOT", &["dot_usdt"]),
+    ("ETH", &["eth_usdt"]),
+    ("EVER", &["ever_usdt"]),
+    ("10SET", &["10set_usdt"]),
+    ("FDUSD", &["fdusd_usdt"]),
+    ("LINK", &["link_usdt"]),
+    ("LTC", &["ltc_usdt"]),
+    ("MATIC", &["pol_usdt"]),
+    ("NEAR", &["near_usdt"]),
+    ("POL", &["pol_usdt"]),
+    ("SOL", &["sol_usdt"]),
+    ("SUI", &["sui_usdt"]),
+    ("GRAM", &["gram_usdt"]),
+    ("TON", &["gram_usdt"]),
+    ("TRX", &["trx_usdt"]),
+    ("UNI", &["uni_usdt"]),
+    ("USDC", &["usdc_usdt"]),
+    ("USDT", &["usdt_usd"]),
+    ("WBTC", &["wbtc_usdt"]),
+    ("WETH", &["eth_usdt"]),
+    ("XRP", &["xrp_usdt"]),
+    ("ZEC", &["zec_usdt"]),
+];
+
+/// CoinGecko identifiers are no longer used for pricing, but they still name
+/// the daily series that DefiLlama exposes as a chart fallback.
 const ASSETS: &[(&str, &str)] = &[
     ("AAVE", "coingecko:aave"),
     ("ADA", "coingecko:cardano"),
@@ -72,7 +118,7 @@ const ASSETS: &[(&str, &str)] = &[
 #[derive(Clone)]
 pub struct MarketPriceService {
     client: reqwest::Client,
-    endpoint: String,
+    tickers_url: String,
     chart_root: String,
     exchange_root: String,
     cache: Arc<RwLock<Option<PriceSnapshot>>>,
@@ -121,18 +167,6 @@ pub struct ExchangeCandle {
 struct MarketPrice {
     usd: f64,
     timestamp: i64,
-}
-
-#[derive(Deserialize)]
-struct ProviderResponse {
-    coins: HashMap<String, ProviderPrice>,
-}
-
-#[derive(Deserialize)]
-struct ProviderPrice {
-    price: f64,
-    timestamp: i64,
-    confidence: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -211,14 +245,9 @@ impl MarketPriceService {
     }
 
     fn with_client(client: reqwest::Client, root: String, exchange_root: String) -> Self {
-        let ids = ASSETS
-            .iter()
-            .map(|(_, id)| *id)
-            .collect::<Vec<_>>()
-            .join(",");
         Self {
             client,
-            endpoint: format!("{root}prices/current/{ids}"),
+            tickers_url: GATE_TICKERS.to_owned(),
             chart_root: root,
             exchange_root,
             cache: Arc::new(RwLock::new(None)),
@@ -283,19 +312,41 @@ impl MarketPriceService {
     }
 
     /// Only fresh, identified prices may participate in discovery rankings.
-    pub(crate) async fn discovery_prices(&self) -> Vec<(String, f64, chrono::DateTime<chrono::Utc>)> {
-        let Some((snapshot, stale)) = self.prices().await else { return Vec::new(); };
-        if stale { return Vec::new(); }
-        snapshot.prices.into_iter().filter_map(|(asset, price)| {
-            if chrono::Utc::now().timestamp().saturating_sub(price.timestamp) > MAX_PROVIDER_PRICE_AGE_SECS || !price.usd.is_finite() || price.usd <= 0.0 { return None; }
-            Some((asset.to_string(), price.usd, chrono::DateTime::from_timestamp(price.timestamp, 0)?))
-        }).collect()
+    pub(crate) async fn discovery_prices(
+        &self,
+    ) -> Vec<(String, f64, chrono::DateTime<chrono::Utc>)> {
+        let Some((snapshot, stale)) = self.prices().await else {
+            return Vec::new();
+        };
+        if stale {
+            return Vec::new();
+        }
+        snapshot
+            .prices
+            .into_iter()
+            .filter_map(|(asset, price)| {
+                if chrono::Utc::now()
+                    .timestamp()
+                    .saturating_sub(price.timestamp)
+                    > MAX_PROVIDER_PRICE_AGE_SECS
+                    || !price.usd.is_finite()
+                    || price.usd <= 0.0
+                {
+                    return None;
+                }
+                Some((
+                    asset.to_string(),
+                    price.usd,
+                    chrono::DateTime::from_timestamp(price.timestamp, 0)?,
+                ))
+            })
+            .collect()
     }
 
     pub async fn list(&self) -> MarketPricesResponse {
         let snapshot = self.prices().await;
         MarketPricesResponse {
-            source: "DefiLlama",
+            source: "Gate.io",
             stale: snapshot.as_ref().is_some_and(|(_, stale)| *stale),
             updated_at: snapshot.as_ref().map(|(snapshot, _)| snapshot.updated_at),
             prices: snapshot
@@ -313,35 +364,32 @@ impl MarketPriceService {
     async fn fetch(&self) -> anyhow::Result<PriceSnapshot> {
         let response = self
             .client
-            .get(&self.endpoint)
+            .get(&self.tickers_url)
             .send()
             .await?
             .error_for_status()?;
-        let payload = response.json::<ProviderResponse>().await?;
+        let payload = response
+            .json::<HashMap<String, serde_json::Value>>()
+            .await?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        let prices: HashMap<&'static str, MarketPrice> = ASSETS
+        let prices: HashMap<&'static str, MarketPrice> = GATE_PAIRS
             .iter()
-            .filter_map(|(asset, id)| {
-                let price = payload.coins.get(*id)?;
-                let age = now - price.timestamp;
-                if !price.price.is_finite()
-                    || price.price <= 0.0
-                    || !(0..=MAX_PROVIDER_PRICE_AGE_SECS).contains(&age)
-                    || price.confidence.is_some_and(|confidence| confidence < 0.8)
-                {
-                    return None;
-                }
+            .filter_map(|(asset, pairs)| {
+                let (_, usd) = pairs.iter().find_map(|pair| {
+                    let last = as_number(payload.get(*pair)?.get("last")?)?;
+                    (last.is_finite() && last > 0.0).then_some((*pair, last))
+                })?;
                 Some((
                     *asset,
                     MarketPrice {
-                        usd: price.price,
-                        timestamp: price.timestamp,
+                        usd,
+                        timestamp: now,
                     },
                 ))
             })
             .collect();
         if prices.is_empty() {
-            anyhow::bail!("price provider returned no recent supported assets");
+            anyhow::bail!("Gate tickers returned no usable supported assets");
         }
         Ok(PriceSnapshot {
             fetched_at: Instant::now(),
@@ -373,7 +421,7 @@ impl MarketPriceService {
             })
             .collect();
         MarketValuesResponse {
-            source: "DefiLlama",
+            source: "Gate.io",
             stale,
             values,
         }
@@ -384,9 +432,10 @@ impl MarketPriceService {
         self.spot_history(asset, "1d", days.clamp(2, 400)).await
     }
 
-    /// Indicative USD series at a provider-supported resolution. DefiLlama
-    /// exposes hourly points for the recent window and daily points further
-    /// back, so callers choose the period that matches their chart range.
+    /// Indicative USD series for one listed asset. Gate candles are the
+    /// primary series because they come from the same provider as the spot
+    /// prices; DefiLlama daily points remain a fallback for assets whose Gate
+    /// pair is missing or too new to cover the requested window.
     pub async fn spot_history(
         &self,
         asset: &str,
@@ -401,14 +450,41 @@ impl MarketPriceService {
         else {
             return (Vec::new(), true);
         };
-        let key = format!("{period}:{span}");
+        let key = format!("{asset}:{period}:{span}");
         if let Some(cached) = self.history.read().await.get(&key) {
             // An empty series retries soon: a provider hiccup should not blank
             // the chart for the whole full-history window.
-            let ttl = if cached.points.is_empty() { EMPTY_TTL } else { HISTORY_TTL };
+            let ttl = if cached.points.is_empty() {
+                EMPTY_TTL
+            } else {
+                HISTORY_TTL
+            };
             if cached.fetched_at.elapsed() < ttl {
                 return (cached.points.clone(), false);
             }
+        }
+        let exchange: Vec<SpotPoint> = if period == "1h" {
+            self.exchange_history(asset, period, span).await
+        } else {
+            self.exchange_candles(asset, "1d", span)
+                .await
+                .0
+                .into_iter()
+                .map(|candle| SpotPoint {
+                    t: candle.t,
+                    usd: candle.close,
+                })
+                .collect()
+        };
+        if !exchange.is_empty() {
+            self.history.write().await.insert(
+                key,
+                HistorySnapshot {
+                    fetched_at: Instant::now(),
+                    points: exchange.clone(),
+                },
+            );
+            return (exchange, false);
         }
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -460,9 +536,6 @@ impl MarketPriceService {
                 return (stale, true);
             }
         };
-        // DefiLlama stopped returning recent hourly points for some coins
-        // (EVER among them). Keep its daily series and take the intraday ranges
-        // from the exchange so the chart still has movement to draw.
         if points.is_empty() {
             points = self.exchange_history(asset, period, span).await;
         }
@@ -488,7 +561,7 @@ impl MarketPriceService {
         let Some(pair) = GATE_PAIRS
             .iter()
             .find(|(symbol, _)| *symbol == asset)
-            .map(|(_, pair)| *pair)
+            .and_then(|(_, pairs)| pairs.first().copied())
         else {
             return (Vec::new(), true);
         };
@@ -498,6 +571,7 @@ impl MarketPriceService {
         ) {
             return (Vec::new(), true);
         }
+        let pair = pair.to_ascii_uppercase();
         let limit = limit.clamp(2, 1_000);
         let key = format!("{asset}:{interval}:{limit}");
         if let Some(cached) = self.candles.read().await.get(&key) {
@@ -587,9 +661,9 @@ impl MarketPriceService {
             .unwrap_or_default()
     }
 
-    /// Intraday fallback for coins whose DefiLlama hourly series is empty.
-    /// Gate.io keeps recent candlesticks for the assets we list, which is the
-    /// only intraday resolution available for the short chart ranges.
+    /// Intraday exchange series. Gate.io keeps recent candlesticks for every
+    /// listed pair, which is the only intraday resolution available for the
+    /// short chart ranges.
     async fn exchange_history(&self, asset: &str, period: &str, span: u32) -> Vec<SpotPoint> {
         if period != "1h" {
             return Vec::new();
@@ -664,20 +738,21 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let hit_count = calls.clone();
         let app = Router::new().route(
-            "/prices/current/:coins",
+            "/api2/1/tickers",
             get(move || {
                 let call = hit_count.fetch_add(1, Ordering::SeqCst);
                 async move {
                     if call > 0 {
-                        return Json(serde_json::json!({ "coins": {
-                            "coingecko:bitcoin": { "price": 100.0, "timestamp": now_epoch(), "confidence": 0.99 }
-                        }}));
+                        return Json(serde_json::json!({
+                            "btc_usdt": { "last": "100" }
+                        }));
                     }
-                    Json(serde_json::json!({ "coins": {
-                        "coingecko:bitcoin": { "price": 100.0, "timestamp": now_epoch(), "confidence": 0.99 },
-                        "coingecko:tether": { "price": 0.99, "timestamp": now_epoch(), "confidence": 0.99 },
-                        "coingecko:everscale": { "price": 0.002, "timestamp": now_epoch(), "confidence": 0.99 }
-                    }}))
+                    Json(serde_json::json!({
+                        "btc_usdt": { "last": "100" },
+                        "usdt_usd": { "last": "0.99" },
+                        "ever_usdt": { "last": "0.002" },
+                        "matic_usdt": { "last": "0" }
+                    }))
                 }
             }),
         );
@@ -701,6 +776,7 @@ mod tests {
             format!("http://{address}/"),
             format!("http://{address}/"),
         );
+        service.tickers_url = format!("http://{address}/api2/1/tickers");
         service.initialize().await;
         let pair = || {
             vec![
@@ -741,14 +817,14 @@ mod tests {
         assert!(service.daily_history("EVER", 30).await.0.len() == 2);
         assert!(service.daily_history("NOPE", 30).await.1);
 
-        service.endpoint = "http://127.0.0.1:1/unavailable".to_owned();
+        service.tickers_url = "http://127.0.0.1:1/unavailable".to_owned();
         service.refresh().await;
         assert_eq!(service.value(pair()).await.values[0].value_usd, Some(200.0));
         assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn hourly_history_falls_back_to_the_exchange_when_defillama_is_empty() {
+    async fn hourly_history_uses_exchange_candles_when_available() {
         let app = Router::new()
             .route(
                 "/chart/:id",
@@ -758,8 +834,26 @@ mod tests {
                 "/spot/candlesticks",
                 get(|| async {
                     Json(serde_json::json!([
-                        ["1700000000", "1", "0.002", "0.002", "0.002", "0.002", "2", true],
-                        ["1700000300", "1", "0.0021", "0.002", "0.002", "0.002", "2", true],
+                        [
+                            "1700000000",
+                            "1",
+                            "0.002",
+                            "0.002",
+                            "0.002",
+                            "0.002",
+                            "2",
+                            true
+                        ],
+                        [
+                            "1700000300",
+                            "1",
+                            "0.0021",
+                            "0.002",
+                            "0.002",
+                            "0.002",
+                            "2",
+                            true
+                        ],
                         ["1700000600", "0", "0", "0", "0", "0", "0", false],
                         [1700000900, 0, 0.0022, 0.0022, 0.0022, 0.0022, 0, false]
                     ]))
@@ -792,12 +886,5 @@ mod tests {
                 },
             ]
         );
-    }
-
-    fn now_epoch() -> i64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64
     }
 }
