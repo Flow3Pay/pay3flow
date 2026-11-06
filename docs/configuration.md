@@ -220,3 +220,10 @@ reference so tracking can resume without signing again.
 ## OTC route
 
 `OTC_CONFIG_FILE` selects a private JSON configuration file; the route is disabled when absent. See [OTC setup](otc-service.md) and `backend/otc.example.json`. Initial booking state is paused. Record the independent RPCs, deployed wallet profile, desk/operator policies, tested alert routes and live-gate evidence before enabling it. Demo and live deployments require separate databases; the database mode and each quote are bound to their original environment.
+
+Direct same-network OTC transfers on non-Ethereum EVM chains additionally
+require `p2p_evm_rpcs` in that private JSON file. It maps a canonical network
+ID to two independently operated HTTPS RPC endpoints; supported IDs are
+`base`, `arbitrum-one`, `optimism`, `bnb-smart-chain`, `gnosis`, `polygon-pos`
+and `avalanche-c`. A missing pair keeps that direct network unavailable; it
+does not disable routed cross-network settlement.

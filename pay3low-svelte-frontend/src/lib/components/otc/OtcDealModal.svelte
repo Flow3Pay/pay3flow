@@ -81,12 +81,14 @@
   $: directPaymentAvailable = p2pDirectAssetMatch(selectedSource, outputAsset, outputAssetId, outputNetwork);
   $: selectedSource = sourceAssets.find(item => item.asset === selectedSourceAsset) || null;
   $: intentQuote = deal?.attempts?.find(attempt => attempt.kind === "payment" && !!attempt.instructions.source_asset && attempt.state !== "failed") || null;
+  $: directPaymentAttempt = deal?.attempts?.find(attempt => attempt.kind === "payment" && !attempt.instructions.source_asset && attempt.state !== "failed") || null;
   $: actionLabel = action === "retry"
     ? actionKind === "payment" && deal && !p2pOpenAttempt(deal, "payment") ? say("Choose payment network", "Выбрать сеть оплаты")
       : actionAsset ? say(`Retry ${actionAsset}`, `Повторить ${actionAsset}`) : say("Retry", "Повторить")
     : action === "send"
       ? actionKind === "payment" && deal && !p2pOpenAttempt(deal, "payment") ? say("Choose payment network", "Выбрать сеть оплаты")
-        : intentQuote ? say("Review quote and send", "Проверить котировку и отправить")
+        : directPaymentAttempt ? say("Review transfer and send", "Проверить перевод и отправить")
+          : intentQuote ? say("Review quote and send", "Проверить котировку и отправить")
           : actionAsset ? say(`Send ${actionAsset}`, `Отправить ${actionAsset}`) : say("Send", "Отправить")
       : say("Confirm", "Подтвердить");
   $: legs = deal ? p2pViewerLegs(deal) : null;
@@ -342,7 +344,11 @@
       const paymentSource = paymentAttempt?.instructions.source_asset
         || paymentAttempt?.instructions.fee_source_asset
         || `${current.terms.stablecoin || "USDT"}@${outputNetwork}`;
-      const needsRoute = outputNetwork !== "ethereum" || paymentSource !== "USDT@ethereum";
+      const paymentSourceId = paymentAttempt?.instructions.source_asset_id
+        || paymentAttempt?.instructions.fee_source_asset_id;
+      const directFee = paymentSource === `USDT@${outputNetwork}`
+        && (!current.terms.fee_usdt_asset_id || paymentSourceId === current.terms.fee_usdt_asset_id);
+      const needsRoute = !directFee;
       const storageKey = `pay3flow.otc.fee-key.${current.id}`;
       const key = sessionStorage.getItem(storageKey) || crypto.randomUUID();
       sessionStorage.setItem(storageKey, key);
@@ -445,8 +451,22 @@
     if (!current || !owner || !source) return;
     await run(async () => {
       if (source.asset === outputAsset && directPaymentAvailable) {
+        const storageKey = `pay3flow.otc.direct-key.${current.id}`;
+        const key = sessionStorage.getItem(storageKey) || crypto.randomUUID();
+        sessionStorage.setItem(storageKey, key);
+        const prepared = await request<P2pDeal & { attempt: Attempt }>(
+          `/p2p/trades/${current.id}/prepare`,
+          owner.token,
+          { kind: "payment" },
+          key,
+        );
+        sessionStorage.removeItem(storageKey);
+        const paymentAttempt = { ...prepared.attempt, kind: "payment" };
+        applyDeal(prepared, {
+          ...current,
+          attempts: [...(current.attempts || []), paymentAttempt],
+        });
         routePickerOpen = false;
-        await sendLeg(current, "payment");
         return;
       }
       const connected = await connectWallet(walletNetwork(source.network, otcP2pNetwork()));
@@ -561,7 +581,7 @@
               <small>{say("Quote expires", "Котировка действует до")}: {new Date(feeAttempt.instructions.quote_expires_at).toLocaleString($locale === "ru" ? "ru-RU" : "en-US")}</small>
             {/if}
           {:else}
-            <small>{say("USDT · Ethereum", "USDT · Ethereum")}</small>
+            <small>{`USDT · ${outputNetwork}`}</small>
           {/if}
           <small>{feeAttempt.instructions.source_asset ? say("Route deposit address", "Адрес депозита маршрута") : say("Fee recipient", "Получатель комиссии")}</small>
           <code>{feeAttempt.instructions.leg.recipient}</code>
@@ -630,6 +650,27 @@
           <small>{say("Required payment memo", "Обязательное сообщение платежа")}: <code>{intentQuote.instructions.deposit_memo}</code></small>
         {/if}
         <small class="depositAddress">{say("Deposit address", "Адрес депозита")}: <code>{intentQuote.instructions.deposit_address}</code></small>
+        {#if intentQuote.instructions.fee_preflight}
+          <strong>{say("Service-fee route estimate", "Расчёт маршрута комиссии")}</strong>
+          <p>{intentQuote.instructions.fee_preflight.source_amount} {intentQuote.instructions.fee_preflight.source_asset} → {intentQuote.instructions.fee_preflight.expected_output} {intentQuote.instructions.fee_preflight.destination_asset}</p>
+          {#if intentQuote.instructions.fee_preflight.expected_fee}
+            <small>{say("Additional route fee estimate", "Оценка дополнительной комиссии маршрута")}: {intentQuote.instructions.fee_preflight.expected_fee.amount} {intentQuote.instructions.fee_preflight.expected_fee.asset}</small>
+          {/if}
+        {/if}
+      </section>
+    {/if}
+    {#if directPaymentAttempt && actionKind === "payment"}
+      <section class="routeQuote" aria-label={say("Direct payment review", "Проверка прямого платежа")} data-testid="otc-direct-payment-review">
+        <strong>{say("Direct payment", "Прямой платёж")}</strong>
+        <p>{netAmount} {deal.terms.stablecoin || "USDT"} · {outputNetwork}</p>
+        <small>{say("Seller receives", "Продавец получает")}: <code>{directPaymentAttempt.instructions.leg.recipient}</code></small>
+        {#if directPaymentAttempt.instructions.fee_preflight}
+          <strong>{say("Service-fee route estimate", "Расчёт маршрута комиссии")}</strong>
+          <p>{directPaymentAttempt.instructions.fee_preflight.source_amount} {directPaymentAttempt.instructions.fee_preflight.source_asset} → {directPaymentAttempt.instructions.fee_preflight.expected_output} {directPaymentAttempt.instructions.fee_preflight.destination_asset}</p>
+          {#if directPaymentAttempt.instructions.fee_preflight.expected_fee}
+            <small>{say("Additional route fee estimate", "Оценка дополнительной комиссии маршрута")}: {directPaymentAttempt.instructions.fee_preflight.expected_fee.amount} {directPaymentAttempt.instructions.fee_preflight.expected_fee.asset}</small>
+          {/if}
+        {/if}
       </section>
     {/if}
 

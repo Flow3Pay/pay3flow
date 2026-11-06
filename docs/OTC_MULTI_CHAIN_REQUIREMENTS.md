@@ -280,10 +280,18 @@ Implemented so far:
   confirmed refund releases the attempt for retry. Exact-output quote creation
   is covered by a mocked provider test that checks the requested output and
   decodes the calculated source amount.
-- For identical Ethereum source and destination assets, the ordinary direct
-  payment path is used without a provider quote, and only when the exact
-  catalog asset IDs match. Direct payment on identical non-Ethereum networks
-  is not implemented yet.
+- For identical EVM source and destination assets, the ordinary direct
+  payment path is used without a provider quote only when the exact catalog
+  asset IDs match and two independent RPC endpoints are configured for that
+  receiving network. Ethereum uses the peer Ethereum RPC pair; other supported
+  EVM networks use `p2p_evm_rpcs`. Non-EVM same-network direct payments remain
+  unavailable.
+- A direct EVM USDT fee transfer bypasses route lookup when the payment source
+  is the exact USDT token on the receiving network. This avoids rejecting a
+  valid direct payment because the route provider does not expose a redundant
+  USDT-to-USDT route. Other fee sources require an exact-output route to the
+  configured USDT recipient, and its source amount/route fee are preflighted
+  before the principal transfer is signed.
 - The recorded fee policy is denominated in USDT. For USDC offers, the fee
   amount is calculated using nominal 1:1 USDC/USDT parity. The stablecoin leg
   sends only the net principal to the seller; the separate fee leg sends the
@@ -310,10 +318,14 @@ Still incomplete and not to be presented as supported:
 - Memo handling is currently accepted only for NEAR source transfers; other
   memo/tag-dependent source networks must remain unavailable until their
   wallet executors support the required instruction.
-- Direct same-network settlement outside Ethereum is still unsupported; those
-  cases must not be presented as working direct transfers. Cross-network
-  principal and fee routes use exact-output quotes and status verification;
-  transaction-level real-network testing remains a separate validation task.
+- Direct same-network settlement on non-EVM networks is still unsupported;
+  those cases must not be presented as working direct transfers. The OTC asset
+  endpoint excludes those pairs because the current direct-transfer observers
+  do not verify their chains. Direct EVM settlement is also excluded unless
+  the network has two configured HTTPS RPCs and the exact stablecoin token is
+  unambiguous. Cross-network principal and fee routes use exact-output quotes
+  and status verification; transaction-level real-network testing remains a
+  separate validation task.
 - Fee-routing availability is amount-dependent: a quote can still fail after
   the catalog shows a route, for example if the provider applies a minimum
   amount. The UI surfaces that failure and does not permit seller payout until

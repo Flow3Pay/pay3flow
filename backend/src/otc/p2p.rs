@@ -124,13 +124,31 @@ impl Service {
             && self.wallet_login_chain_available("ethereum")
             && self.cfg.p2p_rpc().len() >= 2
     }
+    pub(crate) fn p2p_direct_evm_network_available(&self, network: &str) -> bool {
+        super::config::evm_chain_id(network).is_some()
+            && self
+                .cfg
+                .p2p_evm_rpcs(network)
+                .is_some_and(|endpoints| endpoints.len() >= 2)
+    }
     /// Reads always follow the network the deal was booked on. If an operator
     /// repoints the peer contour mid-deal, the chain check fails and the attempt
     /// stays unresolved instead of confirming a transfer on another network.
     fn p2p_net(&self, body: &Value) -> Result<super::chain::EvmNet> {
-        let chain_id = body["ethereum_chain_id"]
-            .as_u64()
-            .ok_or_else(|| invalid("deal network is missing"))?;
+        let network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
+        let chain_id = super::config::evm_chain_id(network)
+            .filter(|expected| {
+                body["stablecoin_chain_id"]
+                    .as_u64()
+                    .or_else(|| body["ethereum_chain_id"].as_u64())
+                    .is_none_or(|configured| configured == *expected)
+            })
+            .ok_or_else(|| invalid("deal network is not an OTC EVM network"))?;
+        let rpcs = self
+            .cfg
+            .p2p_evm_rpcs(network)
+            .filter(|endpoints| endpoints.len() >= 2)
+            .ok_or_else(|| invalid("two independent OTC EVM endpoints are required"))?;
         let usdt = body
             .get("stablecoin_contract")
             .or_else(|| body.get("usdt_contract"))
@@ -138,7 +156,7 @@ impl Service {
             .ok_or_else(|| invalid("deal token is missing"))?
             .to_string();
         Ok(super::chain::EvmNet {
-            rpcs: self.cfg.p2p_rpc().to_vec(),
+            rpcs: rpcs.to_vec(),
             chain_id,
             usdt,
         })
@@ -238,12 +256,13 @@ impl Service {
         } else {
             owner.as_str()
         };
+        let offer_network = terms["stablecoin_network"].as_str().unwrap_or("ethereum");
         if self.cfg.p2p_chain() != 1
             || terms["ethereum_chain_id"] != json!(1)
-            || token_contract != stablecoin.contract()
+            || (offer_network == "ethereum" && token_contract != stablecoin.contract())
         {
             return Err(Error::Conflict(
-                "offer was published for a different Ethereum network".into(),
+                "offer was published for a different payment network".into(),
             ));
         }
         let (usdt_payer, default_usdt_payee, ever_payer, ever_payee) = match direction {
@@ -257,6 +276,14 @@ impl Service {
         };
         let (output_network, output_asset_id, usdt_payee) =
             accepted_destination(direction, &terms, &default_usdt_payee, destination)?;
+        let mut output_contract = token_contract.to_string();
+        let mut fee_usdt_contract = if output_network == "ethereum" {
+            Some(self.cfg.p2p_usdt().to_string())
+        } else {
+            None
+        };
+        let mut fee_usdt_asset_id = None;
+        let output_chain_id = super::config::evm_chain_id(&output_network);
         if output_network != "ethereum" || output_asset_id.is_some() {
             let provider = self.near_intents.as_ref().ok_or(Error::RouteUnavailable)?;
             let output_asset = Asset::new(stablecoin.symbol(), Some(&output_network))
@@ -276,6 +303,30 @@ impl Service {
                         .is_none_or(|address| !address.eq_ignore_ascii_case(stablecoin.contract())))
             {
                 return Err(invalid("selected network token does not match the deal"));
+            }
+            if let Some(contract) = token
+                .contract_address
+                .as_deref()
+                .filter(|contract| !contract.trim().is_empty())
+            {
+                output_contract = contract.to_string();
+            }
+            let fee_asset = Asset::new("USDT", Some(&output_network))?;
+            let fee_token = provider
+                .unique_token_for_asset(&fee_asset)
+                .await
+                .map_err(|_| Error::RouteUnavailable)?;
+            if fee_token.decimals != Some(6) {
+                return Err(Error::RouteUnavailable);
+            }
+            fee_usdt_contract = fee_token
+                .contract_address
+                .as_deref()
+                .filter(|contract| !contract.trim().is_empty())
+                .map(str::to_string);
+            fee_usdt_asset_id = Some(fee_token.asset_id);
+            if fee_usdt_contract.is_none() {
+                return Err(Error::RouteUnavailable);
             }
             if direction == Direction::Buy && output_network != "ethereum" {
                 let source_asset = Asset::new(stablecoin.symbol(), Some("ethereum"))?;
@@ -311,8 +362,11 @@ impl Service {
             "stablecoin_asset_id": output_asset_id,
             "ever_payer": ever_payer, "ever_payee": ever_payee,
             "fee_payer_actor": fee_payer_actor,
-            "usdt_contract": token_contract,
-            "stablecoin_contract": token_contract,
+            "usdt_contract": output_contract,
+            "stablecoin_contract": output_contract,
+            "fee_usdt_contract": fee_usdt_contract,
+            "fee_usdt_asset_id": fee_usdt_asset_id,
+            "stablecoin_chain_id": output_chain_id,
             "ethereum_chain_id": 1,
             "ever_network_id": 42,
             "fee_policy": fee_policy,
@@ -439,7 +493,7 @@ impl Service {
         let text = |key: &str| body[key].as_str().unwrap_or_default().to_string();
         let (chain, amount, sender, recipient) = match kind {
             "payment" => (
-                "ethereum",
+                body["stablecoin_network"].as_str().unwrap_or("ethereum"),
                 body["fee_policy"]["net_units"]
                     .as_str()
                     .unwrap_or_else(|| body["usdt_units"].as_str().unwrap_or_default())
@@ -560,14 +614,13 @@ impl Service {
         let state: String = row.get("state");
         let body: Value = row.get("body");
         let pay_by: DateTime<Utc> = row.get("pay_by");
-        if kind == "payment"
-            && body["stablecoin_network"]
-                .as_str()
-                .is_some_and(|network| network != "ethereum")
-        {
-            return Err(Error::Conflict(
-                "this payment requires the selected network route".into(),
-            ));
+        if kind == "payment" {
+            let network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
+            if !self.p2p_direct_evm_network_available(network) {
+                return Err(Error::Conflict(
+                    "this payment requires a supported conversion route".into(),
+                ));
+            }
         }
         if kind != "fee" {
             let payer_field = if kind == "payment" {
@@ -647,15 +700,18 @@ impl Service {
                         ""
                     }
                 });
-            if payment_source != "USDT@ethereum" {
-                return Err(Error::Conflict(
-                    "this service fee must use the deal's conversion route".into(),
-                ));
-            }
             let fee_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
-            if fee_network != "ethereum" {
+            let payment_source_asset_id = payment_instructions["source_asset_id"]
+                .as_str()
+                .or_else(|| payment_instructions["fee_source_asset_id"].as_str());
+            let expected_fee_asset_id = body["fee_usdt_asset_id"].as_str();
+            if payment_source != format!("USDT@{fee_network}")
+                || expected_fee_asset_id
+                    .is_some_and(|expected| payment_source_asset_id != Some(expected))
+                || !self.p2p_direct_evm_network_available(fee_network)
+            {
                 return Err(Error::Conflict(
-                    "this service-fee destination requires a conversion route".into(),
+                    "this service fee requires a supported conversion route".into(),
                 ));
             }
             let recipient = self.cfg.fee_recipients.get(fee_network).ok_or_else(|| {
@@ -663,7 +719,7 @@ impl Service {
                     "service-fee recipient is not configured for the deal network".into(),
                 )
             })?;
-            fee_leg(&fee.get::<_, String>(0), &verified, recipient)?
+            fee_leg(fee_network, &fee.get::<_, String>(0), &verified, recipient)?
         } else {
             self.deal_leg(&body, kind)?
         };
@@ -679,16 +735,15 @@ impl Service {
                 "this deal leg already has an unresolved attempt".into(),
             ));
         }
-        let net = if kind == "fee" {
-            super::chain::EvmNet {
-                rpcs: self.cfg.p2p_rpc().to_vec(),
-                chain_id: 1,
-                usdt: self.cfg.p2p_usdt().to_string(),
-            }
+        let net = if kind == "payout" {
+            self.p2p_evm()
         } else {
             let mut net = self.p2p_net(&body)?;
-            if kind == "payment" && body["stablecoin"] == "USDC" {
-                net.usdt = super::config::USDC.to_string();
+            if kind == "fee" {
+                net.usdt = body["fee_usdt_contract"]
+                    .as_str()
+                    .unwrap_or(self.cfg.p2p_usdt())
+                    .to_string();
             }
             net
         };
@@ -696,7 +751,7 @@ impl Service {
             if super::chain::number(&self.evm_agree(&net, "eth_chainId", json!([])).await?)?
                 != u128::from(net.chain_id)
             {
-                return Err(invalid("wrong Ethereum network"));
+                return Err(invalid("wrong EVM network"));
             }
             let nonce = format!("0x{:x}", self.evm_pending_nonce(&net, &leg.sender).await?);
             let data = super::chain::ethereum::transfer_data(&leg)?;
@@ -709,14 +764,101 @@ impl Service {
         } else {
             Value::Null
         };
+        let fee_preflight = if kind == "payment" {
+            let source_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
+            let source_symbol = body["stablecoin"].as_str().unwrap_or("USDT");
+            let source_asset = Asset::new(source_symbol, Some(source_network))?;
+            let fee_asset = Asset::new("USDT", Some(source_network))?;
+            let provider = self.near_intents.as_ref().ok_or(Error::Disabled)?;
+            let source_asset_id = body["stablecoin_asset_id"]
+                .as_str()
+                .ok_or_else(|| invalid("payment source asset id is missing"))?;
+            let source_token = provider
+                .token_for_asset_id(&source_asset, source_asset_id)
+                .await
+                .map_err(|_| invalid("payment source asset is no longer available"))?;
+            let fee_token = provider
+                .unique_token_for_asset(&fee_asset)
+                .await
+                .map_err(|_| Error::RouteUnavailable)?;
+            let direct_fee_transfer = direct_fee_transfer_supported(
+                &source_asset,
+                &fee_asset,
+                source_network,
+                self.p2p_direct_evm_network_available(source_network),
+                source_token.asset_id == fee_token.asset_id,
+            );
+            if direct_fee_transfer {
+                None
+            } else {
+                let recipient = self.cfg.fee_recipients.get(source_network).ok_or_else(|| {
+                    Error::Conflict(
+                        "service-fee recipient is not configured for the deal network".into(),
+                    )
+                })?;
+                crate::route_execution::validate_otc_wallet_address(source_network, recipient)
+                    .map_err(|_| invalid("invalid service-fee recipient for the deal network"))?;
+                if fee_token.decimals != Some(6)
+                    || !provider.route_available(&source_asset, &fee_asset).await
+                {
+                    return Err(Error::RouteUnavailable);
+                }
+                let fee_units = amount::integer(
+                    body["fee_policy"]["fee_units"]
+                        .as_str()
+                        .ok_or_else(|| invalid("deal fee terms are malformed"))?,
+                )?;
+                let quote = provider
+                    .dry_executable_quote(NearQuoteRequest {
+                        from: source_asset.clone(),
+                        to: fee_asset.clone(),
+                        origin_asset_id: Some(source_token.asset_id.clone()),
+                        destination_asset_id: Some(fee_token.asset_id.clone()),
+                        amount: Amount::new(amount::decimal(fee_units, 6), fee_asset.clone())?,
+                        recipient: recipient.to_string(),
+                        refund_to: leg.sender.clone(),
+                        slippage_bps: 0,
+                        dry: true,
+                    })
+                    .await
+                    .map_err(|error| {
+                        tracing::warn!(trade=%id, error=%error, "OTC fee route preflight failed");
+                        Error::RouteUnavailable
+                    })?;
+                let source_decimals = source_token.decimals.ok_or(Error::RouteUnavailable)?;
+                if !fee_preflight_matches(
+                    &quote.output.value,
+                    &quote.input.value,
+                    fee_units,
+                    u32::from(source_decimals),
+                ) {
+                    return Err(Error::RouteUnavailable);
+                }
+                Some(json!({
+                    "source_asset": source_asset,
+                    "source_asset_id": source_token.asset_id,
+                    "source_amount": quote.input.value,
+                    "destination_asset": fee_asset,
+                    "expected_output": quote.output.value,
+                    "expected_fee": quote.fee.as_ref().map(|route_fee| json!({
+                        "asset": route_fee.asset.to_string(),
+                        "amount": route_fee.value,
+                    })),
+                }))
+            }
+        } else {
+            None
+        };
         let fee_source_address = (kind == "payment").then(|| leg.sender.clone());
+        let fee_source_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
         let attempt = Uuid::new_v4();
         let instructions = json!({
             "leg": leg, "call": call, "checkpoint": checkpoint,
             "stablecoin": if kind == "fee" { json!("USDT") } else { body.get("stablecoin").cloned().unwrap_or(json!("USDT")) },
-            "fee_source_asset": if kind == "payment" { Some(format!("{}@ethereum", body["stablecoin"].as_str().unwrap_or("USDT"))) } else { None },
+            "fee_source_asset": if kind == "payment" { Some(format!("{}@{fee_source_network}", body["stablecoin"].as_str().unwrap_or("USDT"))) } else { None },
             "fee_source_asset_id": if kind == "payment" { body.get("stablecoin_asset_id").cloned() } else { None },
             "fee_source_address": fee_source_address,
+            "fee_preflight": fee_preflight,
             "attempt_id": attempt, "trade_id": id, "kind": kind,
             "submit_path": format!("/p2p/attempts/{attempt}/reference"),
             "prepared_at": Utc::now(),
@@ -775,9 +917,9 @@ impl Service {
         let output_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
         let to = Asset::new(stablecoin.symbol(), Some(output_network))?;
         if from == to {
-            if network != "ethereum" {
+            if !self.p2p_direct_evm_network_available(network) {
                 return Err(Error::Conflict(
-                    "Direct payment on this receiving network is not supported yet".into(),
+                    "direct payment is not configured for this receiving network".into(),
                 ));
             }
         }
@@ -886,12 +1028,12 @@ impl Service {
         crate::route_execution::validate_otc_wallet_address(output_network, fee_recipient)
             .map_err(|_| invalid("invalid service-fee recipient for the deal network"))?;
         let fee_asset = Asset::new("USDT", Some(output_network))?;
-        let direct_payment = is_direct_ethereum_asset_match(
+        let direct_payment = is_direct_evm_asset_match(
             &from,
             &to,
             &source_token.asset_id,
             &destination_token.asset_id,
-        );
+        ) && self.p2p_direct_evm_network_available(network);
         if from == to && !direct_payment {
             return Err(invalid(
                 "source and destination token identities do not match",
@@ -901,7 +1043,13 @@ impl Service {
             .unique_token_for_asset(&fee_asset)
             .await
             .map_err(|_| Error::RouteUnavailable)?;
-        let direct_fee_transfer = direct_fee_transfer_supported(&from, &fee_asset, output_network);
+        let direct_fee_transfer = direct_fee_transfer_supported(
+            &from,
+            &fee_asset,
+            output_network,
+            self.p2p_direct_evm_network_available(output_network),
+            source_token.asset_id == fee_token.asset_id,
+        );
         if fee_token.decimals != Some(6)
             || fee_token
                 .contract_address
@@ -911,6 +1059,52 @@ impl Service {
         {
             return Err(Error::RouteUnavailable);
         }
+        let fee_units = amount::integer(
+            body["fee_policy"]["fee_units"]
+                .as_str()
+                .ok_or_else(|| invalid("deal fee terms are malformed"))?,
+        )?;
+        let fee_amount = amount::decimal(fee_units, 6);
+        let fee_preflight = if direct_fee_transfer {
+            None
+        } else {
+            let quote = provider
+                .dry_executable_quote(NearQuoteRequest {
+                    from: from.clone(),
+                    to: fee_asset.clone(),
+                    origin_asset_id: Some(source_token.asset_id.clone()),
+                    destination_asset_id: Some(fee_token.asset_id.clone()),
+                    amount: Amount::new(fee_amount.clone(), fee_asset.clone())?,
+                    recipient: fee_recipient.to_string(),
+                    refund_to: source_address.to_string(),
+                    slippage_bps: 0,
+                    dry: true,
+                })
+                .await
+                .map_err(|error| {
+                    tracing::warn!(trade=%id, error=%error, "OTC fee route preflight failed");
+                    Error::RouteUnavailable
+                })?;
+            if !fee_preflight_matches(
+                &quote.output.value,
+                &quote.input.value,
+                fee_units,
+                u32::from(decimals),
+            ) {
+                return Err(Error::RouteUnavailable);
+            }
+            Some(json!({
+                "source_asset": from,
+                "source_asset_id": source_token.asset_id,
+                "source_amount": quote.input.value,
+                "destination_asset": fee_asset,
+                "expected_output": quote.output.value,
+                "expected_fee": quote.fee.as_ref().map(|route_fee| json!({
+                    "asset": route_fee.asset.to_string(),
+                    "amount": route_fee.value,
+                })),
+            }))
+        };
         if network == "ethereum" {
             let expected_contract = if source_token.symbol.eq_ignore_ascii_case("USDT") {
                 super::config::USDT
@@ -1018,6 +1212,7 @@ impl Service {
             })),
             "slippage_bps": slippage_bps.min(10_000),
             "minimum_output": net_amount,
+            "fee_preflight": fee_preflight,
             "deposit_address": deposit_address,
             "deposit_memo": deposit_memo,
             "quote_id": quote.quote_id,
@@ -1308,7 +1503,9 @@ impl Service {
             }
         } else {
             let bytes = wallet::unhex(reference)?;
-            if bytes.len() != 32 || (chain == "ethereum" && !reference.starts_with("0x")) {
+            if bytes.len() != 32
+                || (super::config::evm_chain_id(&chain).is_some() && !reference.starts_with("0x"))
+            {
                 return Err(invalid("invalid chain reference"));
             }
         }
@@ -1484,10 +1681,12 @@ impl Service {
                 continue;
             }
             // Read the leg back on the network the handoff was built for.
+            let is_evm_chain = super::config::evm_chain_id(&chain).is_some();
             let evm_net = || super::chain::EvmNet {
-                rpcs: self.cfg.p2p_rpc().to_vec(),
+                rpcs: self.cfg.p2p_evm_rpcs(&chain).unwrap_or_default().to_vec(),
                 chain_id: instructions["call"]["chain_id"]
                     .as_u64()
+                    .or_else(|| super::config::evm_chain_id(&chain))
                     .unwrap_or_else(|| self.cfg.p2p_chain()),
                 usdt: instructions["call"]["to"]
                     .as_str()
@@ -1495,7 +1694,7 @@ impl Service {
                     .unwrap_or_else(|| self.cfg.p2p_usdt().to_string()),
             };
             if reference.is_none() {
-                let located = if chain == "ethereum" {
+                let located = if is_evm_chain {
                     self.locate_ethereum(&leg, &instructions, &evm_net())
                         .await
                         .unwrap_or(None)
@@ -1521,6 +1720,17 @@ impl Service {
                     .and_then(|n| u128::from_str_radix(n.trim_start_matches("0x"), 16).ok());
                 self.ethereum_evidence(&reference, &leg, nonce, &evm_net())
                     .await
+            } else if is_evm_chain {
+                let nonce = instructions["call"]["nonce"]
+                    .as_str()
+                    .and_then(|n| u128::from_str_radix(n.trim_start_matches("0x"), 16).ok());
+                let mut result = self
+                    .ethereum_evidence(&reference, &leg, nonce, &evm_net())
+                    .await;
+                if let Ok(Some(evidence)) = &mut result {
+                    evidence.chain = chain.clone();
+                }
+                result
             } else {
                 self.everscale_deal_evidence(&reference, &leg).await
             };
@@ -1640,10 +1850,10 @@ impl Service {
                 && evidence.raw["actual_output_units"].as_str() == Some(fee_units.as_str())
                 && instructions["destination_asset"] == json!(format!("USDT@{expected_network}"))
                 && instructions["recipient"].as_str() == expected_recipient.map(String::as_str);
-            let direct_transfer = attempt_chain == "ethereum"
-                && evidence.chain == "ethereum"
+            let direct_transfer = attempt_chain == expected_network
+                && evidence.chain == expected_network
                 && expected_leg.amount == fee_units
-                && expected_leg.chain == "ethereum"
+                && expected_leg.chain == expected_network
                 && expected_leg.recipient == expected_recipient.cloned().unwrap_or_default();
             if source.get::<_, String>(0) != fee.get::<_, String>(0)
                 || fee.get::<_, String>(2) != "USDT"
@@ -1755,7 +1965,7 @@ fn provider_amount_units(value: &str, decimals: u32) -> Option<u128> {
     }
 }
 
-fn fee_leg(fee_units: &str, sender: &str, recipient: &str) -> Result<Leg> {
+fn fee_leg(network: &str, fee_units: &str, sender: &str, recipient: &str) -> Result<Leg> {
     let units = amount::integer(fee_units)?;
     if units == 0 || sender == recipient {
         return Err(invalid(
@@ -1763,7 +1973,7 @@ fn fee_leg(fee_units: &str, sender: &str, recipient: &str) -> Result<Leg> {
         ));
     }
     Ok(Leg {
-        chain: "ethereum".into(),
+        chain: network.into(),
         amount: units.to_string(),
         transfer_amount: units.to_string(),
         sender: sender.to_string(),
@@ -1771,19 +1981,41 @@ fn fee_leg(fee_units: &str, sender: &str, recipient: &str) -> Result<Leg> {
     })
 }
 
-fn is_direct_ethereum_asset_match(
+fn is_direct_evm_asset_match(
     source: &Asset,
     destination: &Asset,
     source_asset_id: &str,
     destination_asset_id: &str,
 ) -> bool {
     source == destination
-        && source.location.as_deref() == Some("ethereum")
+        && source
+            .location
+            .as_deref()
+            .is_some_and(|network| super::config::evm_chain_id(network).is_some())
         && source_asset_id == destination_asset_id
 }
 
-fn direct_fee_transfer_supported(source: &Asset, fee_asset: &Asset, network: &str) -> bool {
-    network == "ethereum" && source == fee_asset
+fn direct_fee_transfer_supported(
+    source: &Asset,
+    fee_asset: &Asset,
+    network: &str,
+    direct_network_enabled: bool,
+    exact_token_identity: bool,
+) -> bool {
+    direct_network_enabled
+        && exact_token_identity
+        && fee_asset.location.as_deref() == Some(network)
+        && source == fee_asset
+}
+
+fn fee_preflight_matches(
+    output_amount: &str,
+    source_amount: &str,
+    fee_units: u128,
+    source_decimals: u32,
+) -> bool {
+    amount::units(output_amount, 6).ok() == Some(fee_units)
+        && amount::units(source_amount, source_decimals).is_ok_and(|units| units > 0)
 }
 
 enum NearStatusOutcome {
@@ -1877,22 +2109,29 @@ mod route_status_tests {
     }
 
     #[test]
-    fn direct_payment_requires_same_ethereum_asset_identity() {
+    fn direct_payment_requires_same_evm_asset_identity() {
         let usdt = Asset::new("USDT", Some("ethereum")).unwrap();
+        let base_usdt = Asset::new("USDT", Some("base")).unwrap();
         let same_ticker_other_network = Asset::new("USDT", Some("base")).unwrap();
-        assert!(is_direct_ethereum_asset_match(
+        assert!(is_direct_evm_asset_match(
             &usdt,
             &usdt,
             "canonical-usdt",
             "canonical-usdt"
         ));
-        assert!(!is_direct_ethereum_asset_match(
+        assert!(is_direct_evm_asset_match(
+            &base_usdt,
+            &base_usdt,
+            "base-usdt",
+            "base-usdt"
+        ));
+        assert!(!is_direct_evm_asset_match(
             &usdt,
             &usdt,
             "lookalike-token",
             "canonical-usdt"
         ));
-        assert!(!is_direct_ethereum_asset_match(
+        assert!(!is_direct_evm_asset_match(
             &usdt,
             &same_ticker_other_network,
             "canonical-usdt",
@@ -1901,28 +2140,44 @@ mod route_status_tests {
     }
 
     #[test]
-    fn only_ethereum_usdt_fee_transfer_bypasses_the_conversion_route() {
+    fn direct_fee_transfer_requires_same_configured_evm_network() {
         let ethereum_usdt = Asset::new("USDT", Some("ethereum")).unwrap();
         let ethereum_usdc = Asset::new("USDC", Some("ethereum")).unwrap();
-        let tron_usdt = Asset::new("USDT", Some("tron")).unwrap();
+        let base_usdt = Asset::new("USDT", Some("base")).unwrap();
         assert!(direct_fee_transfer_supported(
             &ethereum_usdt,
             &ethereum_usdt,
-            "ethereum"
+            "ethereum",
+            true,
+            true,
+        ));
+        assert!(direct_fee_transfer_supported(
+            &base_usdt, &base_usdt, "base", true, true,
         ));
         assert!(!direct_fee_transfer_supported(
             &ethereum_usdc,
             &ethereum_usdt,
-            "ethereum"
+            "ethereum",
+            true,
+            false,
         ));
         assert!(!direct_fee_transfer_supported(
-            &tron_usdt, &tron_usdt, "tron"
+            &base_usdt, &base_usdt, "base", false, true,
         ));
+    }
+
+    #[test]
+    fn fee_preflight_requires_exact_output_and_nonzero_source() {
+        assert!(fee_preflight_matches("0.123456", "0.124", 123_456, 6));
+        assert!(!fee_preflight_matches("0.123455", "0.124", 123_456, 6));
+        assert!(!fee_preflight_matches("0.123456", "0", 123_456, 6));
+        assert!(!fee_preflight_matches("0.1234567", "0.124", 123_456, 6));
     }
 
     #[test]
     fn fee_leg_is_an_exact_usdt_transfer_to_the_configured_recipient() {
         let leg = fee_leg(
+            "ethereum",
             "1234567",
             &format!("0x{}", "a".repeat(40)),
             &format!("0x{}", "b".repeat(40)),
@@ -1931,8 +2186,8 @@ mod route_status_tests {
         assert_eq!(leg.chain, "ethereum");
         assert_eq!(leg.amount, "1234567");
         assert_eq!(leg.transfer_amount, "1234567");
-        assert!(fee_leg("0", &leg.sender, &leg.recipient).is_err());
-        assert!(fee_leg("1234567", &leg.sender, &leg.sender).is_err());
+        assert!(fee_leg("ethereum", "0", &leg.sender, &leg.recipient).is_err());
+        assert!(fee_leg("ethereum", "1234567", &leg.sender, &leg.sender).is_err());
     }
 
     #[test]

@@ -315,6 +315,14 @@ impl NearIntentsProvider {
         .await
     }
 
+    pub async fn dry_executable_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
+        self.request_quote(NearQuoteRequest {
+            dry: true,
+            ..request
+        })
+        .await
+    }
+
     pub async fn submit_deposit_tx(&self, tx_hash: &str, deposit_address: &str) -> Result<()> {
         self.submit_deposit_tx_with_memo(tx_hash, deposit_address, None).await
     }

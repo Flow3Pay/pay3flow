@@ -1,6 +1,10 @@
 import type { Attempt } from "./service";
 
 export type P2pLeg = "payment" | "payout";
+const directEvmNetworks = new Set([
+  "ethereum", "optimism", "bnb-smart-chain", "gnosis",
+  "polygon-pos", "avalanche-c", "arbitrum-one", "base",
+]);
 
 export function p2pCompatibleSources<T extends { destination_asset_ids: string[] }>(
   sources: T[],
@@ -17,10 +21,11 @@ export function p2pDirectAssetMatch(
   destinationAssetId: string,
   destinationNetwork: string,
 ): boolean {
-  return destinationNetwork === "ethereum"
-    && !!source
+  return !!source
     && source.asset === destinationAsset
-    && source.asset_id === destinationAssetId;
+    && source.asset_id === destinationAssetId
+    && directEvmNetworks.has(destinationNetwork)
+    && source.asset.split("@")[1] === destinationNetwork;
 }
 
 export interface P2pFeePolicy {
@@ -47,6 +52,7 @@ export interface P2pDealTerms {
   ever_payer: string;
   ever_payee: string;
   fee_payer_actor?: string;
+  fee_usdt_asset_id?: string | null;
   fee_policy?: P2pFeePolicy;
 }
 

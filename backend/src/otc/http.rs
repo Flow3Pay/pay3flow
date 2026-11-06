@@ -347,7 +347,8 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         {
             continue;
         }
-        let is_ethereum = destination.location.as_deref() == Some("ethereum");
+        let direct_network = state.otc.p2p_direct_evm_network_available(network);
+        let is_ethereum = network == "ethereum";
         if is_ethereum {
             let expected = if symbol == "USDT" {
                 super::config::USDT
@@ -372,15 +373,15 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         });
         let mut any_route = false;
         for (source, source_token) in &candidates {
-            let payment_route = (is_ethereum
+            let payment_route = (direct_network
                 && source == destination
                 && source_token.asset_id == token.asset_id)
                 || (source != destination && provider.route_available(source, destination).await);
             if !payment_route {
                 continue;
             }
-            let fee_route = if source == &fee_asset {
-                is_ethereum
+            let fee_route = if source == &fee_asset && source_token.asset_id == fee_token.asset_id {
+                direct_network
             } else {
                 provider.route_available(source, &fee_asset).await
             };
@@ -396,14 +397,21 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
             Ok(source) => source,
             Err(_) => continue,
         };
-        let buy_payment_route = (is_ethereum && &buy_source == destination && symbol == "USDT")
+        let Ok(buy_source_token) = provider.unique_token_for_asset(&buy_source).await else {
+            continue;
+        };
+        let buy_payment_route = (direct_network
+            && &buy_source == destination
+            && symbol == "USDT"
+            && buy_source_token.asset_id == token.asset_id)
             || (&buy_source != destination
                 && provider.route_available(&buy_source, destination).await);
-        let buy_fee_route = if buy_source == fee_asset {
-            is_ethereum
-        } else {
-            provider.route_available(&buy_source, &fee_asset).await
-        };
+        let buy_fee_route =
+            if buy_source == fee_asset && buy_source_token.asset_id == fee_token.asset_id {
+                direct_network
+            } else {
+                provider.route_available(&buy_source, &fee_asset).await
+            };
         let buy_route = buy_payment_route && buy_fee_route;
         if buy_route {
             buy_destination_assets.push(output);
@@ -438,13 +446,14 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
             {
                 continue;
             }
-            let is_exact_direct = source == destination
-                && source.location.as_deref() == Some("ethereum")
+            let direct_network = state.otc.p2p_direct_evm_network_available(network);
+            let is_exact_direct = direct_network
+                && source == destination
                 && token.asset_id == destination_token.asset_id;
             let payment_route = is_exact_direct
                 || (source != destination && provider.route_available(source, destination).await);
-            let fee_route = if source == &fee_asset {
-                network == "ethereum"
+            let fee_route = if source == &fee_asset && token.asset_id == fee_token.asset_id {
+                direct_network
             } else {
                 provider.route_available(source, &fee_asset).await
             };

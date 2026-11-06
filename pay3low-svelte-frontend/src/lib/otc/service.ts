@@ -29,6 +29,13 @@ interface Instructions {
   destination_decimals?: number; recipient?: string; refund_to?: string; expected_output?: string;
   minimum_output?: string; deposit_address?: string; deposit_memo?: string; quote_expires_at?: string;
   expected_fee?: { asset: string; amount: string };
+  fee_preflight?: {
+    source_asset: string;
+    source_amount: string;
+    destination_asset: string;
+    expected_output: string;
+    expected_fee?: { asset: string; amount: string };
+  } | null;
   slippage_bps?: number;
 }
 export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; everscale_multisig_available?: boolean; p2p_available?: boolean; ethereum_chain_id?: number; usdt_contract?: string; usdc_contract?: string; usdt_network?: string; p2p_ethereum_chain_id?: number; p2p_usdt_contract?: string; p2p_usdc_contract?: string; p2p_usdt_network?: string; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; wallet_verification_days?: number; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }

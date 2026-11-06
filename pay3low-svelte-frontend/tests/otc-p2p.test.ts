@@ -16,6 +16,21 @@ test("payment networks are restricted to routes for the exact destination token"
   assert.deepEqual(p2pCompatibleSources(sources, "missing"), []);
   assert.equal(p2pDirectAssetMatch(sources[0], "USDT@ethereum", "eth-usdt", "ethereum"), true);
   assert.equal(p2pDirectAssetMatch(sources[0], "USDT@ethereum", "lookalike", "ethereum"), false);
+  for (const network of [
+    "base", "optimism", "bnb-smart-chain", "gnosis",
+    "polygon-pos", "avalanche-c", "arbitrum-one",
+  ]) {
+    const asset = `USDT@${network}`;
+    assert.equal(
+      p2pDirectAssetMatch(
+        { ...sources[0], asset, asset_id: `${network}-usdt` },
+        asset,
+        `${network}-usdt`,
+        network,
+      ),
+      true,
+    );
+  }
   assert.equal(p2pDirectAssetMatch(sources[2], "USDT@tron", "tron-usdt", "tron"), false);
 });
 

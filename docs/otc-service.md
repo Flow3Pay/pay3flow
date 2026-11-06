@@ -90,9 +90,11 @@ which leg each side still owes.
 Each completed deal accrues a 3% service fee exactly once from the gross USDT
 leg (`otc_p2p_fees`; startup also applies `backend/migrations/otc_p2p_fees.sql`).
 The policy is frozen into the deal body at acceptance, so republishing the offer
-cannot change it. Both on-chain transfers stay gross: the fee is not a network
-cost, is never deducted from a signed transfer, and is recorded as `accrued` for
-later collection.
+cannot change it. The stablecoin payment sends `gross - fee` to the seller; the
+fee payer separately authorizes an exact USDT transfer to the configured
+recipient. The fee is not a network cost. It is recorded as `accrued` only after
+payment verification, and the EVER payout remains blocked until fee collection
+is verified.
 
 The route deliberately bypasses the desk: it works with `enabled: false`, needs no
 inventory, relay account, RFQ, federation or staffed-hours gate, and the worker
@@ -105,31 +107,32 @@ payment handoff exists, and an unreadable observer reading keeps the attempt in
 `confirming` rather than `failed`, because marking a real payment failed would
 invite a second send.
 
-Peer settlement runs on its own Ethereum contour: `p2p_ethereum_chain_id`,
-`p2p_usdt_contract` and `p2p_ethereum_rpc` override `ethereum_chain_id`,
-`usdt_contract` and `ethereum_rpc` for offers, handoffs and observers only. A
-deployment can therefore keep the desk on mainnet USDT while advertisements
-settle on a testnet with the live `enabled: true` route untouched. Each deal
-stores the chain id and token it was booked on and is read back through the peer
-RPC pair on that chain, so repointing the contour mid-deal leaves the outstanding
-attempt in `confirming` instead of confirming evidence from another network.
-Acceptance additionally refuses an offer whose published chain or token differs
-from the live peer contour; those advertisements must be republished.
+Public offers retain canonical Ethereum mainnet base terms while storing the
+selected stablecoin receiving network separately. `p2p_ethereum_rpc`
+overrides `ethereum_rpc` for Ethereum peer transfers. Optional direct peer
+settlement on EVM receiving networks is configured with `p2p_evm_rpcs`, a JSON
+object mapping canonical network IDs (`base`, `arbitrum-one`, `optimism`,
+`bnb-smart-chain`, `gnosis`, `polygon-pos`, `avalanche-c`) to two independently
+operated HTTPS RPC URLs. Ethereum uses `p2p_ethereum_rpc`; other networks with
+no configured pair remain unavailable for direct settlement. The backend
+checks each pair's chain ID before preparing a transfer and observes the exact
+token transfer on that same network. NEAR Intents remains the path for
+cross-network or non-EVM payments.
 
-Settlement follows `ethereum_chain_id` and `usdt_contract`, so a test network
-works without touching the desk configuration; `validate_network` rejects a
-non-canonical contract on mainnet and requires a usable
-`p2p_ever_fee_reserve`. The EVER leg adds that reserve to the booked amount and
-accepts a balance increase of at least the booked amount, because a receiving
-contract may take its fee from the transfer. Chain labels come from
-`ethereum_chain_id`, and `counterparty_risk` states the no-escrow property, so the
-browser never has to guess which network it is signing on.
+The deal stores the receiving network, exact catalog asset identity, token
+contract and EVM chain ID. Direct same-network EVM settlement is enabled only
+when the exact source/destination asset IDs match and the required observer
+pair is configured. A fee transfer is direct only when its source is the exact
+USDT token on the configured recipient network; otherwise it requires an
+exact-output route. `validate_network` keeps the public offer network on
+canonical Ethereum mainnet and requires a usable `p2p_ever_fee_reserve`. The
+EVER leg adds that reserve to the booked amount and accepts a balance increase
+of at least the booked amount, because a receiving contract may take its fee
+from the transfer.
 
-Verification still needs independent observers: at least two HTTPS Ethereum RPCs
-for the USDT leg and at least two HTTPS Everscale GraphQL endpoints for the EVER
-leg. Finalized heights and pending nonces are read from every endpoint and the
-conservative value is used instead of demanding identical answers, since public
-providers legitimately sit at different heads.
+Every direct EVM network needs two independent HTTPS observers, and the EVER
+leg needs two Everscale GraphQL endpoints. Finalized heights and pending nonces
+are read conservatively because public providers may be at different heads.
 
 ### Desk settlement setup
 
