@@ -54,7 +54,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::otc::http::router())
         .merge(crate::hex::router())
         .route("/openapi.json", get(openapi::document))
-        .route("/health", get(health))
+        .route("/health", get(health).post(health))
         .route("/health/ready", get(ready))
         .route("/metrics", get(metrics))
         .route("/api/share-links", post(share_links::create))

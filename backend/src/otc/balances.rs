@@ -33,8 +33,9 @@ impl Service {
         let usdt = self
             .balance("ethereum", "USDT", network, USDT_DECIMALS, async {
                 let address = self.wallet(actor, "ethereum").await?;
-                self.erc20_balance_of(&self.p2p_evm(), &address, &json!("finalized"))
-                    .await
+                let net = self.p2p_evm();
+                let block = self.evm_finalized_tag(&net).await?;
+                self.erc20_balance_of(&net, &address, &block).await
             })
             .await;
         let usdc = self
@@ -42,8 +43,8 @@ impl Service {
                 let address = self.wallet(actor, "ethereum").await?;
                 let mut net = self.p2p_evm();
                 net.usdt = super::config::USDC.into();
-                self.erc20_balance_of(&net, &address, &json!("finalized"))
-                    .await
+                let block = self.evm_finalized_tag(&net).await?;
+                self.erc20_balance_of(&net, &address, &block).await
             })
             .await;
         json!({"balances": [ever, usdt, usdc]})

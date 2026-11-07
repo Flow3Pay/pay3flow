@@ -97,6 +97,21 @@ impl Service {
         }
         height.ok_or_else(|| invalid("no Ethereum RPC endpoint configured"))
     }
+    /// Heads also differ between providers. The highest observed head is used so the
+    /// lag guard stays conservative instead of failing on a one-block difference.
+    pub(crate) async fn evm_head(&self, net: &EvmNet) -> Result<u128> {
+        let mut head: Option<u128> = None;
+        for url in net.rpcs.iter().take(2) {
+            let seen = number(&self.evm_read(url, "eth_blockNumber", json!([])).await?)?;
+            head = Some(head.map_or(seen, |current| current.max(seen)));
+        }
+        head.ok_or_else(|| invalid("no Ethereum RPC endpoint configured"))
+    }
+    /// A concrete finalized block tag shared by every provider. Reads pinned to the
+    /// `finalized` tag can disagree while providers advance at different speeds.
+    pub(crate) async fn evm_finalized_tag(&self, net: &EvmNet) -> Result<Value> {
+        Ok(json!(format!("0x{:x}", self.evm_finalized_height(net).await?)))
+    }
     /// Pending nonces depend on which transactions each provider has admitted to its mempool.
     pub(crate) async fn evm_pending_nonce(&self, net: &EvmNet, address: &str) -> Result<u128> {
         let mut nonce: Option<u128> = None;

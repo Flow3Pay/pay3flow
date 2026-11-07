@@ -157,21 +157,27 @@ impl Service {
     ) -> Result<(Value, String, chrono::DateTime<Utc>, u64)> {
         let net = &self.desk_evm();
         self.evm_chain_matches(net).await?;
+        let finalized_height = self.evm_finalized_height(net).await?;
+        let finalized_tag = json!(format!("0x{finalized_height:x}"));
+        let finalized = self
+            .evm_agree(
+                net,
+                "eth_getBlockByNumber",
+                json!([finalized_tag, false]),
+            )
+            .await?;
         let precision = self
             .evm_agree(
                 net,
                 "eth_call",
-                json!([{"to":net.usdt,"data":"0x313ce567"},"finalized"]),
+                json!([{"to":net.usdt,"data":"0x313ce567"},finalized_tag]),
             )
             .await?;
         if number(&precision)? != 6 {
             return Err(invalid("USDT precision mismatch"));
         }
-        let finalized = self
-            .evm_agree(net, "eth_getBlockByNumber", json!(["finalized", false]))
-            .await?;
-        let head = self.evm_agree(net, "eth_blockNumber", json!([])).await?;
-        let lag = u64::try_from(number(&head)?.saturating_sub(number(&finalized["number"])?))
+        let head = self.evm_head(net).await?;
+        let lag = u64::try_from(head.saturating_sub(number(&finalized["number"])?))
             .map_err(|_| invalid("Ethereum lag overflow"))?;
         if lag > self.cfg.ethereum_lag_blocks {
             return Err(invalid("Ethereum observer exceeds configured lag"));
