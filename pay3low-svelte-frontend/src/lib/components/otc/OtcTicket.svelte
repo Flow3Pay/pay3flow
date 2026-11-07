@@ -12,6 +12,7 @@
   import { type SaleTicketState, type Stablecoin } from "$lib/otc/public-offers";
   import { everFromUsd, offerTotal } from "$lib/otc/offer-amount";
   import { formatTokenMarketValue, formatUsdAmount, formatUsdMarketValue, sanitizeDecimalInput } from "$lib/usd-amount";
+  import { walletFamily } from "$lib/wallet-execution";
   export let sale: SaleTicketState | null = null;
   export let direction: Direction = "buy";
   export let input = "100";
@@ -145,6 +146,10 @@
     else sale.onUsdt(value);
   }
   function changeReceive(value: string) { sale?.onUsdt(value); }
+  $: walletConnectable = !!sale && !!walletFamily(sale.stablecoinNetwork);
+  $: walletNetworkLabel = sale ? (networkNames[sale.stablecoinNetwork] ?? sale.stablecoinNetwork) : "";
+  $: everHint = sale && !sale.everAmount && !usdMode && sale.everApprox ? `≈ ${sale.everApprox}` : "";
+  $: usdtHint = sale && !sale.usdtAmount && sale.usdtApprox ? `≈ ${sale.usdtApprox}` : "—";
 
 </script>
 {#snippet asset(asset: string)}
@@ -173,15 +178,15 @@
         {#if settingsOpen}
           <div class="settingsPanel" role="dialog" aria-label={say("Offer settings", "Настройки предложения")} tabindex="-1">
             <div class="settingsPanelHead"><strong>{say("Offer settings", "Настройки предложения")}</strong><button type="button" class="settingsClose" aria-label={say("Close settings", "Закрыть настройки")} on:click={() => closeSettings(true)}>×</button></div>
-            <label class="recipientField">{say(`Your ${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address on ${sale.stablecoinNetwork}`, `Ваш ${direction === "buy" ? "адрес оплаты" : "адрес получения"} ${sale.stablecoin} в сети ${sale.stablecoinNetwork}`)}<input bind:this={settingsInput} data-testid="otc-offer-recipient" value={sale.receivingAddress} on:input={(event) => sale?.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={addressPlaceholders[sale.stablecoinNetwork] ?? say("Wallet address", "Адрес кошелька")} disabled={busy} /></label>
-            {#if sale.stablecoinNetwork === "ethereum"}<button class="walletAddress" type="button" disabled={busy || sale.linkingEvm} on:click={sale.onUseEthereum}>{sale.linkingEvm ? say("Connecting…", "Подключаем…") : say("Use my Ethereum wallet address", "Использовать адрес моего Ethereum-кошелька")}</button>{/if}
+            <label class="recipientField">{say(`Your ${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address on ${walletNetworkLabel}`, `Ваш ${direction === "buy" ? "адрес оплаты" : "адрес получения"} ${sale.stablecoin} в сети ${walletNetworkLabel}`)}<input bind:this={settingsInput} data-testid="otc-offer-recipient" value={sale.receivingAddress} on:input={(event) => sale?.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={addressPlaceholders[sale.stablecoinNetwork] ?? say("Wallet address", "Адрес кошелька")} disabled={busy} /></label>
+            {#if walletConnectable}<button class="walletAddress" type="button" disabled={busy || sale.linkingWallet} on:click={sale.onUseWallet}>{sale.linkingWallet ? say("Connecting…", "Подключаем…") : say(`Use my ${walletNetworkLabel} wallet address`, `Использовать адрес моего кошелька ${walletNetworkLabel}`)}</button>{/if}
           </div>
         {/if}
       </div>
     {/if}
   </div>
   <div class="moneyStack">
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say(usdMode ? "Buy amount · USD" : "Buy amount · EVER", usdMode ? "Количество к покупке · USD" : "Количество к покупке · EVER") : say(usdMode ? "Sell amount · USD" : "Sell amount · EVER", usdMode ? "Количество к продаже · USD" : "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={focusSend} on:blur={blurSend} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div>{#if sale}<div class="marketMeta"><span class="marketValue" data-testid="otc-market-value" aria-label={usdMode && usdAvailable ? say("Approximate EVER amount", "Примерная сумма в EVER") : say("Approximate USD market value", "Примерная рыночная стоимость в долларах")}>{usdMode && usdAvailable ? formatTokenMarketValue(Number(sale.everAmount), "EVER") : formatUsdMarketValue(Number(usdValue))}</span><button type="button" class="usdToggle" class:usdToggleActive={usdMode} aria-pressed={usdMode} disabled={!usdAvailable || busy} title={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} aria-label={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} on:click={toggleUsd}>USD</button>{#if maxBalance}<button type="button" class="usdToggle" class:usdToggleActive={maxActive} data-testid="otc-amount-max" aria-pressed={maxActive} disabled={busy} title={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} aria-label={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} on:click={applyMax}>{say("Max", "Макс")}</button>{/if}</div>{/if}</div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say(usdMode ? "Buy amount · USD" : "Buy amount · EVER", usdMode ? "Количество к покупке · USD" : "Количество к покупке · EVER") : say(usdMode ? "Sell amount · USD" : "Sell amount · EVER", usdMode ? "Количество к продаже · USD" : "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSendValue} placeholder={everHint} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={focusSend} on:blur={blurSend} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div>{#if sale}<div class="marketMeta"><span class="marketValue" data-testid="otc-market-value" aria-label={usdMode && usdAvailable ? say("Approximate EVER amount", "Примерная сумма в EVER") : say("Approximate USD market value", "Примерная рыночная стоимость в долларах")}>{usdMode && usdAvailable ? formatTokenMarketValue(Number(sale.everAmount), "EVER") : formatUsdMarketValue(Number(usdValue))}</span><button type="button" class="usdToggle" class:usdToggleActive={usdMode} aria-pressed={usdMode} disabled={!usdAvailable || busy} title={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} aria-label={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} on:click={toggleUsd}>USD</button>{#if maxBalance}<button type="button" class="usdToggle" class:usdToggleActive={maxActive} data-testid="otc-amount-max" aria-pressed={maxActive} disabled={busy} title={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} aria-label={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} on:click={applyMax}>{say("Max", "Макс")}</button>{/if}</div>{/if}</div></div>
   <ExchangeFlowBridge overlay reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{#if sale}<div class="methodControls">
     <button type="button" class="methodTrigger" data-tooltip={`${sale.stablecoin} · ${selectedStablecoinMethod?.name ?? sale.stablecoin}`} aria-haspopup="dialog" aria-label={say(`Select recipient asset: ${sale.stablecoin}`, `Выбрать актив получения: ${sale.stablecoin}`)} on:click={() => openStablecoinPicker("currency")}>
@@ -194,7 +199,7 @@
       <span class="networkCopy"><span class="networkName">{selectedStablecoinNetwork?.name ?? sale.stablecoinNetwork}</span></span>
       <svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
     </button></div>
-  </div>{:else}{@render asset(receiveAsset)}{/if}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say(`Total to pay · ${sale.stablecoin}`, `Всего к оплате · ${sale.stablecoin}`) : say(`Total to receive · ${sale.stablecoin}`, `Всего к получению · ${sale.stablecoin}`) : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} />{#if receiveShort}{@render shortfallMark(sale?.stablecoin || "USDT")}{/if}</div></div></div>
+  </div>{:else}{@render asset(receiveAsset)}{/if}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say(`Total to pay · ${sale.stablecoin}`, `Всего к оплате · ${sale.stablecoin}`) : say(`Total to receive · ${sale.stablecoin}`, `Всего к получению · ${sale.stablecoin}`) : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={usdtHint} />{#if receiveShort}{@render shortfallMark(sale?.stablecoin || "USDT")}{/if}</div></div></div>
   </div>
   <div class="priceField">
     <div class="priceHead">
@@ -216,7 +221,7 @@
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
   {#if sale?.seller && sale.blockingReason}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
-  <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingEvm || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
+  <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingWallet || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
 {#if sale}<PaymentMethodPicker open={stablecoinPickerOpen} title={stablecoinPickerStage === "detail" ? say(`Choose ${sale.stablecoin} network`, `Выберите сеть для ${sale.stablecoin}`) : say("Choose token", "Выберите токен")} role="recipient" networks={stablecoinPickerNetworks} paymentMethods={stablecoinMethods} selected={selectedStablecoinMethod} selectedNetwork={selectedStablecoinNetwork} initialStage={stablecoinPickerStage} initialCurrency={sale.stablecoin} onClose={() => stablecoinPickerOpen = false} onSelect={selectStablecoin} />{/if}
 
@@ -251,15 +256,15 @@
   .priceFieldRow { display: flex; min-height: 38px; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 10px; border: 1px solid var(--exchange-field-border); border-radius: 7px; background: var(--exchange-field-bg); }
   .priceFieldRow input { width: 100%; min-width: 0; min-height: 24px; height: 24px; padding: 0; border: 0; outline: 0; background: transparent; font-family: var(--font-mono); font-size: 16px; }
   .priceFieldRow > span { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; }
-  .moneyPanel .amountOutput::placeholder { color: var(--color-text-soft); font-size: 20px; letter-spacing: -.02em; opacity: .55; }
+  .moneyPanel .amountInput::placeholder { color: var(--color-text-soft); font-size: 20px; letter-spacing: -.02em; opacity: .55; }
   .priceHint { margin: 6px 0 12px; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
   .intentLabel { margin: 0 0 8px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: .04em; text-transform: uppercase; }
   .intentLabel span::before { display: inline-block; width: 5px; height: 5px; margin-right: 8px; border-radius: 50%; background: var(--color-danger); content: ""; vertical-align: 2px; }
   .receiveLabel span::before { background: var(--color-accent-strong); }
   .moneyStack { position: relative; display: flex; flex-direction: column; gap: 6px; }
   .moneyPanel { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 6px; padding: 10px; border: 1px solid var(--exchange-field-border); border-radius: 7px; background: var(--exchange-field-bg); }
-  .panelTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .panelTop > :first-child { flex: 1; min-width: 0; }
+  .panelTop { display: flex; width: 100%; align-items: stretch; justify-content: space-between; gap: 12px; }
+  .panelTop > :first-child { flex: 1 1 auto; width: 100%; min-width: 0; }
   .moneyPanel:focus-within { border-width: 1px; border-color: var(--exchange-field-border); outline: none; }
   .moneyPanel .panelCopy { display: grid; flex: none; width: 100%; grid-template-rows: 34px; gap: 2px; }
   .moneyPanel .amountInput { min-height: 34px; height: 34px; padding: 0; font-size: 28px; line-height: 1.15; letter-spacing: -.04em; }
@@ -267,10 +272,10 @@
   .moneyPanel .amountRow .amountInput { width: auto; flex: 1 1 auto; min-width: 0; }
   .moneyPanel .amountInput.shortfall { color: var(--color-warn); }
   .shortfallMark { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; background: transparent; color: var(--color-warn); }
-  .assetIdentity { display: flex; min-width: 0; align-items: center; justify-content: flex-end; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
+  .assetIdentity { display: flex; width: 100%; min-width: 0; align-items: center; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
   .assetMain { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 7px; min-height: 40px; padding: 5px 7px 5px 6px; }
   .assetAvatar { display: grid; flex: 0 0 auto; width: 28px; height: 28px; place-items: center; overflow: hidden; border-radius: 50%; }
-  .assetAvatar img { width: 20px; height: 20px; border-radius: 50%; object-fit: contain; }
+  .assetAvatar img { display: block; width: 20px; height: 20px; border-radius: 50%; object-fit: contain; }
   .assetText { min-width: 0; }
   .assetText strong { color: var(--color-text); font-size: 14px; font-weight: 650; line-height: 1.2; }
   .assetNetwork { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 40px; padding: 5px 7px; border-left: 1px solid var(--exchange-asset-border); }
@@ -280,16 +285,16 @@
   .assetCopy strong { color: #344235; font-size: 12px; font-weight: 700; line-height: 1; }
   :global(html[data-theme="dark"]) .assetCopy strong { color: var(--color-text); }
   .blockingHint { color: var(--color-danger); }
-  .methodControls { position: relative; z-index: 4; display: flex; min-width: 0; align-items: center; justify-content: flex-end; justify-self: stretch; gap: 0; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
-  .methodTrigger { display: inline-flex; width: auto; min-width: 0; min-height: 44px; flex: 1 1 auto; align-items: center; gap: 7px; padding: 6px 8px 6px 6px; border: 0; border-radius: 0; background: transparent; text-align: left; }
+  .methodControls { position: relative; z-index: 4; display: flex; width: 100%; min-width: 0; align-items: stretch; gap: 0; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
+  .methodTrigger { display: flex; width: auto; min-width: 0; min-height: 44px; flex: 1 1 auto; align-items: center; gap: 7px; padding: 6px 8px 6px 6px; border: 0; border-radius: 0; background: transparent; text-align: left; }
   .methodTrigger:hover { background: color-mix(in srgb, var(--exchange-asset-bg) 80%, var(--color-paper)); }
   .methodTrigger:focus-visible, .networkButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: calc(-1 * var(--focus-ring-width)); }
   .methodAvatar { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 50%; }
-  .methodAvatar img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+  .methodAvatar img { display: block; width: 20px; height: 20px; object-fit: contain; border-radius: 50%; }
   .methodText { min-width: 0; }
   .methodText strong { color: var(--color-text); font-size: 14px; font-weight: 650; line-height: 1.2; }
   .methodTextAsset strong { font-weight: 850; }
-  .networkControl { position: relative; z-index: 6; flex: 0 0 auto; margin-top: 0; border-left: 1px solid var(--exchange-asset-border); }
+  .networkControl { position: relative; z-index: 6; display: flex; flex: 0 0 auto; align-items: stretch; margin-top: 0; border-left: 1px solid var(--exchange-asset-border); }
   .networkButton { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 6px 8px; border: 0; border-radius: 0; background: transparent; color: var(--color-text-soft); text-align: left; }
   .networkButton:hover { background: transparent; }
   .networkDot { display: grid; width: 18px; height: 18px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 50%; }

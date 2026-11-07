@@ -5,6 +5,7 @@
   import { connectWallet, wallets } from "$lib/wallet-session";
   import { sameWalletAddress } from "$lib/wallet-amount";
   import { isValidWalletAddress } from "$lib/wallet-address";
+  import { chainIdForNetwork, walletFamily } from "$lib/wallet-execution";
   import { fetchMarketPrices } from "$lib/exchange";
   import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState, type Stablecoin } from "$lib/otc/public-offers";
   export let session: Session | null;
@@ -15,7 +16,7 @@
   export let posting = false;
   export let onPublished: () => void = () => {};
   let suggestionKey = "";
-  let offers: Offer[] = [], mine: Offer[] = [], history: OfferHistoryPoint[] = [], error = "", message = "";
+  let offers: Offer[] = [], mine: Offer[] = [], history: OfferHistoryPoint[] = [], error = "";
   let amountSource: "ever" | "usdt" = "ever";
   let stablecoin: Stablecoin = "USDT";
   let priceInput = "", priceMode = false, loadedDirection: Direction = "sell";
@@ -23,15 +24,14 @@
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
   let stablecoinNetwork = "ethereum";
   let stablecoinAssets: Array<{ asset: string; symbol: Stablecoin; network: string; asset_id: string }> = [];
-  let linkingEvm = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
+  let linkingWallet = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
   let marketAbort: AbortController | null = null;
   let balances: WalletBalance[] = [], balanceGeneration = 0;
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: seller = session?.wallets?.find(wallet => wallet.chain === "everscale")?.address || "";
   $: draftKey = session ? `pay3flow.otc.sell-draft.v1:${session.actor}` : "";
   $: if (mounted && (session?.actor || "") !== loadedActor) {
-    const previousActor = loadedActor;
-    loadedActor = session?.actor || ""; loadedDirection = direction; mine = []; reviewing = false; error = ""; message = "";
+    const previousActor = loadedActor;      loadedActor = session?.actor || ""; loadedDirection = direction; mine = []; reviewing = false; error = "";
     if (previousActor || !loadedActor) { everAmount = ""; usdtAmount = ""; stablecoin = "USDT"; receivingAddress = ""; key = ""; priceInput = ""; priceMode = false; marketPrice = true; }
     try {
       const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
@@ -48,20 +48,27 @@
     void refreshBalances();
   }
   $: askingRate = saleRate(everAmount,usdtAmount);
-  $: marketApprox = marketRate ? offerTotal(everAmount, marketRate)?.amount || "" : "";
+  // Conversion hints only — amounts stay independent of the price field.
+  $: hintRate = (priceMode && offerDecimal(priceInput, 12)) ? priceInput : marketRate;
+  $: usdtApprox = hintRate ? offerTotal(everAmount, hintRate)?.amount || "" : "";
+  $: everApprox = hintRate ? offerEver(usdtAmount, hintRate)?.amount || "" : "";
   $: price = priceMode ? priceInput : askingRate === "—" ? "" : askingRate;
-  $: roundingAsset = priceMode ? amountSource === "ever" ? offerTotal(everAmount,priceInput)?.rounded ? "USDT" as const : null : offerEver(usdtAmount,priceInput)?.rounded ? "EVER" as const : null : null;
-  $: priceRounded = !!roundingAsset;
+  $: roundingAsset = null;
+  $: priceRounded = false;
   $: amountFloored = offerFloored(everAmount,9) ? "EVER" as const : offerFloored(usdtAmount,6) ? "USDT" as const : null;
   $: everUnits = offerUnits(everAmount,9);
   $: usdtUnits = offerUnits(usdtAmount,6);
   /** Only the leg the trader pays from their own wallet can be short: EVER when selling, USDT when buying. */
   $: fundedLeg = direction === "sell" ? "ever" as const : "usdt" as const;
-  // The reported USDT balance belongs to the verified wallet, so a hand-typed paying address is not ours to judge.
+  // Backend balance reads cover Everscale + Ethereum only. Other stablecoin networks
+  // must not inherit the Ethereum USDT warning.
+  $: ethereumWallet = session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "";
   $: fundedBalance = fundedLeg === "ever"
     ? balances.find(balance => balance.symbol === "EVER" && balance.state === "ok")?.amount || ""
-    : sameWalletAddress("evm", receivingAddress.trim(), session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "")
-      ? balances.find(balance => balance.symbol === stablecoin && balance.state === "ok")?.amount || ""
+    : stablecoinNetwork === "ethereum"
+      && !!ethereumWallet
+      && sameWalletAddress("evm", receivingAddress.trim(), ethereumWallet)
+      ? balances.find(balance => balance.symbol === stablecoin && balance.chain === "ethereum" && balance.state === "ok")?.amount || ""
       : "";
   $: shortfall = offerShortfall(
     fundedLeg === "ever" ? everUnits : usdtUnits,
@@ -84,28 +91,49 @@
   const networkLabel = (network: string) => networkLabels[network] ?? network;
   $: valid = !blockingReason;
   $: if (direction !== loadedDirection) resetDirection(direction);
-  function resetDirection(next: Direction) { loadedDirection = next; amountSource = next === "buy" ? "usdt" : "ever"; stablecoinNetwork = "ethereum"; receivingAddress = ""; reviewing = false; key = ""; message = ""; }
-  $: if (mounted) suggestEthereum(
-    session?.wallets.find(w => w.chain === "ethereum")?.address || ($wallets.evm?.family === "evm" && $wallets.evm.chainId === otcP2pNetwork().chainId ? $wallets.evm.address : ""),
-    session?.actor || "",
-  );
-  function suggestEthereum(address: string, actor: string) {
-    const next=`${actor}:${address}`;
-    if (next === suggestionKey) return;
-    suggestionKey=next;
-    if (address && !receivingAddress) { receivingAddress=address; edited(); }
+  function resetDirection(next: Direction) { loadedDirection = next; amountSource = next === "buy" ? "usdt" : "ever"; stablecoinNetwork = "ethereum"; receivingAddress = ""; reviewing = false; key = ""; suggestionKey = ""; }
+  function recipientSuggestion(network: string): string {
+    const family = walletFamily(network);
+    if (!family) return "";
+    if (family === "evm") {
+      const expected = network === "ethereum" ? otcP2pNetwork().chainId : chainIdForNetwork(network);
+      if (network === "ethereum" || network === otcP2pNetwork().name) {
+        const verified = session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "";
+        if (verified) return verified;
+      }
+      return $wallets.evm?.family === "evm" && expected != null && $wallets.evm.chainId === expected ? $wallets.evm.address : "";
+    }
+    return $wallets[family]?.address || "";
   }
-  function edited() { reviewing = false; key = ""; message = ""; }
-  async function useEthereumWallet() {
-    if (posting || busy || linkingEvm) return;
-    const actor = session?.actor; linkingEvm = true; error = "";
+  $: if (mounted) suggestRecipient(stablecoinNetwork, recipientSuggestion(stablecoinNetwork), session?.actor || "");
+  function suggestRecipient(network: string, address: string, actor: string) {
+    const next = `${actor}:${network}:${address}`;
+    if (next === suggestionKey) return;
+    suggestionKey = next;
+    if (address && !receivingAddress) { receivingAddress = address; edited(); }
+  }    function edited() { reviewing = false; key = ""; }
+  async function useNetworkWallet() {
+    if (posting || busy || linkingWallet) return;
+    const family = walletFamily(stablecoinNetwork);
+    if (!family) {
+      error = say(`Connect a ${networkLabel(stablecoinNetwork)} wallet from the wallet menu.`, `Подключите кошелёк ${networkLabel(stablecoinNetwork)} через меню кошельков.`);
+      return;
+    }
+    const actor = session?.actor; linkingWallet = true; error = "";
     try {
-      const wallet = await connectWallet(walletNetwork("ethereum", otcP2pNetwork()));
+      const target = stablecoinNetwork === "ethereum" ? walletNetwork("ethereum", otcP2pNetwork()) : stablecoinNetwork;
+      const wallet = await connectWallet(target);
       if (session?.actor !== actor) return;
-      if (wallet.family !== "evm" || wallet.chainId !== otcP2pNetwork().chainId) throw new Error(say(`Select ${otcP2pNetwork().label}.`, `Выберите сеть ${otcP2pNetwork().label}.`));
+      if (wallet.family !== family) throw new Error(say(`Select a ${networkLabel(stablecoinNetwork)} wallet.`, `Выберите кошелёк ${networkLabel(stablecoinNetwork)}.`));
+      if (wallet.family === "evm") {
+        const expected = stablecoinNetwork === "ethereum" ? otcP2pNetwork().chainId : chainIdForNetwork(stablecoinNetwork);
+        if (expected == null || wallet.chainId !== expected) {
+          throw new Error(say(`Select ${networkLabel(stablecoinNetwork)}.`, `Выберите сеть ${networkLabel(stablecoinNetwork)}.`));
+        }
+      }
       receivingAddress = wallet.address; edited();
     } catch (e) { if (session?.actor === actor) error = e instanceof Error ? e.message : "Connection failed"; }
-    finally { linkingEvm = false; }
+    finally { linkingWallet = false; }
   }
   async function refresh() {
     if (!enabled) return;
@@ -140,7 +168,7 @@
     }
   }
   async function publish() {
-    if (!enabled || !session || !seller || posting || busy || linkingEvm || !valid) return;
+    if (!enabled || !session || !seller || posting || busy || linkingWallet || !valid) return;
     if (!reviewing) { reviewing = true; error = ""; return; }
     key ||= crypto.randomUUID();
     const selectedAsset = stablecoinAssets.find(item => item.symbol === stablecoin && item.network === stablecoinNetwork);
@@ -152,7 +180,7 @@
     try {
       localStorage.setItem(draftKey, JSON.stringify({ ...body, key, price_mode: priceMode, price_input: priceInput, amount_source: amountSource, market_price: marketPrice }));
     } catch { error = say("Enable browser storage to publish and safely retry an offer.", "Разрешите хранение данных в браузере для безопасной публикации и повторной проверки."); return; }
-    posting = true; error = ""; message = "";
+    posting = true; error = "";
     const owner = session;
     try {
       const published = await request<Offer>("/offers", owner.token, body, key);
@@ -166,7 +194,6 @@
         return;
       }
       offers = [published, ...offers.filter(offer => offer.id !== published.id)];
-      message = direction === "buy" ? say("Your EVER buy offer is published.", "Ваше предложение о покупке EVER опубликовано.") : say("Your EVER sale offer is published.", "Ваше предложение о продаже EVER опубликовано.");
       onPublished();
       await refresh();
     } catch (e) { if (session?.token === owner.token) error = e instanceof Error ? e.message : "Request failed"; }
@@ -204,9 +231,8 @@
     }
   }
   function applyMarketRate(rate: string) {
-    priceInput = rate; priceMode = true;
-    if (amountSource === "ever") usdtAmount = offerTotal(everAmount, rate)?.amount || "";
-    else everAmount = offerEver(usdtAmount, rate)?.amount || "";
+    priceInput = rate;
+    priceMode = true;
   }
   function useMarketPrice(checked: boolean) {
     marketPrice = checked;
@@ -228,41 +254,40 @@
 
   let started = false;
   $: if (mounted && enabled && !started) { started = true; void refresh(); void refreshBalances(); }
-  function changePrice(value: string) { priceInput = value; priceMode = true; if (amountSource === "ever") usdtAmount = offerTotal(everAmount,priceInput)?.amount || ""; else everAmount = offerEver(usdtAmount,priceInput)?.amount || ""; edited(); }
+  function changePrice(value: string) { priceInput = value; priceMode = true; edited(); }
   function changeEver(value: string) {
     everAmount = value; amountSource = "ever";
     if (!priceMode && marketPrice && marketRate) { priceInput = marketRate; priceMode = true; }
-    if (priceMode) usdtAmount = offerTotal(everAmount, priceInput)?.amount || "";
     edited();
   }
   function changeUsdt(value: string) {
     usdtAmount = value; amountSource = "usdt";
     if (!priceMode && marketPrice && marketRate) { priceInput = marketRate; priceMode = true; }
-    if (priceMode) everAmount = offerEver(usdtAmount, priceInput)?.amount || "";
     edited();
   }
-  function changeStablecoin(value: Stablecoin) { stablecoin = value; stablecoinNetwork = "ethereum"; receivingAddress = ""; edited(); if (marketAbort) void refreshMarket(marketAbort.signal); }
+  function changeStablecoin(value: Stablecoin) { stablecoin = value; stablecoinNetwork = "ethereum"; receivingAddress = ""; suggestionKey = ""; edited(); if (marketAbort) void refreshMarket(marketAbort.signal); }
   function changeAddress(value: string) { receivingAddress = value; edited(); }
   function changeStablecoinNetwork(value: string) {
     if (stablecoinNetwork === value) return;
     stablecoinNetwork = value;
     receivingAddress = "";
+    suggestionKey = "";
     edited();
   }
   $: ticket = {
-    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, stablecoinNetwork, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingEvm,
-    marketPrice, marketRate, marketUsdRate, marketApprox, error,
+    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, stablecoinNetwork, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
+    marketPrice, marketRate, marketUsdRate, usdtApprox, everApprox, error,
     onPrice: changePrice,
     onEver: changeEver,
     onUsdt: changeUsdt,
     onStablecoin: changeStablecoin,
     onAddress: changeAddress,
     onStablecoinNetwork: changeStablecoinNetwork,
-    onUseEthereum: useEthereumWallet,
+    onUseWallet: useNetworkWallet,
     onMarketPrice: useMarketPrice,
     onRequest: () => seller ? void publish() : onConnect(),
     onCloseReview: () => { reviewing = false; },
   } satisfies SaleTicketState;
 </script>
 
-<slot {ticket} {offers} {mine} {history} {message} offerError={error} onCancel={cancel} />
+<slot {ticket} {offers} {mine} {history} offerError={error} onCancel={cancel} />

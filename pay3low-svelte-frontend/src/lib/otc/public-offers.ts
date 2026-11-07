@@ -52,12 +52,15 @@ export interface SaleTicketState {
   askingRate: string;
   valid: boolean;
   reviewing: boolean;
-  linkingEvm: boolean;
+  linkingWallet: boolean;
   marketPrice: boolean;
   marketRate: string;
   /** USD per EVER from the same reference feed, used by the USD amount input. */
   marketUsdRate: string;
-  marketApprox: string;
+  /** Soft conversion hint for an empty stablecoin amount field. */
+  usdtApprox: string;
+  /** Soft conversion hint for an empty EVER amount field. */
+  everApprox: string;
   error: string;
   onPrice: (value: string) => void;
   onEver: (value: string) => void;
@@ -65,7 +68,7 @@ export interface SaleTicketState {
   onStablecoin: (value: Stablecoin) => void;
   onAddress: (value: string) => void;
   onStablecoinNetwork: (value: string) => void;
-  onUseEthereum: () => void;
+  onUseWallet: () => void;
   onMarketPrice: (checked: boolean) => void;
   onRequest: () => void;
   onCloseReview: () => void;
