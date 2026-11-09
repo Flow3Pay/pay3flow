@@ -243,7 +243,8 @@
           {#if $wallets.evm}<button class="accountAction" type="button" disabled={working} on:click={() => disconnect("evm", "ethereum")}>{copy("Disconnect EVM wallet")}</button>{/if}
           {#if account?.session}<button class="accountAction" type="button" disabled={account.disconnectDisabled || !!account.progress || Boolean(busy)} on:click={account.onDisconnect}>{copy("Disconnect")}</button>{/if}
           {#if account?.requestingQuote}
-            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} on:click={account.onRequest}>{copy("Request exact quote")}</button>
+            {#if account.quoteStatus}<p class="walletStatus" id="otc-quote-status" data-testid="otc-quote-status">{account.quoteStatus}</p>{/if}
+            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} aria-describedby={account.quoteStatus ? "otc-quote-status" : undefined} on:click={account.onRequest}>{copy("Request exact quote")}</button>
           {/if}
         </div>
       </div>

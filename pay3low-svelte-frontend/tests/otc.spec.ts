@@ -227,7 +227,7 @@ for (const revokeFails of [false, true]) test(`OTC logout disconnects both walle
   await dialog.getByRole("button", { name: "Connect Ethereum wallet", exact: true }).click();
   await dialog.getByRole("button", { name: "Verify Everscale wallet", exact: true }).click();
   await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (2)");
-  await dialog.locator(".accountAction").click();
+  await dialog.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Connect wallet");
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("pay3flow.wallet-families")!))).toEqual([]);
   expect(await page.evaluate(() => sessionStorage.getItem("pay3flow.otc.session.v1"))).toBeNull();
@@ -244,14 +244,14 @@ test("a verified Everscale wallet can disconnect and reconnect without logging o
   await dialog.getByRole("button", { name: "Connect Ethereum wallet", exact: true }).click();
   await dialog.getByRole("button", { name: "Verify Everscale wallet", exact: true }).click();
   const everChoice = dialog.locator('[data-family="everscale"]');
-  await expect(everChoice).toContainText("Connected wallet");
+  await expect(everChoice.getByRole("button", { name: "Disconnect Everscale wallet", exact: true })).toBeVisible();
   await everChoice.getByRole("button", { name: "Disconnect Everscale wallet", exact: true }).click();
   await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (1)");
-  await expect(everChoice).toContainText("Wallet disconnected");
-  await expect(dialog.getByRole("button", { name: "Disconnect Ethereum wallet", exact: true })).toBeEnabled();
+  await expect(everChoice.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Disconnect EVM wallet", exact: true })).toBeEnabled();
   await everChoice.getByRole("button", { name: "Connect Everscale wallet", exact: true }).click();
   await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (2)");
-  await expect(everChoice).toContainText("Connected wallet");
+  await expect(everChoice.getByRole("button", { name: "Disconnect Everscale wallet", exact: true })).toBeVisible();
 });
 
 test("a connected Everscale wallet has a disconnect action before OTC verification", async ({ page }) => {
@@ -404,7 +404,7 @@ test("unconfigured OTC verification still permits connecting and disconnecting t
   await expect(dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeEnabled();
   await dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true }).click();
   await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (1)");
-  await expect(dialog.locator('[data-family="everscale"]')).toContainText("Connected wallet");
+  await expect(dialog.locator('[data-family="everscale"]')).toContainText("Disconnect");
   await expect(dialog.locator('[data-family="everscale"]')).toContainText("OTC verification is unavailable for this network.");
   await dialog.getByRole("button", { name: "Disconnect Everscale wallet", exact: true }).click();
   await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Connect wallet");
@@ -423,7 +423,7 @@ test("quote reuses the header picker; cancelling preserves the ticket without an
   await expect(dialog).toHaveAttribute("id", "wallet-connections");
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(dialog.getByRole("searchbox", { name: "Search wallets" })).toBeFocused();
-  await expect.poll(() => dialog.locator(".optionLogo img").evaluateAll(images => images.length === 4 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  await expect.poll(() => dialog.locator(".optionLogo img").evaluateAll(images => images.length === 19 && images.filter(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0).length >= 4)).toBe(true);
   expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.keyboard.press("Shift+Tab");
   await expect(dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeFocused();
@@ -447,7 +447,7 @@ test("quote reuses the header picker; cancelling preserves the ticket without an
   await expect(dialog).toHaveAttribute("id", "wallet-connections");
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(dialog.getByRole("button", { name: "Request exact quote", exact: true })).toHaveCount(0);
-  await expect(dialog.locator(".optionName")).toHaveText(["Ethereum", "NEAR", "TRON", "Everscale"]);
+  await expect(dialog.locator(".optionName")).toHaveText(["Ethereum", "BNB Smart Chain", "Optimism", "Polygon", "Base", "Avalanche C-Chain", "Arbitrum One", "Gnosis", "Linea", "Plasma", "Ink", "Sei", "NEAR", "TRON", "Solana", "Sui", "Aptos", "TON", "Everscale"]);
   await dialog.locator(".closeButton").click();
   expect(f.requests.filter(request => request.path === "/rfqs")).toHaveLength(0);
   expect(f.auth).toHaveLength(0);

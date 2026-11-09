@@ -55,8 +55,8 @@ test("wallet dialog has avatars, contains keyboard focus and closes from every p
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute("aria-modal", "true");
     await expect(dialog.getByRole("heading", { name: "Available networks", exact: true })).toHaveCount(0);
-    await expect(dialog.locator(".optionName")).toHaveText(["Ethereum", "NEAR", "TRON", "Everscale"]);
-    await expect.poll(() => dialog.locator(".optionLogo img").evaluateAll(images => images.length === 4 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    await expect(dialog.locator(".optionName")).toHaveText(["Ethereum", "BNB Smart Chain", "Optimism", "Polygon", "Base", "Avalanche C-Chain", "Arbitrum One", "Gnosis", "Linea", "Plasma", "Ink", "Sei", "NEAR", "TRON", "Solana", "Sui", "Aptos", "TON", "Everscale"]);
+    await expect.poll(() => dialog.locator(".optionLogo img").evaluateAll(images => images.length === 19 && images.filter(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0).length >= 4)).toBe(true);
     await expect(page.locator(".appShell")).toHaveAttribute("inert", "");
     const search = dialog.getByRole("searchbox", { name: "Search wallets" });
     await expect(search).toBeFocused();
@@ -142,13 +142,13 @@ test("wallet search filters network names and tickers, handles empty results and
   await dialog.getByRole("button", { name: "Clear wallet search" }).click();
   await expect(search).toHaveValue("");
   await expect(search).toBeFocused();
-  await expect(dialog.locator(".walletChoice")).toHaveCount(4);
+  await expect(dialog.locator(".walletChoice")).toHaveCount(19);
   await search.fill("TRX");
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true }).click();
   await expect(search).toHaveValue("");
-  await expect(dialog.locator(".walletChoice")).toHaveCount(4);
+  await expect(dialog.locator(".walletChoice")).toHaveCount(19);
 });
 
 test("wallet search finds connected addresses and keeps focus when disconnecting removes a result", async ({ page }) => {

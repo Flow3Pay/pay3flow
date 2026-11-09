@@ -65,7 +65,7 @@
   $: if (mounted) otcWalletDialog.set({
     session, bound, busy, error, progress: walletProgress, disconnectDisabled: accountLocked || offersBusy,
     chains: config?.wallet_login_chains ?? ["ethereum", "everscale"],
-    enabled: !!(config?.wallet_login_available ?? config?.enabled), requestingQuote, quoteReady,
+    enabled: !!(config?.wallet_login_available ?? config?.enabled), requestingQuote, quoteReady, quoteStatus: quote ? "" : quoteStatus,
     onClose: closeIdentity,
     onConnect: chain => run(() => connectAccount(chain)),
     onVerify: chain => run(() => verify(chain)),
