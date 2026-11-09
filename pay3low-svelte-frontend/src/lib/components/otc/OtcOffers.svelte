@@ -236,7 +236,9 @@
   }
   function useMarketPrice(checked: boolean) {
     marketPrice = checked;
-    if (checked && marketRate) { applyMarketRate(marketRate); edited(); }
+    if (checked && marketRate) applyMarketRate(marketRate);
+    else { priceInput = ""; priceMode = false; }
+    edited();
   }
   onMount(() => {
     mounted = true;
