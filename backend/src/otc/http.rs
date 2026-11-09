@@ -38,6 +38,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/offers/history", get(public_offer_history))
         .route("/api/otc/offers/:id/cancel", post(cancel_public_offer))
         .route("/api/otc/offers/:id/accept", post(accept_offer))
+        .route("/api/otc/volumes", get(volumes))
         .route("/api/otc/p2p/trades", get(p2p_trades))
         .route("/api/otc/p2p/assets", get(p2p_assets))
         .route("/api/otc/p2p/trades/:id", get(p2p_deal))
@@ -169,6 +170,10 @@ async fn public_offers(State(state): State<AppState>) -> Result<Json<Value>> {
 }
 async fn public_offer_history(State(state): State<AppState>) -> Result<Json<Value>> {
     Ok(Json(state.otc.public_offer_history().await?))
+}
+/// Settled EVER/USDT volume for the last 24 hours, 7 days and all time.
+async fn volumes(State(state): State<AppState>) -> Result<Json<Value>> {
+    Ok(Json(state.otc.volumes().await?))
 }
 /// Time-bucketed chart data: candles and book levels from the desk's own
 /// records, real exchange OHLC for the selected range, plus the indicative

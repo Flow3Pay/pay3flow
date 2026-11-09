@@ -31,6 +31,7 @@ mod route_provider;
 #[cfg(test)]
 mod tests;
 mod transfers;
+mod volumes;
 mod wallet;
 mod workers;
 

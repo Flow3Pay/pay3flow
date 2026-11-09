@@ -133,7 +133,7 @@
   $: canPrepareFee = isFeePayer && feeStatus === "accrued";
   $: flowActive = deal ? p2pLegActive(deal, "payment") || p2pLegActive(deal, "payout") : false;
   $: canCancel = !!deal && deal.state === "payment_pending";
-  $: canCloseMine = !!deal && deal.state === "delivery_pending" && !!deal.my_confirmed && !deal.counterparty_confirmed;
+
 
   $: {
     const actor = session?.actor || "";
@@ -511,7 +511,7 @@
         <span>·</span>
         <strong>{deal.terms.usdt_amount}</strong><small>{deal.terms.stablecoin || "USDT"}</small>
       </div>
-      <button type="button" class="closeButton" aria-label={say("Close", "Закрыть")} on:click={close}>
+      <button type="button" class="closeButton" aria-label={say("Close window", "Закрыть окно")} on:click={close}>
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
       </button>
     </div>
@@ -684,10 +684,9 @@
         <p class="waitingAction">{waitingLabel}</p>
       {/if}
       {#if canCancel}
-        <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-cancel" on:click={cancelDeal}>{say("Cancel offer", "Отменить оффер")}</button>
-      {:else if canCloseMine}
-        <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-close-mine" on:click={close}>{say("Close for me", "Закрыть для меня")}</button>
+        <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-cancel" on:click={cancelDeal}>{say("Cancel deal", "Отменить сделку")}</button>
       {/if}
+      <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-close" on:click={close}>{say("Close", "Закрыть")}</button>
     </div>
   {/if}
 </dialog>
