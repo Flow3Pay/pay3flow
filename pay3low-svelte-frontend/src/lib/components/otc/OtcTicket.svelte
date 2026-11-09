@@ -285,7 +285,8 @@
   .assetCopy strong { color: #344235; font-size: 12px; font-weight: 700; line-height: 1; }
   :global(html[data-theme="dark"]) .assetCopy strong { color: var(--color-text); }
   .blockingHint { color: var(--color-danger); }
-  .methodControls { position: relative; z-index: 4; display: flex; width: 100%; min-width: 0; align-items: stretch; gap: 0; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
+  .methodControls { position: relative; z-index: 4; display: flex; width: 100%; max-width: none; min-width: 0; align-items: stretch; justify-content: flex-start; gap: 0; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
+  .exchangeMoneyPanel .methodControls { width: 100%; max-width: none; justify-content: flex-start; }
   .methodTrigger { display: flex; width: auto; min-width: 0; min-height: 44px; flex: 1 1 auto; align-items: center; gap: 7px; padding: 6px 8px 6px 6px; border: 0; border-radius: 0; background: transparent; text-align: left; }
   .methodTrigger:hover { background: color-mix(in srgb, var(--exchange-asset-bg) 80%, var(--color-paper)); }
   .methodTrigger:focus-visible, .networkButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: calc(-1 * var(--focus-ring-width)); }
@@ -294,8 +295,8 @@
   .methodText { min-width: 0; }
   .methodText strong { color: var(--color-text); font-size: 14px; font-weight: 650; line-height: 1.2; }
   .methodTextAsset strong { font-weight: 850; }
-  .networkControl { position: relative; z-index: 6; display: flex; flex: 0 0 auto; align-items: stretch; margin-top: 0; border-left: 1px solid var(--exchange-asset-border); }
-  .networkButton { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 6px 8px; border: 0; border-radius: 0; background: transparent; color: var(--color-text-soft); text-align: left; }
+  .networkControl { position: relative; z-index: 6; display: flex; min-width: 0; flex: 0 1 auto; align-items: stretch; margin-top: 0; border-left: 1px solid var(--exchange-asset-border); }
+  .networkButton { display: inline-flex; min-width: 0; min-height: 44px; flex: 1 1 auto; align-items: center; gap: 7px; padding: 6px 8px; border: 0; border-radius: 0; background: transparent; color: var(--color-text-soft); text-align: left; }
   .networkButton:hover { background: transparent; }
   .networkDot { display: grid; width: 18px; height: 18px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 50%; }
   .networkDot img { display: block; width: 100%; height: 100%; object-fit: contain; }
