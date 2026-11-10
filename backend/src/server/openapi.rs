@@ -111,12 +111,13 @@ fn components() -> Value {
             "ReferenceRatesResponse": {"type": "object", "required": ["from", "to", "market", "rates", "unavailable_sources"], "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "market": {"type": "string", "enum": ["cash", "noncash"]}, "rates": {"type": "array", "items": {"$ref": "#/components/schemas/ReferenceRate"}}, "unavailable_sources": {"type": "array", "items": {"type": "object", "required": ["name", "url"], "properties": {"name": {"type": "string"}, "url": {"type": "string", "format": "uri"}}}}}},
             "MarketPricesResponse": {
                 "type": "object",
-                "required": ["source", "stale", "updated_at", "prices"],
+                "required": ["source", "stale", "updated_at", "prices", "fiat"],
                 "properties": {
                     "source": { "type": "string", "example": "Gate.io" },
                     "stale": { "type": "boolean" },
                     "updated_at": { "type": "integer", "format": "int64", "nullable": true, "description": "Unix time of the last successful server refresh." },
-                    "prices": { "type": "object", "additionalProperties": { "type": "number", "format": "double" }, "description": "USD price per one unit of each supported asset." }
+                    "prices": { "type": "object", "additionalProperties": { "type": "number", "format": "double" }, "description": "USD price per one unit of each supported asset." },
+                    "fiat": { "type": "object", "additionalProperties": { "type": "number", "format": "double", "exclusiveMinimum": true, "minimum": 0 }, "description": "Fresh informational USD benchmark per one unit of each supported fiat currency." }
                 }
             },
             "User": {

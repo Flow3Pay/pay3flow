@@ -76,4 +76,6 @@ RUB/USD uses CBR; USD/AMD uses Rate.am; BYN, UAH and KZT use their national bank
 
 Official source snapshots refresh hourly; Rate.am refreshes every five minutes. Concurrent refreshes are coalesced. Failures retry after one minute and may retain a visibly stale snapshot for up to 72 hours for official feeds or one hour for Rate.am. Source outages are explicit; no alternative source is silently substituted.
 
+`GET /api/market-prices` also includes a `fiat` map with the fresh official USD benchmark for each supported fiat. The converter uses it only for the small approximate USD value below a fiat amount; crypto amounts keep using the Gate.io prices. The map never prices a route, and an unavailable feed simply omits that currency.
+
 For any pair involving crypto, the UI instead shows the median target/source ratio of complete, unexpired routes in the current search. It uses major-unit amounts and the full result set, deduplicated by route ID, independently of the selected best route and progressive display. The reference is cleared when search inputs change.

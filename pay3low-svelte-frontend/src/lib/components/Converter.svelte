@@ -179,6 +179,7 @@
   let marketRefreshTimer: number | undefined;
   let marketController: AbortController | null = null;
   let marketPrices: Record<string, number> = {};
+  let fiatPrices: Record<string, number> = {};
   let marketPricesUpdatedAt = 0;
   let marketUsd: { source: number | null; target: number | null } = { source: null, target: null };
   let initialSearchTimer: number | undefined;
@@ -637,6 +638,8 @@
   $: previewCanSwap = Boolean(previewRoute?.status === "complete" && canOpenSwap(buildRouteTutorial(previewRoute, {}, {}, {}, key => key)[0], previewRoute));
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
+  $: sourceMarketUsdPrice = sourceMethod?.kind === "wallet" ? marketPrices[selectedSourceCurrency] : fiatPrices[selectedSourceCurrency];
+  $: targetMarketUsdPrice = targetMethod?.kind === "wallet" ? marketPrices[selectedTargetCurrency] : fiatPrices[selectedTargetCurrency];
   $: sourceUsdPrice = sourceMethod?.kind === "wallet" ? marketPrices[selectedSourceCurrency] : undefined;
   $: sourceUsdAvailable = typeof sourceUsdPrice === "number" && Number.isFinite(sourceUsdPrice) && sourceUsdPrice > 0;
   $: if (!sourceUsdAvailable && sourceAmountUsd) { sourceAmountUsd = false; sourceUsdEntry = ""; }
@@ -657,8 +660,8 @@
     sources: [...selectedSources], methods: [...selectedExchangeMethods], assets: [...selectedIntermediaryAssets],
   } : null);
   $: marketUsd = {
-    source: sourceMethod?.kind === "wallet" ? calculateMarketUsd(displayedSourceAmount, marketPrices[selectedSourceCurrency]) : null,
-    target: targetMethod?.kind === "wallet" ? calculateMarketUsd(displayedTargetAmount, marketPrices[selectedTargetCurrency]) : null,
+    source: calculateMarketUsd(displayedSourceAmount, sourceMarketUsdPrice),
+    target: calculateMarketUsd(displayedTargetAmount, targetMarketUsdPrice),
   };
   $: converterAmountDigits = Math.min(14, Math.max(10, displayedSourceAmount.replace(/\D/g, "").length, displayedTargetAmount.replace(/\D/g, "").length));
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
@@ -690,15 +693,20 @@
     try {
       const response = await fetchMarketPrices(controller.signal);
       if (controller.signal.aborted) return;
-      if (Object.keys(response.prices).length) {
+      if (Object.keys(response.prices).length || Object.keys(response.fiat ?? {}).length) {
         marketPrices = response.prices;
+        fiatPrices = response.fiat ?? {};
         marketPricesUpdatedAt = response.updated_at ?? Math.floor(Date.now() / 1000);
       } else if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt >= 6 * 60 * 60) {
         marketPrices = {};
+        fiatPrices = {};
       }
     } catch (error) {
       if (!controller.signal.aborted) {
-        if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt >= 6 * 60 * 60) marketPrices = {};
+        if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt >= 6 * 60 * 60) {
+          marketPrices = {};
+          fiatPrices = {};
+        }
         console.warn("Market prices unavailable", error);
       }
     }

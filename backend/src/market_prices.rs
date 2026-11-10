@@ -1,9 +1,11 @@
-//! Indicative USD values for the crypto assets in the public picker.
+//! Indicative USD values for the assets in the public picker.
 //!
 //! One cached Gate.io tickers request serves every visitor and every asset.
 //! Symbols are mapped to explicit pairs because looking a token up by ticker
 //! alone can select a different coin. DefiLlama is only kept as a chart
-//! fallback for the rare case where Gate has no candles for an asset.
+//! fallback for the rare case where Gate has no candles for an asset. Fiat
+//! benchmarks come from the informational reference-rate feeds and are only
+//! shown beside amounts, never used to price executable quotes.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -221,6 +223,8 @@ pub struct MarketPricesResponse {
     stale: bool,
     updated_at: Option<i64>,
     prices: HashMap<&'static str, f64>,
+    /// Official fiat benchmarks expressed as USD per one currency unit.
+    fiat: HashMap<&'static str, f64>,
 }
 
 #[derive(Serialize)]
@@ -358,6 +362,7 @@ impl MarketPriceService {
                         .collect()
                 })
                 .unwrap_or_default(),
+            fiat: HashMap::new(),
         }
     }
 
@@ -689,7 +694,9 @@ impl MarketPriceService {
 }
 
 pub async fn market_prices(State(state): State<AppState>) -> Json<MarketPricesResponse> {
-    Json(state.market_prices.list().await)
+    let mut response = state.market_prices.list().await;
+    response.fiat = state.reference_rates.usd_rates().await;
+    Json(response)
 }
 
 pub async fn market_values(

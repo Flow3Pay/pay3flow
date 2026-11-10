@@ -249,6 +249,28 @@ impl ReferenceRateService {
         })
     }
 
+    /// Fresh official USD benchmarks for every supported fiat. Used only as an
+    /// indicative value line in the converter; executable quotes never read it.
+    pub async fn usd_rates(&self) -> HashMap<&'static str, f64> {
+        let requests =
+            FIAT.iter()
+                .filter(|currency| **currency != "USD")
+                .map(|&currency| async move {
+                    let response = self.list(currency, "USD", Market::Noncash).await.ok()?;
+                    let rate = response.rates.into_iter().find(|rate| !rate.stale)?;
+                    Some((currency, rate.rate))
+                });
+        let mut rates = HashMap::from([("USD", 1.0)]);
+        for (currency, rate) in futures::future::join_all(requests)
+            .await
+            .into_iter()
+            .flatten()
+        {
+            rates.insert(currency, rate);
+        }
+        rates
+    }
+
     pub async fn list(
         &self,
         from: &str,

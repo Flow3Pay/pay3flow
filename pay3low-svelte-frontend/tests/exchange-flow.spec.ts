@@ -784,6 +784,17 @@ test("USD values recover after the first market price request fails", async ({ p
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
 });
 
+test("fiat amounts show an approximate USD value from the reference benchmarks", async ({ page }) => {
+  await mockBackend(page);
+  await page.route("**/api/market-prices", route => route.fulfill({ json: {
+    source: "Gate.io", stale: false, updated_at: Math.floor(Date.now() / 1000),
+    prices: { USDT: 1 }, fiat: { AMD: 0.0025, RUB: 0.0125, USD: 1 },
+  } }));
+  await openApp(page, "/#/swap/AMD/RUB?amount=100000&from=am-ameriabank&to=ru-sberbank");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$250.00");
+  await expect(page.locator(".moneyPanelSource .usdToggle")).toHaveCount(0);
+});
+
 test("USD toggle turns the sending field into a USD budget and shows token units", async ({ page }) => {
   await mockBackend(page);
   await openApp(page, "/#/swap/USDT/USDC?amount=2");

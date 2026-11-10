@@ -168,6 +168,55 @@ async fn cross_rates_dual_sources_identity_and_unsupported_currency() {
     assert!(service.list("BTC", "USD", Market::Cash).await.is_err());
 }
 
+#[tokio::test]
+async fn usd_rates_cover_supported_fiats_from_fresh_benchmarks() {
+    let service = ReferenceRateService::default();
+    for (source, values) in [
+        (Source::Cbr, vec![("USD", 80.0)]),
+        (Source::Nbrb, vec![("USD", 3.2)]),
+        (Source::Nbu, vec![("USD", 40.0)]),
+        (Source::Nbk, vec![("USD", 500.0)]),
+    ] {
+        service.caches[&(source, Market::Noncash)]
+            .lock()
+            .await
+            .snapshot = Some(snapshot(
+            values
+                .into_iter()
+                .map(|(currency, value)| {
+                    (
+                        currency.into(),
+                        Observation {
+                            value,
+                            count: 1,
+                            published_at: "2026-10-30".into(),
+                        },
+                    )
+                })
+                .collect(),
+        ));
+    }
+    service.caches[&(Source::RateAm, Market::Noncash)]
+        .lock()
+        .await
+        .snapshot = Some(snapshot(HashMap::from([(
+        "USD".into(),
+        Observation {
+            value: 390.0,
+            count: 2,
+            published_at: "2026-10-30".into(),
+        },
+    )])));
+
+    let rates = service.usd_rates().await;
+    assert_eq!(rates["USD"], 1.0);
+    assert_eq!(rates["AMD"], 1.0 / 390.0);
+    assert_eq!(rates["RUB"], 1.0 / 80.0);
+    assert_eq!(rates["BYN"], 1.0 / 3.2);
+    assert_eq!(rates["UAH"], 1.0 / 40.0);
+    assert_eq!(rates["KZT"], 1.0 / 500.0);
+}
+
 async fn upstream(
     status: axum::http::StatusCode,
     body: &'static str,

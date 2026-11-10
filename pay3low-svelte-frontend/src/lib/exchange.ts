@@ -23,6 +23,8 @@ export interface MarketPricesResponse {
   stale: boolean;
   updated_at: number | null;
   prices: Record<string, number>;
+  /** Informational USD benchmark per one unit of each supported fiat. */
+  fiat?: Record<string, number>;
 }
 
 export async function fetchMarketPrices(signal?: AbortSignal): Promise<MarketPricesResponse> {
