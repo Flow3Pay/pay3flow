@@ -399,6 +399,30 @@ The business accepts the quote within its TTL, sends the input, and receives
 `output_amount` at the recipient. The hosted checkout uses the same quote
 engine and adds a payment page, QR and countdown.
 
+### Payment page
+
+One screen, no wallet connection and no signature:
+
+- amount and asset/network chosen by the payer;
+- the rate and the exact `input_amount` (all fees included);
+- deposit address, QR code, copy button and a visible network warning;
+- countdown and status: `awaiting_deposit` → `processing` → `paid`;
+- an "I have paid" button that only refreshes the status, never marks paid;
+- a link to the transaction and the merchant's `success_url`.
+
+Rules:
+
+- the page never shows `paid` from the browser; it polls the backend and the
+  backend waits for delivery, not for the deposit hash;
+- the quote is locked for the whole payment window. Default 15 minutes, hard
+  maximum 60 minutes. Stablecoin pairs may use the full hour; volatile assets
+  stay at 10–15 minutes;
+- after expiry the page shows `expired`, offers a re-quote with a new deposit
+  address, and any late deposit is refunded to `refundTo` or handled manually;
+- the page does not ask for an email, account or wallet;
+- mobile-first: QR and address are the primary actions, the network is always
+  visible.
+
 ## 12. State machine
 
 ```text
@@ -412,6 +436,10 @@ paid ─► refunded
 
 `paid` means delivery to the recipient, not the payer's transaction. Never infer
 success from the deposit hash alone.
+
+`awaiting_deposit` never lasts longer than 60 minutes. After that the order
+expires or is re-quoted; a late deposit is refunded to `refundTo` or handled
+manually.
 
 ## 13. Webhooks
 
