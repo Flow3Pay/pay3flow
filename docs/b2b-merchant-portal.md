@@ -356,14 +356,58 @@ states:
   “API-документация”. No merchant data and no auth-only widgets;
 - **authenticated** — the workspace home described below.
 
-Top strip:
+Design reference, received 2026-11-11:
+[approximate dashboard layout](https://jmgbb.com/i/IaHeZ4f4Vv). It is a dark,
+OpenRouter-like account dashboard: fixed left navigation, top bar with timezone,
+filter and period, tabs, a row of KPI cards, two summary cards and a wide chart.
+Use it for structure only; do not copy OpenRouter branding, copy or token/model
+metrics.
 
-- business name and current environment (`test` / `live`);
-- primary action “Создать API-ключ”;
-- secondary actions “Новый checkout”, “Webhooks”, “Настройки”;
-- account menu with the signed-in email and logout.
+#### 5.1.1 Layout and navigation
 
-#### 5.1.1 “Касса” — all-time totals
+- fixed left sidebar, roughly 240–260 px, full viewport height;
+- workspace name at the top of the sidebar, then the navigation;
+- main area takes the remaining width with the shared page padding; no centred
+  fixed-width container;
+- top bar: page title on the left; environment badge (`test`/`live`), timezone,
+  period selector and “Создать API-ключ” on the right;
+- tabs under the title: “Обзор”, “Тренды”, “Заказы”, “Лимиты” (limits may start
+  as a disabled/`soon` tab);
+- KPI row of five compact cards;
+- two summary cards below the KPIs, then a wide chart and a recent-orders table;
+- at ≤900 px the sidebar becomes a drawer and the KPI cards wrap.
+
+Sidebar mapping:
+
+| Reference item | Pay3Flow page |
+| --- | --- |
+| Activity | `/business` — overview |
+| Logs | `/business/orders` — orders and events |
+| Keys | `/business/settings/api-keys` |
+| Files | `/business/checkout-links` |
+| Guardrails | `/business/limits` (later, read-only limits first) |
+| Routing | `/business/analytics` — corridors and asset mix |
+| Observability | `/business/webhooks` and analytics |
+| Settings | `/business/settings/profile`, team, addresses, security |
+
+The sidebar also links to API docs and support at the bottom. “Files”, “BYOK”,
+“Presets”, “Tools” and “Classifiers” from the reference are not copied unless a
+Pay3Flow feature actually needs them.
+
+KPI cards:
+
+1. **Касса** — received all time (primary number, per asset selector);
+2. **Оборот** — cumulative paid volume with USD estimate;
+3. **Заказы** — paid/delivered count, failed separately;
+4. **Комиссия Pay3Flow** — cumulative fee ledger;
+5. **Конверсия / средний чек** — choose one, or make the fifth card a period
+   metric with a sparkline.
+
+Each card shows the number, the comparison period (“к прошлому периоду”) and a
+small sparkline or “—”, exactly like the reference. For “all time” there is no
+prior period, so show “—”, not a fake percentage.
+
+#### 5.1.2 “Касса” — all-time totals
 
 The owner wants a single place that shows what has accumulated over the whole
 life of the merchant account. Phase 2 defines it as a **read-only cumulative
@@ -691,7 +735,8 @@ Rules:
 11. API-key UI and live-enablement/KYB gate.
 12. Remaining Figma pages and responsive polish.
 
-Each step updates this document and the OpenAPI document.
+Each step updates this document and the OpenAPI document. The state of every
+step as of 2026-11-11 is recorded in §14.
 
 ## 11. Acceptance criteria
 
@@ -744,7 +789,7 @@ Each step updates this document and the OpenAPI document.
 
 | Figma frame | Route | Status |
 | --- | --- | --- |
-| [Registration](https://www.figma.com/make/MccHliZg3K4s9m37RHa69V/Collaborative-Drawing-Workspace?t=6OjvSj4O4ZxU7aXI-1) | `/register` | design received 2026-11-11; implementation deferred until Phase 2 is approved |
+| [Registration](https://www.figma.com/make/MccHliZg3K4s9m37RHa69V/Collaborative-Drawing-Workspace?t=6OjvSj4O4ZxU7aXI-1) | `/register` | design received 2026-11-11; uncommitted draft in the working tree, not wired to the new auth flow (§14) |
 | _pending_ | `/business` | waiting for design |
 | _pending_ | `/business/orders` | waiting for design |
 | _pending_ | `/business/balances` | waiting for design |
@@ -758,3 +803,58 @@ padding described in §4.2 and §5.
 The remaining designs should cover: desktop and mobile, empty/loading/error
 states, test/live banners, permission-denied states and the onboarding
 checklist.
+
+## 14. Implementation status
+
+Recorded 2026-11-11 from the working tree at `master` (`e12ee2d`). Nothing in
+this section is implemented by recording it; it only separates the plan from
+what the repository already contains.
+
+| §10 step | State | Evidence |
+| --- | --- | --- |
+| 1. Phase 1.1 API keys | Not started | `migrations/b2b.sql` still says `b2b_api_keys` is deferred; only `/api/b2b/webhooks`, `/api/b2b/orders` and `/api/b2b/analytics` exist. |
+| 2. `auth_oauth.sql`, real codes and mail adapter | Not started | no `auth_oauth.sql`; `users` has no `email_verified_at`; `service/user/mail.rs` still returns `code == "1234"`; `register::send_auth_code` only logs. |
+| 3. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
+| 4. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
+| 5. `/register` page | Draft, uncommitted | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are untracked; no route links to `/register` yet. |
+| 6–12. Portal, onboarding, orders, keys, settings | Not started | there is no `src/routes/business/` directory in the frontend. |
+
+### 14.1 What the `/register` draft already does
+
+- follows §4.2 visually: dark palette, lime underline, two route cards, no
+  glow, no `:hover` rules, `:focus-visible` only;
+- walks `email + consent → code → success` in one card and has no separate
+  login prompt; `role="alert"` errors, `autocomplete="email"` and
+  `autocomplete="one-time-code"` are present.
+
+### 14.2 Where the draft differs from this plan
+
+The draft predates the auth contract and must be reconciled before step 5 is
+considered done:
+
+- the code field accepts **four** digits (`maxlength="4"`, `/^\d{4}$/`);
+  §4.4 specifies six digits;
+- it calls `authenticate()` from `$lib/exchange`, which tries
+  `/api/auth/login` and falls back to `/api/auth/register` on `404`; §4.3
+  replaces that helper with `/api/auth/authenticate` and adds
+  `/api/auth/code` before the code step;
+- there is no `?next=` or `?ref=` handling, no redirect for an already
+  authenticated visitor, and no `?oauth=ok` branch;
+- the GitHub and Telegram buttons only show “скоро появится” instead of
+  starting the backend OAuth2 flow;
+- the page is hardcoded `lang="ru"` with Russian-only copy while the rest of
+  the site switches en/ru/hy; the plan does not yet say whether `/register`
+  follows the shared locale or stays Russian-only;
+- the dev hint advertises the fixed code `1234`; §4.4 allows a fixed code only
+  behind `AUTH_DEV_MODE`, and production must refuse to start with it.
+
+### 14.3 Existing auth behaviour the plan changes
+
+- a token is stored in `localStorage` under `pay3flow.auth.token`
+  (`src/lib/auth-session.ts`); §12 question 4 still asks whether the portal
+  should use cookie sessions instead;
+- `/api/auth/login` answers `404` for an unknown email, which is how the
+  current helper decides to register. §4.3 forbids revealing whether an email
+  exists, so that signal must disappear with `/api/auth/authenticate`;
+- `POST /api/auth/register` and `POST /api/auth/login` stay as deprecated
+  aliases for one release (§7), so both keep working until the new flow ships.
