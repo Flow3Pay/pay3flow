@@ -49,6 +49,9 @@ balances and payouts remain Phase 3.
 - API-key lifecycle inside a project: name, environment, daily request limit,
   product scopes, rotation and revocation (backend keys may land earlier as
   Phase 1.1);
+- API keys on every business API route — exchange, quotes, transfers, payments,
+  OTC, P2P, solver — with a short explicit allowlist for infrastructure and
+  payer-facing endpoints (§8.1);
 - manual KYB/sanctions gate before live volume.
 
 ### 2.2 Out of scope
@@ -508,7 +511,9 @@ project page (§5.3). A key cannot exist without a project:
   used and status;
 - rotate and revoke; a revoked key stops working immediately;
 - owners and admins only; members/viewers see metadata without secrets;
-- keys are never rendered in SSR or written to logs;
+- keys are never rendered in SSR, written to logs or shipped to the browser;
+  the website's own key stays in the SvelteKit server environment and appears
+  in Activity as the dedicated “Pay3Flow website” project;
 - backend contract is Phase 1.1 (`b2b_api_keys`), now carrying `project_id`,
   the daily limit and usage counters.
 
@@ -919,6 +924,8 @@ stub is removed.
 
 Portal routes require an authenticated session or Bearer token and are scoped
 to a merchant membership. OpenAPI gets a `B2B Portal` tag in the same pass.
+Business API routes (`/api/v1/*`, `/api/exchange/*`, `/api/p2p/*`, OTC and the
+rest of §8.1) authenticate with a project API key, not with the portal session.
 
 ```text
 GET    /api/b2b/profile
@@ -973,9 +980,10 @@ Rules:
   Telegram use OAuth2/OIDC on the backend (§4.5). No passwords.
 - The portal should use `HttpOnly`, `Secure`, `SameSite=Lax` session cookies
   (`__Host-pay3flow_session`) with a random 256-bit token stored as a hash.
-  The public API keeps `Authorization: Bearer` until merchant API keys land.
-  This is still an open decision because the current frontend stores a Bearer
-  token.
+  The business API switches from the user Bearer token to project keys (§8.1);
+  that token survives only for the `/api/b2b/*` and `/api/v1/*` deprecation
+  window. The portal's own session transport is still an open decision because
+  the current frontend stores a Bearer token.
 - CSRF protection is mandatory for cookie-authenticated mutations.
 - Owner/admin checks happen in the service layer, not only in the UI.
 - OAuth2 state and PKCE values are single-use, cookie-bound and expire after
@@ -1000,9 +1008,78 @@ Rules:
 - Production startup must fail if the demo auth code or a development OAuth
   shortcut is enabled.
 
+### 8.1 Key coverage — every business route
+
+A merchant integrates through project API keys. Every business route requires a
+key; only the allowlist below may stay keyless. Enforcement is a router-wide
+layer around the business groups, so a route added later is protected by
+default and an exception has to be a deliberate entry.
+
+Protected groups:
+
+| Scope | Routes |
+| --- | --- |
+| `rates:read` | `/api/market-prices`, `/api/market-values`, `/api/reference-rates`, `/api/exchange-pairs` |
+| `quotes:write` | `/api/v1/quotes`, `/api/exchange/*`, `/api/p2p/*`, `/api/solver/*`, `/api/routing/fallback`, `/api/route-instructions/open` |
+| `orders:read` | reads under `/api/v1/transfers`, `/api/b2b/orders`, `/api/b2b/analytics`, `/api/payments`, `/api/share-links/:id` |
+| `orders:write` | `/api/v1/transfers` and cancel, `/api/v1/payments`, `POST /api/payments`, `/api/share-links`, checkout-link management |
+| `refunds:write` | refund endpoints |
+| `otc:write` | OTC HTTP routes and `/ws/otc` |
+
+The table is the product grouping, not a per-handler list: the exact scope of
+every route is declared in OpenAPI, and an action that writes orders needs the
+write scope even when it lives under `/api/exchange/*`.
+
+`/ws`, `/ws/rates`, `/ws/payments` and `/ws/p2p/*` authenticate with the same key
+as their HTTP counterparts; the key travels in the first message, not in the
+URL.
+
+Keyless allowlist:
+
+| Route | Why it stays keyless |
+| --- | --- |
+| `GET`/`POST /health`, `/health/ready` | infrastructure probes |
+| `GET /metrics` | Prometheus scrape; protect it with the ingress/network policy, not a merchant key |
+| `/openapi.json`, `/scalar` | API reference |
+| `/api/auth/*`, `/api/auth/oauth/*` | sign-in and OAuth bootstrap; no key can exist yet |
+| `/pay/:token`, `/pay/:token/status`, `/pay/:token/quote` | payer-facing checkout; the unguessable token is the capability |
+| provider webhooks, `/inbox*`, `/.well-known/webfinger`, `/actor*`, `/marketplace/*` | authenticated by provider signatures or public federation formats |
+| `/api/networks`, `/api/banks`, `/api/providers*`, `/api/reviews/*` | public catalogue reads used by the site and public pages |
+| site pages and static assets | not API |
+
+Rules:
+
+- a request is authenticated with `Authorization: Bearer sk_…`; `pk_` alone is
+  not enough. Unknown or revoked key → `401`; key from the other environment →
+  `403`; missing scope → `403 insufficient_scope`; over the daily limit → `429`
+  with the `X-RateLimit-*` headers (§5.3.2);
+- each route declares its scope in OpenAPI, and the middleware reads that
+  declaration instead of duplicating checks inside handlers;
+- `/api/admin/*` and staff tooling never accept merchant keys; they keep their
+  own authentication;
+- a route-table test walks the router and fails if a route is neither in a
+  protected group nor on the allowlist, so a new business endpoint cannot ship
+  unprotected;
+- the legacy user Bearer token is accepted only on `/api/b2b/*` and `/api/v1/*`
+  during the deprecation window (§7), then removed;
+- keyless calls are counted separately; Activity (§5.2) shows only keyed
+  traffic, so a merchant sees their own usage, not the site's.
+
+First-party traffic. The site is a SvelteKit `adapter-node` app, and today it
+calls exchange and P2P endpoints from the browser (`src/lib/exchange.ts`). A
+`sk_` must never reach the browser, so those calls move behind the SvelteKit
+server — a `+server.ts` proxy or server `load` — with a first-party key held in
+the server environment. That key lives in a dedicated “Pay3Flow website”
+project, scoped to exactly what the site uses, so first-party traffic is
+visible in Activity and separable from merchant traffic. A route that cannot
+move server-side yet gets a dated temporary exception in the allowlist, not an
+accidental keyless hole.
+
 ## 9. Anonymous users and migration
 
-- Anonymous users, swaps and checkouts continue to work unchanged.
+- Anonymous users, swaps and checkouts continue to work unchanged; after
+  §8.1 the site's own swap calls go through the SvelteKit server with the
+  first-party key, so the visitor still needs no account and no key.
 - Registration never silently takes ownership of anonymous orders. A later,
   explicit "claim by order id + checkout token/email" flow can be added; it is
   not part of Phase 2.
@@ -1017,25 +1094,28 @@ Rules:
 1. Phase 1.1 API keys, project-scoped from the start: `b2b_projects`,
    `b2b_api_keys.project_id`, name, `daily_request_limit`, scopes,
    `b2b_api_key_usage`, and `project_id` on orders and the fee ledger.
-2. `auth_oauth.sql`: email codes, OAuth identities, sessions, email-verified
+2. Business API routes accept only project keys: router-wide middleware, the
+   keyless allowlist, the SvelteKit server proxy with a first-party key and
+   per-route security in OpenAPI (§8.1).
+3. `auth_oauth.sql`: email codes, OAuth identities, sessions, email-verified
    column; replace the `1234` stub and add a real mail adapter.
-3. `POST /api/auth/code` and `POST /api/auth/authenticate`; keep the old
+4. `POST /api/auth/code` and `POST /api/auth/authenticate`; keep the old
    register/login aliases for one release.
-4. GitHub OAuth2 and Telegram OIDC adapters with state/PKCE and account linking.
-5. Registration page `/register` from the Figma design, including the
+5. GitHub OAuth2 and Telegram OIDC adapters with state/PKCE and account linking.
+6. Registration page `/register` from the Figma design, including the
    no-glow/no-hover/one-page rules.
-6. `b2b_portal.sql`, membership/profile backfill, authorization middleware.
-7. Business onboarding and workspace creation, including the first test project
+7. `b2b_portal.sql`, membership/profile backfill, authorization middleware.
+8. Business onboarding and workspace creation, including the first test project
    and test key.
-8. `/business/projects`: projects list, project tabs, key creation with name,
+9. `/business/projects`: projects list, project tabs, key creation with name,
    environment, daily limit and scopes, rotation and revocation (§5.3).
-9. `/business/activity`: usage rollup job, per-project charts and limit meters
-   (§5.2).
-10. “Для бизнеса” home: cashbox, metrics and graphs, project switcher, recent
+10. `/business/activity`: usage rollup job, per-project charts and limit meters
+    (§5.2).
+11. “Для бизнеса” home: cashbox, metrics and graphs, project switcher, recent
     orders; then orders list, order detail and fees.
-11. Balance monitoring (watch-only) and analytics.
-12. Webhooks, addresses, team, settings, audit.
-13. Per-project cashbox report with attribution and CSV, live-enablement/KYB
+12. Balance monitoring (watch-only) and analytics.
+13. Webhooks, addresses, team, settings, audit.
+14. Per-project cashbox report with attribution and CSV, live-enablement/KYB
     gate, remaining Figma pages and responsive polish.
 
 Each step updates this document and the OpenAPI document. The state of every
@@ -1071,6 +1151,14 @@ step as of 2026-11-11 is recorded in §14.
 - Activity and the project cashbox match `b2b_api_key_usage`, `b2b_orders` and
   `b2b_fee_ledger` for the same filters, mark an order without a project as
   “Без проекта”, and never mix test with live revenue;
+- every business route rejects a keyless call with `401`, an unknown or revoked
+  key with `401`, a wrong-environment key with `403` and a missing scope with
+  `403 insufficient_scope`, while health, metrics, docs, auth and the payer
+  checkout still answer without a key;
+- a new business route cannot ship unprotected: the route-table test fails
+  unless the route is in a protected group or on the allowlist;
+- the website's first-party key is used only server-side and never appears in a
+  browser bundle or a response body;
 - every settings/member/key change appears in the audit log;
 - live stays disabled until KYB approval;
 - anonymous swap/checkout still works for users who never register;
@@ -1112,6 +1200,13 @@ step as of 2026-11-11 is recorded in §14.
     their own scopes once their merchant APIs exist.
 14. **Project lifecycle.** Archive or delete a project that has keys or orders,
     and does the workspace need a default project for portal-created orders?
+15. **First-party traffic.** Move the site's exchange and P2P calls behind the
+    SvelteKit server with a first-party key before enforcement, or keep a dated
+    anonymous exception? Who owns rotation of that key and what exactly is it
+    scoped to?
+16. **Public catalogue reads.** Do `/api/market-prices`, `/api/networks` and
+    providers stay anonymous for the site and public pages, or move behind the
+    first-party key with the rest?
 
 ## 13. Figma designs
 
@@ -1147,10 +1242,10 @@ what the repository already contains.
 | 3. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
 | 4. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
 | 5. `/register` page | Draft, uncommitted | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are untracked; no route links to `/register` yet. |
-| 6–13. Portal, projects/keys, Activity, orders, settings | Not started | there is no `src/routes/business/` directory in the frontend. |
+| 6–14. Portal, projects/keys, Activity, orders, settings | Not started | there is no `src/routes/business/` directory in the frontend, and no route outside the allowlist checks a key. |
 
-The projects and Activity steps were added to §10 on 2026-11-11; the numbers in
-this table follow the current §10.
+The projects, Activity and API-key-coverage steps were added to §10 on
+2026-11-11; the numbers in this table follow the current §10.
 
 ### 14.1 What the `/register` draft already does
 
