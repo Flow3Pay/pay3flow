@@ -35,6 +35,8 @@ balances and payouts remain Phase 3.
   passwordless email code, GitHub OAuth2 and Telegram OIDC, reusing the existing
   `users` identity;
 - business workspace creation, membership and roles;
+- a private `/business` area: no page under it opens without sign-in, and a
+  signed-out visitor is sent through `/register?next=…`;
 - onboarding checklist for a first quote/checkout;
 - “Для бизнеса” workspace home with all-time cashbox, metrics and graphs;
 - projects — the folder that owns API keys — with per-project traffic graphs
@@ -335,7 +337,7 @@ applies to the registration page and to the portal pages below.
 | Route | Purpose | Key data / actions |
 | --- | --- | --- |
 | `/register` | Public registration and sign-in | email code, GitHub/Telegram OAuth2, one-page register-or-login, no separate login prompt |
-| `/business` | “Для бизнеса” workspace home | all-time cashbox, metrics and graphs, project switcher, recent orders, environment switch |
+| `/business` | “Для бизнеса” workspace home; sign-in required | all-time cashbox, metrics and graphs, project switcher, recent orders, environment switch |
 | `/business/onboarding` | Guided setup | profile, address, webhook, first project and key, first quote, KYB |
 | `/business/activity` | Activity | requests, errors, latency, volume, fees and limit usage per project and period |
 | `/business/projects` | Projects | list and create projects; a project is the folder for API keys |
@@ -359,15 +361,32 @@ Keys have no page of their own: they are created and managed inside a project.
 `/business/settings/api-keys` redirects to `/business/projects` so old links
 keep working.
 
+Every route in this table except `/register` is private: an unauthenticated
+request redirects to `/register?next=<path>` and returns there after sign-in,
+while the matching `/api/b2b/*` request answers `401` (§5.1).
+
 ### 5.1 “Для бизнеса” workspace home
 
 Route: `/business`; navigation label: “Для бизнеса”. If a shorter public alias
-is useful, `/for-business` redirects to `/business`. The same route has two
-states:
+is useful, `/for-business` redirects to `/business`. The route is **private**:
+there is no guest version of the workspace.
 
-- **guest** — a short product pitch, “Создать аккаунт” → `/register`, and
-  “API-документация”. No merchant data and no auth-only widgets;
-- **authenticated** — the workspace home described below.
+**Access guard.** An unauthenticated visit, or a request with an expired or
+invalid session, to `/business` and every page below it redirects to
+`/register?next=<same-origin path>`; after a successful code or OAuth sign-in
+the merchant lands on the page that was asked for, not on a generic home. The
+guard runs server-side for the HTML response and again on every data request,
+so hiding the UI is not the protection: portal APIs answer `401` without a
+session (§7).
+
+- the guard covers `/business/*` only; `/register`, the public site and hosted
+  checkout pages stay anonymous;
+- “Для бизнеса” stays in the header navigation for everyone; clicking it while
+  signed out starts the sign-in flow instead of opening a guest landing page;
+- marketing copy about the product lives on the public site, not behind the
+  guard; `/business` is a working area, not a landing page;
+- a signed-in user who opens `/register` without `?next=` is sent to
+  `/business` (§4.3).
 
 Design reference, received 2026-11-11:
 [approximate dashboard layout](https://jmgbb.com/i/IaHeZ4f4Vv). It is a dark,
@@ -492,7 +511,8 @@ The home block shows the two or three most recent keys with their project and a
 - quick links to orders, balances, checkout links and webhooks;
 - onboarding checklist until the first live transfer (profile, payout/refund
   address, verified webhook, first test quote, first test checkout, KYB);
-- guest state never renders any of these widgets.
+- nothing renders before the access guard resolves: show a skeleton, never a
+  flash of merchant widgets or “0” totals.
 
 #### 5.1.6 Page rules
 
@@ -504,8 +524,8 @@ The home block shows the two or three most recent keys with their project and a
 - one `<h1>`, semantic sections, keyboard navigation, reduced-motion support;
 - add “Для бизнеса” to the header navigation (mobile menu included) only when
   the page is ready; do not ship a dead link;
-- SEO for the guest state: title, description, canonical URL and Open Graph;
-  the authenticated state is `noindex` and never cached publicly.
+- the page is private: `noindex, nofollow`, no Open Graph card with merchant
+  data, and responses are never cached publicly.
 
 The layout and final copy need a Figma frame. Until it arrives, this section is
 the content and data contract.
@@ -1015,6 +1035,9 @@ step as of 2026-11-11 is recorded in §14.
 
 - a new business can register, create a workspace and quote in test without
   support;
+- a signed-out visitor to `/business/projects` is redirected to
+  `/register?next=%2Fbusiness%2Fprojects`, returns there after sign-in, and the
+  same page's API calls answer `401` without a session;
 - the `/register` page has no glow, no hover effect and no separate login
   prompt; an existing email signs in and a new email registers through the same
   form;
