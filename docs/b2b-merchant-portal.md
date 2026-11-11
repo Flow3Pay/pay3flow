@@ -1244,40 +1244,37 @@ already contains; recording a step here is not a substitute for the code.
 | 3. `auth_oauth.sql`, real codes and mail adapter | Email codes done | `migrations/auth_oauth.sql` adds `users.email_verified_at`, `auth_codes` and `auth_code_sends`; `service/user/codes.rs` stores an Argon2id hash, expires after ten minutes, invalidates after five wrong attempts and enforces one send per minute, five per hour per email and thirty per hour per IP; `service/user/mail.rs` delivers over SMTP configured only from the environment (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`); `AUTH_DEV_CODE` is refused when `PAY3FLOW_ENV=production`, which also requires `SMTP_HOST`. OAuth identity tables wait for step 5. |
 | 4. `/api/auth/code` and `/api/auth/authenticate` | Done | `server/routing/api.rs` registers both routes; `authenticate` registers or logs in with the same response shape, applies a referral code only on creation, and marks the email verified; `register`/`login` stay as deprecated aliases; OpenAPI documents the 202 code response and both request schemas. |
 | 5. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
-| 6. `/register` page | Draft, uncommitted | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are untracked; no route links to `/register` yet. |
+| 6. `/register` page | Done except OAuth | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are committed; the page uses the six-digit `/api/auth/code` + `/api/auth/authenticate` contract, handles `?next=`/`?ref=`, redirects signed-in visitors and hides the OAuth buttons until step 5. No route links to `/register` yet, and `/business` is still step 8. |
 | 7–14. Portal, projects/keys UI, Activity, orders, settings | Not started | there is no `src/routes/business/` directory in the frontend, and no route outside the allowlist checks a key. |
 
 The projects, Activity and API-key-coverage steps were added to §10 on
 2026-11-11; the numbers in this table follow the current §10.
 
-### 14.1 What the `/register` draft already does
+### 14.1 What the `/register` page does
 
 - follows §4.2 visually: dark palette, lime underline, two route cards, no
   glow, no `:hover` rules, `:focus-visible` only;
 - walks `email + consent → code → success` in one card and has no separate
   login prompt; `role="alert"` errors, `autocomplete="email"` and
-  `autocomplete="one-time-code"` are present.
+  `autocomplete="one-time-code"` are present;
+- requests a six-digit code through `/api/auth/code`, verifies it through
+  `/api/auth/authenticate`, stores the token in `pay3flow.auth.token` and
+  shows a rate-limit message on `429`;
+- accepts `?next=` only as a same-origin path, carries a valid `?ref=` into the
+  authenticate call, and redirects an already signed-in visitor to `next` or
+  `/business`;
+- after success continues to `next` or `/business`; the portal route lands in
+  step 8, so until then that default is a placeholder;
+- the dev hint appears only in a development build and its value comes from
+  `PUBLIC_AUTH_DEV_CODE`, never a hardcoded code.
 
-### 14.2 Where the draft differs from this plan
+### 14.2 What the `/register` page still leaves for later steps
 
-The draft predates the auth contract and must be reconciled before step 6 is
-considered done:
-
-- the code field accepts **four** digits (`maxlength="4"`, `/^\d{4}$/`);
-  §4.4 specifies six digits;
-- it calls `authenticate()` from `$lib/exchange`, which tries
-  `/api/auth/login` and falls back to `/api/auth/register` on `404`; §4.3
-  replaces that helper with `/api/auth/authenticate` and adds
-  `/api/auth/code` before the code step;
-- there is no `?next=` or `?ref=` handling, no redirect for an already
-  authenticated visitor, and no `?oauth=ok` branch;
-- the GitHub and Telegram buttons only show “скоро появится” instead of
-  starting the backend OAuth2 flow;
+- `?oauth=ok` and the GitHub/Telegram buttons wait for step 5; the buttons are
+  hidden unless `PUBLIC_AUTH_OAUTH=1`, so no button pretends to work;
 - the page is hardcoded `lang="ru"` with Russian-only copy while the rest of
   the site switches en/ru/hy; the plan does not yet say whether `/register`
-  follows the shared locale or stays Russian-only;
-- the dev hint advertises the fixed code `1234`; §4.4 allows a fixed code only
-  behind `AUTH_DEV_MODE`, and production must refuse to start with it.
+  follows the shared locale or stays Russian-only.
 
 ### 14.3 Existing auth behaviour the plan changes
 

@@ -482,20 +482,29 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
-export async function authenticate(email: string, code: string, referralCode?: string): Promise<string> {
-  const body = JSON.stringify({ email, code, referral_code: referralCode || undefined });
-  const login = await fetch(apiUrl("/api/auth/login"), {
+/** Request a one-time code. The backend answers the same for any valid email. */
+export async function requestAuthCode(email: string): Promise<void> {
+  const response = await fetch(apiUrl("/api/auth/code"), {
     method: "POST",
     headers: anonymousHeaders({ "Content-Type": "application/json" }),
-    body,
+    body: JSON.stringify({ email }),
   });
-  if (login.ok) return ((await login.json()) as { token: string }).token;
-  if (login.status !== 404) throw new Error("Sign-in failed. Check your email and code.");
-  const registered = await request<{ token: string }>("/api/auth/register", {
+  if (!response.ok) {
+    throw new Error(`auth code failed (${response.status})`);
+  }
+}
+
+/** Verify the code and return a session, registering the email when it is new. */
+export async function authenticate(
+  email: string,
+  code: string,
+  referralCode?: string,
+): Promise<string> {
+  const result = await request<{ token: string }>("/api/auth/authenticate", {
     method: "POST",
-    body,
+    body: JSON.stringify({ email, code, referral_code: referralCode || undefined }),
   });
-  return registered.token;
+  return result.token;
 }
 
 export function fetchReferralProfile(token: string): Promise<ReferralProfile> {
