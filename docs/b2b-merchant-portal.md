@@ -395,9 +395,19 @@ filter and period, tabs, a row of KPI cards, two summary cards and a wide chart.
 Use it for structure only; do not copy OpenRouter branding, copy or token/model
 metrics.
 
+The reference is read as a **portal with a sidebar on the left** and the working
+area on the right. That left-column pattern already exists on the site: the
+route instructions use a 246 px column with a right border, items connected by
+a thin vertical line, the active item on the accent tint, and the content
+column beside it (`src/lib/components/RouteInstructions.svelte`); below 760 px
+the items turn into a horizontal chip row. The workspace mirrors that pattern
+with section labels instead of step numbers and the same accent treatment, so
+the portal reads as part of Pay3Flow rather than a separate product.
+
 #### 5.1.1 Layout and navigation
 
-- fixed left sidebar, roughly 240–260 px, full viewport height;
+- fixed left sidebar, roughly 240–260 px, full viewport height, using the same
+  rail pattern as the route instructions (246 px there);
 - workspace name at the top of the sidebar, then the navigation;
 - main area takes the remaining width with the shared page padding; no centred
   fixed-width container;
