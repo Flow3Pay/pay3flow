@@ -465,7 +465,8 @@ exponential backoff, dead-letter, replay from the dashboard. Reuse the
 
 - V1 uses the existing user Bearer token. Merchant API keys are deferred to
   phase 1.1; until then the API serves the internal/first merchant account.
-  Phase 2 adds business registration, membership and the portal; see
+  Phase 2 adds one-page business registration (email code + GitHub OAuth2 /
+  Telegram OIDC), membership and the portal; see
   [`b2b-merchant-portal.md`](b2b-merchant-portal.md).
 - When keys land: `sk_` secrets shown once, stored as an Argon2id hash + prefix;
   `pk_` identifiers are not secrets; separate test/live environments; scopes
@@ -523,7 +524,10 @@ quotes and hosted checkout. A business product cannot run on anonymous mode
 alone: balances, team access, webhooks, analytics, API keys and live limits all
 need a persistent workspace.
 
-- business registration on the existing email one-time-code identity;
+- business registration and sign-in on `/register`: one page, passwordless
+  email code, and existing email signs in while a new email registers;
+- GitHub OAuth2 and Telegram OIDC handled on the backend, with verified-email
+  account linking;
 - workspace, membership and roles (owner/admin/member/viewer);
 - onboarding and test/live environments;
 - portal pages: overview, orders, order detail, balances, fees, checkout links,
@@ -533,12 +537,16 @@ need a persistent workspace.
 - audit log for account/settings mutations;
 - API-key lifecycle surfaced in settings (backend keys land in Phase 1.1);
 - manual KYB/sanctions gate before live volume;
-- Figma designs are pending; routes and data contracts are fixed in the portal
-  plan so the UI can be built when designs arrive.
+- the registration Figma is received: implement it without the green glow,
+  without hover effects, and without the separate login prompt/button; other
+  portal Figma pages are still pending, so their routes and data contracts are
+  fixed in the portal plan until designs arrive.
 
 Acceptance: a new business can register, finish onboarding and quote in test
-without support; roles and audit are enforced; balances and fees match the
-ledger; live stays disabled until approval; anonymous checkout still works.
+without support; an existing email signs in through the same page; GitHub and
+Telegram OAuth2 round trips work; roles and audit are enforced; balances and fees
+match the ledger; live stays disabled until approval; anonymous checkout still
+works.
 
 ### Phase 2.1 — instant OTC (weeks 4–8, only with a counterparty)
 
@@ -604,10 +612,13 @@ ledger; live stays disabled until approval; anonymous checkout still works.
   from the user Bearer token to `sk_`/`pk_`. Remind the user about this at that
   point.
 - [ ] **Phase 2:** registration, merchant workspace, team roles and the portal
-  documented in [`b2b-merchant-portal.md`](b2b-merchant-portal.md). Do not
+  documented in [`b2b-merchant-portal.md`](b2b-merchant-portal.md). Use backend
+  OAuth2 for GitHub and Telegram; do not ship the current OAuth stub. Do not
   remove anonymous swap/checkout.
-- [ ] **Figma:** the owner will send designs later; map the page inventory in
-  the portal plan to frames before implementing UI.
+- [ ] **Figma:** the registration page design is received and must be built
+  without glow, without hover effects and without a separate login prompt. The
+  owner will send the remaining portal designs later; map them to the page
+  inventory before implementing those pages.
 
 ## 22. Phase 1 implementation notes (2026-11-11)
 
