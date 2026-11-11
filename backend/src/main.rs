@@ -230,6 +230,15 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     b2b.clone().start();
+    let mail = pay3flow_backend::service::user::mail::Mailer::new(
+        cfg.smtp_host.as_deref(),
+        cfg.smtp_port,
+        cfg.smtp_username.as_deref(),
+        cfg.smtp_password.as_deref(),
+        cfg.smtp_from.as_deref(),
+        cfg.auth_dev_code.as_deref(),
+    )?;
+
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),
@@ -251,6 +260,7 @@ async fn main() -> anyhow::Result<()> {
         otc,
         telegram,
         b2b,
+        mail,
     );
 
     // Provider refresh work is paced independently from interactive searches:

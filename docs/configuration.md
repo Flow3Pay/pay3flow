@@ -106,6 +106,18 @@ These values are never read from `config.toml`:
 | `CRYPTO_OFFICE_PUBLIC_KEY` | Crypto Office public API key; configure together with the secret key |
 | `CRYPTO_OFFICE_SECRET_KEY` | Crypto Office secret API key, used server-side to generate fresh authorization tokens |
 | `CRYPTO_OFFICE_API_TOKEN` | Optional legacy pre-generated token, used only when neither API key is configured |
+| `SMTP_HOST` | SMTP relay for sign-in codes; required in production |
+| `SMTP_PORT` | SMTP port; `465` uses implicit TLS, any other port uses STARTTLS (default `465`) |
+| `SMTP_USERNAME` | SMTP account, optional for relays that authenticate by IP |
+| `SMTP_PASSWORD` | SMTP password, read together with `SMTP_USERNAME` |
+| `SMTP_FROM` | From mailbox for sign-in codes; required when `SMTP_HOST` is set |
+| `AUTH_DEV_CODE` | Fixed six-digit development code; startup fails in production when set |
+| `PAY3FLOW_ENV` | Set to `production` to enforce the SMTP and dev-code checks |
+
+All mail settings are environment-only: changing provider, credentials or the
+sender needs a restart, never a code change. Without `SMTP_HOST` the backend
+still starts in development, but `/api/auth/code` cannot deliver mail unless
+`AUTH_DEV_CODE` is set.
 
 Development fallbacks exist for local startup; replace them in every
 deployment that handles real users or funds.

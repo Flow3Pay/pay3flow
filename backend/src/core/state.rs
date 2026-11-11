@@ -54,6 +54,8 @@ pub struct AppState {
     pub telegram: Option<crate::tg::bot::BotNotifier>,
     /// B2B crypto routing API and hosted payment page.
     pub b2b: crate::b2b::Service,
+    /// SMTP delivery for sign-in codes, or a disabled mailer in development.
+    pub mail: crate::service::user::mail::Mailer,
 }
 
 impl AppState {
@@ -79,6 +81,7 @@ impl AppState {
         otc: crate::otc::Service,
         telegram: Option<crate::tg::bot::BotNotifier>,
         b2b: crate::b2b::Service,
+        mail: crate::service::user::mail::Mailer,
     ) -> Self {
         Self {
             pool,
@@ -102,6 +105,7 @@ impl AppState {
             otc,
             telegram,
             b2b,
+            mail,
         }
     }
 }

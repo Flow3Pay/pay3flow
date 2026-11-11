@@ -51,6 +51,10 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .batch_execute(include_str!("../../migrations/schema.sql"))
         .await?;
     client
+        .batch_execute(include_str!("../../migrations/auth_oauth.sql"))
+        .await
+        .context("apply auth migration")?;
+    client
         .batch_execute(include_str!("../../migrations/otc.sql"))
         .await?;
     client

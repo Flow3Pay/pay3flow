@@ -81,6 +81,14 @@ pub struct Config {
     pub b2b_quote_ttl_secs: u64,
     /// NEAR Intents account that receives the platform's `appFees`.
     pub b2b_fee_recipient: Option<String>,
+    /// SMTP delivery for sign-in codes (portal §4.4).
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_from: Option<String>,
+    /// Fixed development code. Production refuses to start with it set.
+    pub auth_dev_code: Option<String>,
 }
 
 /// The checked-in TOML surface deliberately contains no credentials. Unknown
@@ -196,6 +204,26 @@ impl Config {
     /// directory and then its parent for local `cargo` workflows.
     pub fn load() -> anyhow::Result<Self> {
         let file = load_file_config()?;
+        let auth_dev_code = optional_secret_env("AUTH_DEV_CODE");
+        if let Some(code) = auth_dev_code.as_deref() {
+            if code.len() != 6 || !code.bytes().all(|byte| byte.is_ascii_digit()) {
+                anyhow::bail!("AUTH_DEV_CODE must be exactly six digits");
+            }
+        }
+        let production = env::var("PAY3FLOW_ENV")
+            .map(|value| value.trim().eq_ignore_ascii_case("production"))
+            .unwrap_or(false);
+        if production && auth_dev_code.is_some() {
+            anyhow::bail!("AUTH_DEV_CODE must not be enabled in production");
+        }
+        let smtp_host = optional_secret_env("SMTP_HOST");
+        if production && smtp_host.is_none() {
+            anyhow::bail!("SMTP_HOST is required in production");
+        }
+        let smtp_port = env::var("SMTP_PORT")
+            .ok()
+            .and_then(|value| value.trim().parse().ok())
+            .unwrap_or(465);
         Ok(Self {
             log_filter: file.log_filter,
             http_addr: file.http_addr,
@@ -252,6 +280,12 @@ impl Config {
             b2b_margin_cap_bps: file.b2b_margin_cap_bps,
             b2b_quote_ttl_secs: file.b2b_quote_ttl_secs,
             b2b_fee_recipient: optional_secret_env("B2B_FEE_RECIPIENT"),
+            smtp_host,
+            smtp_port,
+            smtp_username: optional_secret_env("SMTP_USERNAME"),
+            smtp_password: optional_secret_env("SMTP_PASSWORD"),
+            smtp_from: optional_secret_env("SMTP_FROM"),
+            auth_dev_code,
         })
     }
 

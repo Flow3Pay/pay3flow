@@ -1,51 +1,39 @@
-use anyhow::Result;
 use uuid::Uuid;
 
-use crate::db::repo::user as users;
 use crate::db::DbPool;
 
-use super::{error::UserError, mail};
+use super::auth;
+use super::error::UserError;
 
-pub fn send_auth_code(email: &str) -> Result<()> {
-    tracing::info!("mail stub: would send auth code to {email}");
-    Ok(())
-}
-
+/// Deprecated alias for `/api/auth/register`: the code is already delivered by
+/// `/api/auth/code`, so this only verifies it and creates the account.
 pub async fn register_user(
     pool: &DbPool,
     email: &str,
     code: &str,
     referral_code: Option<&str>,
 ) -> Result<Uuid, UserError> {
-    validate_email(email)?;
-    if !mail::verify_auth_code(email, code) {
-        return Err(UserError::InvalidCode);
-    }
-    mail::send_code(email).map_err(UserError::from)?;
-    let referral_code = referral_code.map(normalize_referral_code).transpose()?;
-    match users::insert_user(pool, email, referral_code.as_deref()).await? {
-        users::InsertUserOutcome::Created(id) => Ok(id),
-        users::InsertUserOutcome::EmailExists => Err(UserError::AlreadyExists),
-        users::InsertUserOutcome::ReferralCodeNotFound => Err(UserError::InvalidReferralCode),
+    auth::register(pool, email, code, referral_code).await
+}
+
+/// Lowercase and trim so the same person always hits the same account.
+pub fn normalize_email(email: &str) -> Result<String, UserError> {
+    let email = email.trim().to_ascii_lowercase();
+    let valid =
+        !email.is_empty() && email.len() <= 254 && email.contains('@') && !email.starts_with('@');
+    if valid {
+        Ok(email)
+    } else {
+        Err(UserError::InvalidEmail)
     }
 }
 
-fn normalize_referral_code(value: &str) -> Result<String, UserError> {
+pub fn normalize_referral_code(value: &str) -> Result<String, UserError> {
     let value = value.trim().to_ascii_uppercase();
     if value.len() == 16 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         Ok(value)
     } else {
         Err(UserError::InvalidReferralCode)
-    }
-}
-
-fn validate_email(email: &str) -> Result<(), UserError> {
-    let valid =
-        !email.is_empty() && email.len() <= 254 && email.contains('@') && !email.starts_with('@');
-    if valid {
-        Ok(())
-    } else {
-        Err(UserError::InvalidEmail)
     }
 }
 
@@ -62,6 +50,18 @@ mod tests {
         assert!(matches!(
             normalize_referral_code("not-a-code"),
             Err(UserError::InvalidReferralCode)
+        ));
+    }
+
+    #[test]
+    fn emails_are_trimmed_and_lowercased() {
+        assert_eq!(
+            normalize_email("  User@Example.COM ").unwrap(),
+            "user@example.com"
+        );
+        assert!(matches!(
+            normalize_email("not-an-email"),
+            Err(UserError::InvalidEmail)
         ));
     }
 }
