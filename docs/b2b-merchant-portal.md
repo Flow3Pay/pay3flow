@@ -37,13 +37,16 @@ balances and payouts remain Phase 3.
 - business workspace creation, membership and roles;
 - onboarding checklist for a first quote/checkout;
 - “Для бизнеса” workspace home with all-time cashbox, metrics and graphs;
-- orders, order detail, balances, fees, webhooks, analytics, settings, team and
-  API-key pages;
+- projects — the folder that owns API keys — with per-project traffic graphs
+  (Activity) and a period cashbox;
+- orders, order detail, balances, fees, webhooks, analytics, settings and team;
 - read-only balance monitoring: watch-only on-chain addresses, fee ledger,
   volume and settlement status;
 - test/live environments per merchant;
 - audit log for account and settings mutations;
-- API-key lifecycle in the portal (backend keys may land earlier as Phase 1.1);
+- API-key lifecycle inside a project: name, environment, daily request limit,
+  product scopes, rotation and revocation (backend keys may land earlier as
+  Phase 1.1);
 - manual KYB/sanctions gate before live volume.
 
 ### 2.2 Out of scope
@@ -76,6 +79,8 @@ balances, team, webhooks, analytics, API keys and live limits.
 | OAuth identity | `auth_oauth_accounts` | GitHub or Telegram subject linked to one `users` row. |
 | Business workspace | `b2b_merchants` | The billing/legal unit that owns orders, webhooks and addresses. |
 | Membership | `b2b_members` | `user_id` ↔ `merchant_id` with a role. |
+| Project | `b2b_projects` | Folder that groups API keys; the reporting unit for traffic and revenue. |
+| API key | `b2b_api_keys` | Belongs to exactly one project; carries environment, scopes and the daily request limit. |
 | Environment | `b2b_orders.env` | `test` or `live`, already present in Phase 1. |
 
 Roles for v2:
@@ -292,14 +297,16 @@ The workspace is created and the user becomes its `owner`. The default
 environment is `test`.
 
 Optional onboarding steps: add a payout/refund address, create a webhook,
-create the first test quote. Live stays disabled until manual KYB/sanctions
-approval; test quotes and checkout pages work immediately.
+create the first test project with a test API key, create the first test quote.
+Live stays disabled until manual KYB/sanctions approval; test quotes and
+checkout pages work immediately.
 
 The overview shows a checklist until the first live transfer:
 
 - business profile completed;
 - payout/refund address saved;
 - webhook endpoint verified (a signed `ping` delivery succeeds);
+- first test project and API key created;
 - first test quote created;
 - first test checkout paid;
 - KYB submitted.
@@ -328,8 +335,11 @@ applies to the registration page and to the portal pages below.
 | Route | Purpose | Key data / actions |
 | --- | --- | --- |
 | `/register` | Public registration and sign-in | email code, GitHub/Telegram OAuth2, one-page register-or-login, no separate login prompt |
-| `/business` | “Для бизнеса” workspace home | all-time cashbox, metrics and graphs, API-key creation, recent orders, environment switch |
-| `/business/onboarding` | Guided setup | profile, address, webhook, first quote, KYB |
+| `/business` | “Для бизнеса” workspace home | all-time cashbox, metrics and graphs, project switcher, recent orders, environment switch |
+| `/business/onboarding` | Guided setup | profile, address, webhook, first project and key, first quote, KYB |
+| `/business/activity` | Activity | requests, errors, latency, volume, fees and limit usage per project and period |
+| `/business/projects` | Projects | list and create projects; a project is the folder for API keys |
+| `/business/projects/:id` | Project | tabs: overview, keys, Activity, cashbox for a period |
 | `/business/orders` | All orders | filters (env, kind, status, asset, date), pagination, export |
 | `/business/orders/:id` | Order detail | quote, deposit address, deposit/delivery tx, timeline, captured fee, re-quote link, webhook delivery log |
 | `/business/balances` | Balance monitoring | watch-only on-chain balances, fees earned, volume, settlement status, freshness/stale marker |
@@ -340,11 +350,14 @@ applies to the registration page and to the portal pages below.
 | `/business/settings/profile` | Business profile | legal/display name, country, website, support email |
 | `/business/settings/addresses` | Saved addresses | payout, refund and watch-only addresses per network |
 | `/business/settings/team` | Members | invite, role change, remove; owner-only actions |
-| `/business/settings/api-keys` | API keys | create/rotate/revoke, `sk_` reveal once, `pk_` prefix, scopes, last used |
 | `/business/settings/security` | Security | sessions, audit log, live enablement state |
 
 Every page must define loading, empty, error and permission-denied states. The
 test environment gets a persistent banner; live gets a red/orange marker.
+
+Keys have no page of their own: they are created and managed inside a project.
+`/business/settings/api-keys` redirects to `/business/projects` so old links
+keep working.
 
 ### 5.1 “Для бизнеса” workspace home
 
@@ -370,7 +383,8 @@ metrics.
 - main area takes the remaining width with the shared page padding; no centred
   fixed-width container;
 - top bar: page title on the left; environment badge (`test`/`live`), timezone,
-  period selector and “Создать API-ключ” on the right;
+  period selector and “Создать проект” on the right (“Создать ключ” lives inside
+  a project);
 - tabs under the title: “Обзор”, “Тренды”, “Заказы”, “Лимиты” (limits may start
   as a disabled/`soon` tab);
 - KPI row of five compact cards;
@@ -381,9 +395,10 @@ Sidebar mapping:
 
 | Reference item | Pay3Flow page |
 | --- | --- |
-| Activity | `/business` — overview |
+| Activity | `/business/activity` — traffic, volume, fees and limit graphs per project |
 | Logs | `/business/orders` — orders and events |
-| Keys | `/business/settings/api-keys` |
+| Projects | `/business/projects` — projects, their keys and cashbox |
+| Keys | `/business/projects/:id` — keys are created and managed inside a project |
 | Files | `/business/checkout-links` |
 | Guardrails | `/business/limits` (later, read-only limits first) |
 | Routing | `/business/analytics` — corridors and asset mix |
@@ -393,6 +408,9 @@ Sidebar mapping:
 The sidebar also links to API docs and support at the bottom. “Files”, “BYOK”,
 “Presets”, “Tools” and “Classifiers” from the reference are not copied unless a
 Pay3Flow feature actually needs them.
+
+Pay3Flow sidebar order: Обзор, Activity, Проекты, Заказы, Балансы, Аналитика,
+Вебхуки, Настройки. Keys have no sidebar item of their own.
 
 KPI cards:
 
@@ -433,7 +451,7 @@ Rules:
 - empty state is zero values with “Пока нет оплаченных заказов”, not fake
   placeholders.
 
-#### 5.1.2 Metrics and graphs
+#### 5.1.3 Metrics and graphs
 
 - volume, fees, order count, conversion and settlement duration over time;
 - failure reasons and pending/failed order counts;
@@ -446,23 +464,29 @@ Rules:
 - CSV export for the current filter;
 - respect permissions: members and viewers see metrics but not API secrets.
 
-#### 5.1.3 API keys
+#### 5.1.4 API keys live in projects
 
-A compact block on the workspace home and the full management page at
-`/business/settings/api-keys`:
+A compact block on the workspace home, and the full management surface on the
+project page (§5.3). A key cannot exist without a project:
 
-- create a key with name, environment (`test`/`live`) and scopes;
-- show `sk_` once at creation, with copy and “I saved it” confirmation;
-- list prefix, environment, scopes, created date, last used and status;
+- a project is the folder for keys, and creating a key starts by choosing or
+  creating its project;
+- the key form sets name, environment (`test`/`live`), daily request limit and
+  the product scopes (курсы, свап, OTC, платёжная система);
+- show `sk_` once at creation or rotation, with copy and “I saved it”
+  confirmation;
+- the list shows prefix, environment, scopes, daily limit, usage today, last
+  used and status;
 - rotate and revoke; a revoked key stops working immediately;
 - owners and admins only; members/viewers see metadata without secrets;
 - keys are never rendered in SSR or written to logs;
-- backend contract is Phase 1.1 (`b2b_api_keys`), surfaced here.
+- backend contract is Phase 1.1 (`b2b_api_keys`), now carrying `project_id`,
+  the daily limit and usage counters.
 
-The home block shows the two or three most recent keys and a “Создать ключ”
-button; management stays on the settings page.
+The home block shows the two or three most recent keys with their project and a
+“Создать проект” button; the key form itself stays inside a project.
 
-#### 5.1.4 Recent orders and quick actions
+#### 5.1.5 Recent orders and quick actions
 
 - the latest 10 orders with status, amount, asset and created time;
 - quick links to orders, balances, checkout links and webhooks;
@@ -470,7 +494,7 @@ button; management stays on the settings page.
   address, verified webhook, first test quote, first test checkout, KYB);
 - guest state never renders any of these widgets.
 
-#### 5.1.5 Page rules
+#### 5.1.6 Page rules
 
 - full-width shell with side padding; no centred fixed-width grid;
 - same visual language as `/register` unless a separate design says otherwise:
@@ -486,7 +510,148 @@ button; management stays on the settings page.
 The layout and final copy need a Figma frame. Until it arrives, this section is
 the content and data contract.
 
-### 5.2 "Balances" semantics (important)
+### 5.2 “Activity” — traffic and revenue graphs
+
+Route: `/business/activity`; sidebar label “Activity”. One page for the whole
+workspace with a project selector: “Все проекты” or a single project. The same
+charts repeat inside the project page as its “Activity” tab (§5.3).
+
+Filters: project, environment (`test`/`live`), asset, period (24 hours, 7 days,
+30 days, 90 days, all time, custom range). The timezone is the one shown in the
+top bar and is stated next to the charts.
+
+Charts:
+
+1. **Запросы к API** — requests per hour or day, stacked by status class
+   (2xx/4xx/5xx);
+2. **Ошибки** — the failure share, plus a table of the most frequent 4xx/5xx
+   codes;
+3. **Латентность** — p50 and p95 of API responses in the same buckets;
+4. **Оборот** — quoted and paid volume per asset, with a clearly labelled USD
+   estimate;
+5. **Касса проекта** — fees earned per day and asset, so the selected period
+   shows what the project brings in;
+6. **Заказы** — created, paid and failed counts;
+7. **Лимиты** — today's request count against the daily limit for every active
+   key (meters, not a chart).
+
+Rules:
+
+- a request is an authenticated call made with a key of a project; anonymous
+  public traffic is not attributable and is not shown;
+- the graphs read `b2b_api_key_usage` (hourly buckets per key and status
+  class), not raw request logs, so 90-day and all-time ranges stay cheap; the
+  page prints the aggregation timestamp and marks today as partial;
+- the rollup runs hourly; if it has not run, show the freshness/stale marker
+  instead of silently old numbers;
+- endpoint labels are normalised (`/api/b2b/quote`, not the raw path with ids);
+  request bodies, headers and IP addresses are never shown;
+- revoked keys keep their history and stop contributing new points;
+- CSV export for the current filters;
+- empty state: “Пока нет запросов” with a link to create a key;
+- members and viewers see the graphs; key secrets and key mutations stay on the
+  project page and are owner/admin only.
+
+### 5.3 “Projects” — the folder for API keys
+
+A **project** is the merchant's folder for keys: one product or token, its
+keys, its traffic and its revenue. Every API key belongs to exactly one project,
+so creating a key always starts with choosing or creating a project. Projects
+scope the graphs in §5.2 and the cashbox below.
+
+Route `/business/projects` lists the projects:
+
+- columns: name, description, keys (active/total), requests today across its
+  keys, period cashbox (fees and volume, 30 days by default), created date;
+- “Создать проект” asks for a name (2–64 characters, unique inside the
+  workspace) and an optional description; nothing else is created at this step;
+- empty state explains the order project → key → integration, with “Создать
+  проект” as the only button;
+- search and pagination once a workspace has more than 20 projects.
+
+Route `/business/projects/:id` has four tabs:
+
+- **Обзор** — active keys, requests today against their limits, current-period
+  cashbox, latest orders and a link to the full Activity page;
+- **Ключи** — the key list and the create form below;
+- **Activity** — the charts from §5.2 scoped to this project;
+- **Касса** — revenue for a chosen period, described below.
+
+#### 5.3.1 Key fields
+
+Creating or editing a key sets:
+
+| Field | Rule |
+| --- | --- |
+| Название ключа | required, unique inside the project, 2–64 characters, shown in Activity and the audit log |
+| Environment | `test` or `live`; `live` requires live enablement/KYB, otherwise the option is disabled with a reason |
+| Лимит запросов в день | required whole number; `0` means “без лимита” and must be picked explicitly, not left blank |
+| Функции ключа | at least one scope from the table below |
+
+Scopes map to the products a merchant uses:
+
+| UI label | Scope | Allows |
+| --- | --- | --- |
+| Курсы и котировки | `rates:read` | corridor and asset prices, fee schedule |
+| Свап | `quotes:write`, `orders:write` | swap quotes and transfer orders |
+| OTC | `otc:write` | OTC quote requests and OTC orders |
+| Платёжная система | `orders:read` | orders, statuses, balances, webhook delivery log |
+| Платёжная система | `refunds:write` | refunds and checkout-link management |
+
+The catalogue extends the Phase 1.1 scope list in
+[`b2b-payment-api.md`](b2b-payment-api.md) with `rates:read` and `otc:write`.
+A scope is offered only when the matching product has a merchant API; the UI
+must not promise a function the backend refuses.
+
+A key is shown as `sk_…` exactly once, at creation or rotation, with a copy
+button and an “I saved it” confirmation. The list shows only the prefix, name,
+environment, scopes, daily limit, usage today, last used and status. `pk_` is
+not secret. Secrets never reach SSR output, logs, URLs or analytics.
+
+Actions: edit name, limit and scopes; rotate (new secret shown once, the old
+one stops working immediately); revoke (immediate, irreversible). Each action
+writes a `b2b_audit_events` row. Owners and admins only; members and viewers
+see metadata without secrets.
+
+#### 5.3.2 Daily request limit
+
+- the limit is per key, not per project: two keys of the same project each get
+  their own counter;
+- a request counts when it is authenticated with the key, whatever the response
+  status; `OPTIONS` preflights and unauthenticated calls do not count;
+- the day is a UTC calendar day in Phase 2 (the reset timezone is an open
+  question, §12);
+- the counter is an atomic upsert into `b2b_api_key_usage`, so it survives
+  restarts and works across several backend instances;
+- over the limit the API answers `429` with `Retry-After`, `X-RateLimit-Limit`,
+  `X-RateLimit-Remaining` and `X-RateLimit-Reset`; the UI shows the same numbers
+  in the limit meters;
+- lowering the limit below today's usage blocks further calls until the next
+  reset; raising it applies immediately.
+
+#### 5.3.3 “Касса” inside a project
+
+The project cashbox answers “сколько принёс этот проект за период”:
+
+- period selector: today, 7 days, 30 days (default), 90 days, all time, custom
+  range; the same asset and environment filters as Activity;
+- headline numbers: **комиссия Pay3Flow** earned from the project, **оборот**
+  (paid volume), **заказы** (paid/failed), **средний чек** and the
+  quote-to-paid conversion;
+- a daily series of fees and volume, plus a breakdown by asset and by key, so a
+  merchant sees which key brings the revenue;
+- CSV export for the current filters;
+- comparison with the previous period of equal length; for “all time” show “—”;
+- test and live are never mixed: the test environment is labelled and excluded
+  from live totals.
+
+Attribution rule: revenue belongs to the project whose key created the order;
+a hosted checkout session inherits the project of the call that created it. An
+order created in the portal itself, with no key involved, has no project and is
+shown as “Без проекта” in the workspace totals but never inside a project
+cashbox. The workspace “Касса” in §5.1.2 stays all-time and covers every order.
+
+### 5.4 "Balances" semantics (important)
 
 This page is separate from the “Касса” block on `/business`:
 
@@ -559,6 +724,72 @@ CREATE TABLE b2b_audit_events (
     body JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Projects are the folder for API keys and the unit for traffic and revenue
+-- reporting. Keys stay in b2b_api_keys (Phase 1.1) and gain project_id here.
+CREATE TABLE b2b_projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID NOT NULL REFERENCES b2b_merchants(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active','archived')),
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX b2b_projects_name_idx
+    ON b2b_projects (merchant_id, lower(name));
+
+-- Phase 1.1 has not shipped yet, so this is the shape it lands with. If it
+-- ships first, these columns are added to the existing table instead.
+CREATE TABLE b2b_api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES b2b_projects(id),
+    name TEXT NOT NULL,
+    env TEXT NOT NULL CHECK (env IN ('test','live')),
+    prefix TEXT NOT NULL UNIQUE,
+    secret_hash TEXT NOT NULL,
+    scopes TEXT[] NOT NULL CHECK (cardinality(scopes) > 0),
+    daily_request_limit INT NOT NULL DEFAULT 0
+        CHECK (daily_request_limit >= 0),
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active','revoked')),
+    created_by UUID REFERENCES users(id),
+    last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX b2b_api_keys_name_idx
+    ON b2b_api_keys (project_id, lower(name));
+
+-- One row per key and hour, written by the API middleware. Day and month views
+-- aggregate this table; the Activity page never scans raw request logs.
+CREATE TABLE b2b_api_key_usage (
+    key_id UUID NOT NULL REFERENCES b2b_api_keys(id) ON DELETE CASCADE,
+    bucket_start TIMESTAMPTZ NOT NULL,
+    requests BIGINT NOT NULL DEFAULT 0,
+    errors_4xx BIGINT NOT NULL DEFAULT 0,
+    errors_5xx BIGINT NOT NULL DEFAULT 0,
+    latency_sum_ms BIGINT NOT NULL DEFAULT 0,
+    latency_p50_ms INT,
+    latency_p95_ms INT,
+    PRIMARY KEY (key_id, bucket_start)
+);
+
+ALTER TABLE b2b_orders
+    ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES b2b_projects(id);
+ALTER TABLE b2b_orders
+    ADD COLUMN IF NOT EXISTS api_key_id UUID REFERENCES b2b_api_keys(id);
+ALTER TABLE b2b_fee_ledger
+    ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES b2b_projects(id);
+
+CREATE INDEX b2b_orders_project_idx
+    ON b2b_orders (merchant_id, project_id, created_at DESC);
+CREATE INDEX b2b_fee_ledger_project_idx
+    ON b2b_fee_ledger (merchant_id, project_id, created_at DESC);
 ```
 
 ### 6.1 Auth and OAuth2 tables
@@ -621,7 +852,17 @@ Notes:
 
 Portal notes:
 
-- `b2b_api_keys` is defined by Phase 1.1 and surfaced by the portal.
+- `b2b_api_keys` belongs to Phase 1.1 and is defined here with the portal's
+  columns (`project_id`, `name`, `daily_request_limit`, scopes) so the shape is
+  fixed in one place (§5.3); keys are always grouped under `b2b_projects`.
+- A key belongs to exactly one project; a project is archived, not deleted,
+  once it has keys or orders.
+- `b2b_orders.project_id` and `b2b_fee_ledger.project_id` are the attribution
+  source for Activity and the per-project cashbox; rows created before the
+  migration keep `NULL` and appear as “Без проекта”.
+- `b2b_api_key_usage` is written by the API middleware: one row per key and
+  hour, upserted atomically, with 4xx/5xx counts and latency percentiles for
+  that hour.
 - `b2b_members` is the authorization source; `b2b_merchants.user_id` remains the
   creator and is not used for permission checks after the migration backfill.
 - Migration backfills one `owner` membership per existing merchant and one
@@ -652,6 +893,18 @@ to a merchant membership. OpenAPI gets a `B2B Portal` tag in the same pass.
 ```text
 GET    /api/b2b/profile
 PUT    /api/b2b/profile
+GET    /api/b2b/projects
+POST   /api/b2b/projects
+GET    /api/b2b/projects/:id
+PATCH  /api/b2b/projects/:id
+GET    /api/b2b/projects/:id/keys        metadata only, never secrets
+POST   /api/b2b/projects/:id/keys
+PATCH  /api/b2b/keys/:id                 name, daily limit, scopes
+POST   /api/b2b/keys/:id/rotate
+POST   /api/b2b/keys/:id/revoke
+GET    /api/b2b/projects/:id/activity    usage series and limit meters
+GET    /api/b2b/projects/:id/summary     period cashbox and per-key revenue
+GET    /api/b2b/activity                 the same series across projects
 GET    /api/b2b/summary        all-time cashbox totals and freshness
 GET    /api/b2b/metrics        time series for volume, fees, orders, conversion
 GET    /api/b2b/members
@@ -668,7 +921,8 @@ GET    /api/b2b/settings        env, limits, live enablement
 PUT    /api/b2b/settings
 ```
 
-Phase 1.1 endpoints (`/api/b2b/keys`) are linked from the settings page.
+A merchant-wide `/api/b2b/keys` path is not part of the contract even if Phase
+1.1 ships first: a key is always created under `/api/b2b/projects/:id/keys`.
 
 Rules:
 
@@ -676,7 +930,12 @@ Rules:
 - mutations require owner/admin as documented per route;
 - every mutation writes a `b2b_audit_events` row in the same transaction;
 - reads never expose webhook secrets or `sk_` values after creation;
-- `GET /api/b2b/balances` reports the timestamp and `stale` flag it used.
+- `GET /api/b2b/balances` reports the timestamp and `stale` flag it used;
+- key authentication checks `status`, `env` and the required scope before the
+  handler runs, then counts the request against `daily_request_limit` and
+  answers `429` with the `X-RateLimit-*` headers when it is exhausted;
+- the activity and summary routes resolve `project_id` before aggregation, so a
+  viewer without access to a project sees nothing for it.
 
 ## 8. Authentication and security
 
@@ -696,8 +955,14 @@ Rules:
   verified provider email and, for existing accounts, an already verified
   Pay3Flow email.
 - API keys: `sk_` secret shown once, stored as an Argon2id hash plus prefix;
-  `pk_` identifier is not secret; scopes `quotes:write`, `orders:read`,
-  `orders:write`, `refunds:write`; separate test/live.
+  `pk_` identifier is not secret; scopes `rates:read`, `quotes:write`,
+  `orders:read`, `orders:write`, `refunds:write`, `otc:write`; separate
+  test/live. A key always belongs to a project and carries a daily request
+  limit; the counter lives in `b2b_api_key_usage` and enforcement returns `429`
+  with `Retry-After` and `X-RateLimit-*`.
+- Scope checks are server-side: a valid key without the scope gets `403` with a
+  machine-readable `insufficient_scope` code, and the portal must not imply a
+  function the scope does not grant.
 - Live enablement requires manual KYB/sanctions approval and a signed agreement.
 - Rate-limit code sends, code verification, OAuth starts/callbacks and invites.
 - Audit all login, OAuth link, member, key, address and webhook changes.
@@ -719,7 +984,9 @@ Rules:
 
 ## 10. Delivery order
 
-1. Phase 1.1 API keys (backend) if not already shipped.
+1. Phase 1.1 API keys, project-scoped from the start: `b2b_projects`,
+   `b2b_api_keys.project_id`, name, `daily_request_limit`, scopes,
+   `b2b_api_key_usage`, and `project_id` on orders and the fee ledger.
 2. `auth_oauth.sql`: email codes, OAuth identities, sessions, email-verified
    column; replace the `1234` stub and add a real mail adapter.
 3. `POST /api/auth/code` and `POST /api/auth/authenticate`; keep the old
@@ -728,12 +995,18 @@ Rules:
 5. Registration page `/register` from the Figma design, including the
    no-glow/no-hover/one-page rules.
 6. `b2b_portal.sql`, membership/profile backfill, authorization middleware.
-7. Business onboarding and workspace creation.
-8. “Для бизнеса” home: cashbox, metrics and graphs, recent orders, compact API-key block; then orders list, order detail and fees.
-9. Balance monitoring (watch-only) and analytics.
-10. Webhooks, addresses, team, settings, audit.
-11. API-key UI and live-enablement/KYB gate.
-12. Remaining Figma pages and responsive polish.
+7. Business onboarding and workspace creation, including the first test project
+   and test key.
+8. `/business/projects`: projects list, project tabs, key creation with name,
+   environment, daily limit and scopes, rotation and revocation (§5.3).
+9. `/business/activity`: usage rollup job, per-project charts and limit meters
+   (§5.2).
+10. “Для бизнеса” home: cashbox, metrics and graphs, project switcher, recent
+    orders; then orders list, order detail and fees.
+11. Balance monitoring (watch-only) and analytics.
+12. Webhooks, addresses, team, settings, audit.
+13. Per-project cashbox report with attribution and CSV, live-enablement/KYB
+    gate, remaining Figma pages and responsive polish.
 
 Each step updates this document and the OpenAPI document. The state of every
 step as of 2026-11-11 is recorded in §14.
@@ -745,8 +1018,8 @@ step as of 2026-11-11 is recorded in §14.
 - the `/register` page has no glow, no hover effect and no separate login
   prompt; an existing email signs in and a new email registers through the same
   form;
-- the “Для бизнеса” home shows the all-time cashbox, dated graphs and API-key
-  creation; totals match the summary and fee-ledger APIs and mark stale data;
+- the “Для бизнеса” home shows the all-time cashbox, dated graphs and a project
+  switcher; totals match the summary and fee-ledger APIs and mark stale data;
 - GitHub OAuth2 and Telegram OIDC complete a full round trip, reject bad state
   and link to an existing account only through a verified email;
 - production auth rejects the demo code; a real code is emailed, expires,
@@ -756,7 +1029,15 @@ step as of 2026-11-11 is recorded in §14.
   stale data;
 - fees shown in the portal match `b2b_fee_ledger`;
 - a webhook secret is shown once and a signed delivery succeeds;
-- API keys can be created, rotated and revoked, and an old key stops working;
+- a key cannot be created without a project; the project page is the only
+  place keys are created, rotated and revoked, and an old key stops working at
+  once;
+- a key with only `rates:read` gets `403 insufficient_scope` on swap, OTC and
+  payments endpoints, and a key over its daily limit gets `429` with
+  `X-RateLimit-*` until the next reset;
+- Activity and the project cashbox match `b2b_api_key_usage`, `b2b_orders` and
+  `b2b_fee_ledger` for the same filters, mark an order without a project as
+  “Без проекта”, and never mix test with live revenue;
 - every settings/member/key change appears in the audit log;
 - live stays disabled until KYB approval;
 - anonymous swap/checkout still works for users who never register;
@@ -784,6 +1065,20 @@ step as of 2026-11-11 is recorded in §14.
    account only when both emails are verified.
 9. **Remaining designs.** The registration frame is received; the rest of the
    portal page inventory still needs Figma frames.
+10. **Project vs token.** Is one project exactly one token, or can a project
+    group several tokens and corridors under one key? This plan treats a project
+    as a product folder, not a token registry.
+11. **Attribution without a key.** Should an order created in the portal or
+    through a hosted checkout with no key belong to a chosen project, to a
+    default project, or stay “Без проекта”?
+12. **Daily limit reset.** UTC midnight, workspace timezone or a rolling 24-hour
+    window? And is the limit per key (as planned) or shared by every key of a
+    project?
+13. **Scope granularity.** Confirm `rates:read`, `quotes:write`, `orders:read`,
+    `orders:write`, `refunds:write`, `otc:write`, and whether swap and OTC need
+    their own scopes once their merchant APIs exist.
+14. **Project lifecycle.** Archive or delete a project that has keys or orders,
+    and does the workspace need a default project for portal-created orders?
 
 ## 13. Figma designs
 
@@ -793,7 +1088,9 @@ step as of 2026-11-11 is recorded in §14.
 | _pending_ | `/business` | waiting for design |
 | _pending_ | `/business/orders` | waiting for design |
 | _pending_ | `/business/balances` | waiting for design |
-| _pending_ | `/business/settings/api-keys` | waiting for design |
+| _pending_ | `/business/activity` | waiting for design |
+| _pending_ | `/business/projects` | waiting for design |
+| _pending_ | `/business/projects/:id` | waiting for design: overview, keys, Activity, cashbox tabs |
 
 The registration design is dark and includes the route cards and the social
 buttons. It must be implemented with the modifications in §4.1: no glow, no
@@ -812,12 +1109,15 @@ what the repository already contains.
 
 | §10 step | State | Evidence |
 | --- | --- | --- |
-| 1. Phase 1.1 API keys | Not started | `migrations/b2b.sql` still says `b2b_api_keys` is deferred; only `/api/b2b/webhooks`, `/api/b2b/orders` and `/api/b2b/analytics` exist. |
+| 1. Phase 1.1 API keys, project-scoped | Not started | `migrations/b2b.sql` still says `b2b_api_keys` is deferred; there is no `b2b_projects` or `b2b_api_key_usage`; only `/api/b2b/webhooks`, `/api/b2b/orders` and `/api/b2b/analytics` exist. |
 | 2. `auth_oauth.sql`, real codes and mail adapter | Not started | no `auth_oauth.sql`; `users` has no `email_verified_at`; `service/user/mail.rs` still returns `code == "1234"`; `register::send_auth_code` only logs. |
 | 3. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
 | 4. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
 | 5. `/register` page | Draft, uncommitted | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are untracked; no route links to `/register` yet. |
-| 6–12. Portal, onboarding, orders, keys, settings | Not started | there is no `src/routes/business/` directory in the frontend. |
+| 6–13. Portal, projects/keys, Activity, orders, settings | Not started | there is no `src/routes/business/` directory in the frontend. |
+
+The projects and Activity steps were added to §10 on 2026-11-11; the numbers in
+this table follow the current §10.
 
 ### 14.1 What the `/register` draft already does
 

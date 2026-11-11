@@ -470,7 +470,8 @@ exponential backoff, dead-letter, replay from the dashboard. Reuse the
   [`b2b-merchant-portal.md`](b2b-merchant-portal.md).
 - When keys land: `sk_` secrets shown once, stored as an Argon2id hash + prefix;
   `pk_` identifiers are not secrets; separate test/live environments; scopes
-  `quotes:write`, `orders:read`, `orders:write`, `refunds:write`.
+  `rates:read`, `quotes:write`, `orders:read`, `orders:write`, `refunds:write`,
+  `otc:write`; every key belongs to a project and has a daily request limit.
 - Per-account rate limits and per-merchant volume limits.
 - Idempotency on quote/transfer creation; same key + same body returns the
   original, a different body conflicts.
@@ -510,7 +511,8 @@ mark paid.
 
 ### Phase 1.1 — merchant API keys (after v1 works)
 
-- `b2b_api_keys`, issue/rotate/revoke, test/live, scopes;
+- `b2b_api_keys` under `b2b_projects`, issue/rotate/revoke, test/live, scopes,
+  daily request limit and usage counters;
 - switch authentication from the user Bearer token to `sk_`/`pk_`;
 - document the security scheme in OpenAPI;
 - remind the user about this step when v1 is running.
