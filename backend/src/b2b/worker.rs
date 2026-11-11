@@ -4,7 +4,7 @@
 //! only evidence that funds arrived, never the success signal.
 
 use chrono::{Duration as ChronoDuration, Utc};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::*;
 
@@ -298,6 +298,7 @@ fn map_provider_status(provider: &str, raw: &Value, input_amount: &str) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     #[test]
     fn release_regression_pending_deposits_expire_without_losing_delivery() {
         assert_eq!(

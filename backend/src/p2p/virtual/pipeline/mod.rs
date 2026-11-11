@@ -51,7 +51,7 @@ impl P2pSearchService {
     ) -> Result<P2pRouteSearchResponse> {
         let started = Instant::now();
         let provider_assets = tokio::time::timeout(
-            self.timeout.min(std::time::Duration::from_secs(2)),
+            std::time::Duration::from_secs(2),
             self.provider_assets(),
         )
         .await
