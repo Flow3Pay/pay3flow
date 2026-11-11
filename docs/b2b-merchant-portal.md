@@ -708,10 +708,70 @@ reconciliation and KYB). The exact balance definition is an open decision
 
 ## 6. Data model additions
 
-New migration `backend/migrations/b2b_portal.sql`, applied after `b2b.sql`.
-Money stays as exact decimal strings; no `f64`.
+Phase 1.1 (projects, keys, usage, order/fee attribution) ships in
+`backend/migrations/b2b_api_keys.sql`, applied after `b2b.sql`. Portal-only
+tables (profiles, members, watch addresses, audit) ship later in
+`backend/migrations/b2b_portal.sql`. Money stays as exact decimal strings; no
+`f64`.
 
 ```sql
+-- b2b_api_keys.sql (Phase 1.1 / §10 step 1)
+CREATE TABLE b2b_projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID NOT NULL REFERENCES b2b_merchants(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active','archived')),
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX b2b_projects_name_idx
+    ON b2b_projects (merchant_id, lower(name));
+
+CREATE TABLE b2b_api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES b2b_projects(id),
+    name TEXT NOT NULL,
+    env TEXT NOT NULL CHECK (env IN ('test','live')),
+    prefix TEXT NOT NULL UNIQUE,
+    secret_hash TEXT NOT NULL,
+    scopes TEXT[] NOT NULL CHECK (cardinality(scopes) > 0),
+    daily_request_limit INT NOT NULL DEFAULT 0
+        CHECK (daily_request_limit >= 0),
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active','revoked')),
+    created_by UUID REFERENCES users(id),
+    last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX b2b_api_keys_name_idx
+    ON b2b_api_keys (project_id, lower(name));
+
+CREATE TABLE b2b_api_key_usage (
+    key_id UUID NOT NULL REFERENCES b2b_api_keys(id) ON DELETE CASCADE,
+    bucket_start TIMESTAMPTZ NOT NULL,
+    requests BIGINT NOT NULL DEFAULT 0,
+    errors_4xx BIGINT NOT NULL DEFAULT 0,
+    errors_5xx BIGINT NOT NULL DEFAULT 0,
+    latency_sum_ms BIGINT NOT NULL DEFAULT 0,
+    latency_p50_ms INT,
+    latency_p95_ms INT,
+    PRIMARY KEY (key_id, bucket_start)
+);
+
+ALTER TABLE b2b_orders
+    ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES b2b_projects(id);
+ALTER TABLE b2b_orders
+    ADD COLUMN IF NOT EXISTS api_key_id UUID REFERENCES b2b_api_keys(id);
+ALTER TABLE b2b_fee_ledger
+    ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES b2b_projects(id);
+
+-- b2b_portal.sql (portal / §10 step 7)
 CREATE TABLE b2b_business_profiles (
     merchant_id UUID PRIMARY KEY REFERENCES b2b_merchants(id),
     legal_name TEXT NOT NULL,
@@ -759,73 +819,12 @@ CREATE TABLE b2b_audit_events (
     body JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- Projects are the folder for API keys and the unit for traffic and revenue
--- reporting. Keys stay in b2b_api_keys (Phase 1.1) and gain project_id here.
-CREATE TABLE b2b_projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    merchant_id UUID NOT NULL REFERENCES b2b_merchants(id),
-    name TEXT NOT NULL,
-    description TEXT,
-    status TEXT NOT NULL DEFAULT 'active'
-        CHECK (status IN ('active','archived')),
-    created_by UUID REFERENCES users(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX b2b_projects_name_idx
-    ON b2b_projects (merchant_id, lower(name));
-
--- Phase 1.1 has not shipped yet, so this is the shape it lands with. If it
--- ships first, these columns are added to the existing table instead.
-CREATE TABLE b2b_api_keys (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES b2b_projects(id),
-    name TEXT NOT NULL,
-    env TEXT NOT NULL CHECK (env IN ('test','live')),
-    prefix TEXT NOT NULL UNIQUE,
-    secret_hash TEXT NOT NULL,
-    scopes TEXT[] NOT NULL CHECK (cardinality(scopes) > 0),
-    daily_request_limit INT NOT NULL DEFAULT 0
-        CHECK (daily_request_limit >= 0),
-    status TEXT NOT NULL DEFAULT 'active'
-        CHECK (status IN ('active','revoked')),
-    created_by UUID REFERENCES users(id),
-    last_used_at TIMESTAMPTZ,
-    revoked_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX b2b_api_keys_name_idx
-    ON b2b_api_keys (project_id, lower(name));
-
--- One row per key and hour, written by the API middleware. Day and month views
--- aggregate this table; the Activity page never scans raw request logs.
-CREATE TABLE b2b_api_key_usage (
-    key_id UUID NOT NULL REFERENCES b2b_api_keys(id) ON DELETE CASCADE,
-    bucket_start TIMESTAMPTZ NOT NULL,
-    requests BIGINT NOT NULL DEFAULT 0,
-    errors_4xx BIGINT NOT NULL DEFAULT 0,
-    errors_5xx BIGINT NOT NULL DEFAULT 0,
-    latency_sum_ms BIGINT NOT NULL DEFAULT 0,
-    latency_p50_ms INT,
-    latency_p95_ms INT,
-    PRIMARY KEY (key_id, bucket_start)
-);
-
-ALTER TABLE b2b_orders
-    ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES b2b_projects(id);
-ALTER TABLE b2b_orders
-    ADD COLUMN IF NOT EXISTS api_key_id UUID REFERENCES b2b_api_keys(id);
-ALTER TABLE b2b_fee_ledger
-    ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES b2b_projects(id);
-
-CREATE INDEX b2b_orders_project_idx
-    ON b2b_orders (merchant_id, project_id, created_at DESC);
-CREATE INDEX b2b_fee_ledger_project_idx
-    ON b2b_fee_ledger (merchant_id, project_id, created_at DESC);
 ```
+
+The Phase 1.1 tables in the first half of the block are what
+`b2b_api_keys.sql` applies today. Profiles, members, watch addresses and audit
+stay as the target shape for step 7 and are not applied until `b2b_portal.sql`
+lands.
 
 ### 6.1 Auth and OAuth2 tables
 
@@ -887,9 +886,10 @@ Notes:
 
 Portal notes:
 
-- `b2b_api_keys` belongs to Phase 1.1 and is defined here with the portal's
-  columns (`project_id`, `name`, `daily_request_limit`, scopes) so the shape is
-  fixed in one place (§5.3); keys are always grouped under `b2b_projects`.
+- `b2b_api_keys` belongs to Phase 1.1 and ships in `b2b_api_keys.sql` with the
+  portal columns (`project_id`, `name`, `daily_request_limit`, scopes) so the
+  shape is fixed in one place (§5.3); keys are always grouped under
+  `b2b_projects`.
 - A key belongs to exactly one project; a project is archived, not deleted,
   once it has keys or orders.
 - `b2b_orders.project_id` and `b2b_fee_ledger.project_id` are the attribution
@@ -1212,7 +1212,7 @@ step as of 2026-11-11 is recorded in §14.
 
 | Figma frame | Route | Status |
 | --- | --- | --- |
-| [Registration](https://www.figma.com/make/MccHliZg3K4s9m37RHa69V/Collaborative-Drawing-Workspace?t=6OjvSj4O4ZxU7aXI-1) | `/register` | design received 2026-11-11; uncommitted draft in the working tree, not wired to the new auth flow (§14) |
+| [Registration](https://www.figma.com/make/MccHliZg3K4s9m37RHa69V/Collaborative-Drawing-Workspace?t=6OjvSj4O4ZxU7aXI-1) | `/register` | design received 2026-11-11; uncommitted draft in the working tree, not wired to the new auth flow (§14 step 6) |
 | _pending_ | `/business` | waiting for design |
 | _pending_ | `/business/orders` | waiting for design |
 | _pending_ | `/business/balances` | waiting for design |
@@ -1231,18 +1231,18 @@ checklist.
 
 ## 14. Implementation status
 
-Recorded 2026-11-11 from the working tree at `master` (`e12ee2d`). Nothing in
-this section is implemented by recording it; it only separates the plan from
-what the repository already contains.
+Updated 2026-11-11. This section separates the plan from what the repository
+already contains; recording a step here is not a substitute for the code.
 
 | §10 step | State | Evidence |
 | --- | --- | --- |
-| 1. Phase 1.1 API keys, project-scoped | Not started | `migrations/b2b.sql` still says `b2b_api_keys` is deferred; there is no `b2b_projects` or `b2b_api_key_usage`; only `/api/b2b/webhooks`, `/api/b2b/orders` and `/api/b2b/analytics` exist. |
-| 2. `auth_oauth.sql`, real codes and mail adapter | Not started | no `auth_oauth.sql`; `users` has no `email_verified_at`; `service/user/mail.rs` still returns `code == "1234"`; `register::send_auth_code` only logs. |
-| 3. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
-| 4. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
-| 5. `/register` page | Draft, uncommitted | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are untracked; no route links to `/register` yet. |
-| 6–14. Portal, projects/keys, Activity, orders, settings | Not started | there is no `src/routes/business/` directory in the frontend, and no route outside the allowlist checks a key. |
+| 1. Phase 1.1 API keys, project-scoped | Schema done | `migrations/b2b_api_keys.sql` creates `b2b_projects`, `b2b_api_keys`, `b2b_api_key_usage` and adds `project_id` / `api_key_id` on orders and the fee ledger; `db::apply_schema` runs it after `b2b.sql`. Issue/rotate/revoke APIs and key middleware are still later steps. |
+| 2. Business API key middleware | Not started | no router-wide key check; business routes still accept the user Bearer token. |
+| 3. `auth_oauth.sql`, real codes and mail adapter | Not started | no `auth_oauth.sql`; `users` has no `email_verified_at`; `service/user/mail.rs` still returns `code == "1234"`; `register::send_auth_code` only logs. |
+| 4. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
+| 5. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
+| 6. `/register` page | Draft, uncommitted | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are untracked; no route links to `/register` yet. |
+| 7–14. Portal, projects/keys UI, Activity, orders, settings | Not started | there is no `src/routes/business/` directory in the frontend, and no route outside the allowlist checks a key. |
 
 The projects, Activity and API-key-coverage steps were added to §10 on
 2026-11-11; the numbers in this table follow the current §10.
@@ -1257,7 +1257,7 @@ The projects, Activity and API-key-coverage steps were added to §10 on
 
 ### 14.2 Where the draft differs from this plan
 
-The draft predates the auth contract and must be reconciled before step 5 is
+The draft predates the auth contract and must be reconciled before step 6 is
 considered done:
 
 - the code field accepts **four** digits (`maxlength="4"`, `/^\d{4}$/`);

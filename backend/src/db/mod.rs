@@ -100,6 +100,10 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .batch_execute(include_str!("../../migrations/b2b.sql"))
         .await
         .context("apply B2B migration")?;
+    client
+        .batch_execute(include_str!("../../migrations/b2b_api_keys.sql"))
+        .await
+        .context("apply B2B API keys migration")?;
     Ok(())
 }
 

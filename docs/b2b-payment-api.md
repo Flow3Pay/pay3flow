@@ -182,8 +182,8 @@ CREATE TABLE b2b_merchants (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- b2b_api_keys is intentionally deferred. V1 authenticates with the existing
--- user Bearer token; keys are added in phase 1.1 (see §20–21).
+-- Phase 1.1 API keys live in b2b_api_keys.sql (projects, keys, usage). V1 still
+-- authenticates with the user Bearer token until the key middleware ships.
 
 CREATE TABLE b2b_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -511,8 +511,11 @@ mark paid.
 
 ### Phase 1.1 — merchant API keys (after v1 works)
 
-- `b2b_api_keys` under `b2b_projects`, issue/rotate/revoke, test/live, scopes,
-  daily request limit and usage counters;
+- schema shipped in `migrations/b2b_api_keys.sql`: `b2b_projects`,
+  `b2b_api_keys`, `b2b_api_key_usage`, and `project_id` / `api_key_id`
+  attribution on orders and the fee ledger;
+- still open: issue/rotate/revoke APIs, test/live enforcement, scope checks,
+  daily request limit counters;
 - switch authentication from the user Bearer token to `sk_`/`pk_`;
 - document the security scheme in OpenAPI;
 - remind the user about this step when v1 is running.

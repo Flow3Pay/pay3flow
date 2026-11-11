@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS b2b_merchants (
 
 CREATE UNIQUE INDEX IF NOT EXISTS b2b_merchants_user_idx ON b2b_merchants (user_id);
 
--- b2b_api_keys is intentionally deferred. V1 authenticates with the existing
--- user Bearer token; keys are added in phase 1.1 (see plan §20-21).
+-- Phase 1.1 API keys live in b2b_api_keys.sql (projects, keys, usage). V1 still
+-- authenticates with the user Bearer token until the key middleware ships.
 
 CREATE TABLE IF NOT EXISTS b2b_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
