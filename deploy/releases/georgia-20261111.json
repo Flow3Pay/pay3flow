@@ -1,0 +1,338 @@
+{
+  "status": "deployed",
+  "verified_at": "2026-11-11T23:47:30.385060+00:00",
+  "url": "https://pay3flow.lefine.pro",
+  "source_revision": "3e9c1c2eec1ca59cc7bfbfa50a00401123e8ba8e",
+  "branch": "master",
+  "upstream_base_revision": "e805c21ac69bbf75027415b99e202fc945ce11ed",
+  "previous_production_revision": "56078c3baab94fe2abc24115dc13755f7db6a9fe",
+  "scope": "Update from default branch master (no main branch exists); Georgian bank and currency catalog, NBG GEL/EUR reference rates, Solunex cash discovery and quotes. B2B prototype remains disabled.",
+  "images": {
+    "backend": {
+      "image": "localhost/pay3flow/backend:live-20261111-3e9c1c2",
+      "pod": "pay3flow-backend-7cc77df4cb-8228s",
+      "image_id": "sha256:445f35e7da8ffb20932a0f08fe8833ee750a3928248c16309c2a3dbed15caa55",
+      "ready": true
+    },
+    "frontend": {
+      "image": "localhost/pay3flow/frontend:live-20261111-3e9c1c2",
+      "pod": "pay3flow-frontend-64c69cddd6-ttnvq",
+      "image_id": "sha256:3b419dc9cef5b30d328512c6b09448da34d7a55c50e3030c489b12d298d23208",
+      "ready": true
+    }
+  },
+  "deployment": {
+    "command": "nix run .#deploy -- --reuse-images --revision 3e9c1c2eec1ca59cc7bfbfa50a00401123e8ba8e --image-tag live-20261111-3e9c1c2",
+    "exit_code": 0,
+    "backend_rollout": "success",
+    "frontend_rollout": "success",
+    "built_in_http_verification": "passed"
+  },
+  "backup": {
+    "directory": "/var/lib/pay3flow/backups/live-20261111-3e9c1c2",
+    "database_dump": "/var/lib/pay3flow/backups/live-20261111-3e9c1c2/database.dump",
+    "bytes": 7745863,
+    "mode": "0600",
+    "pg_dump_exit_code": 0,
+    "header": "PGDMP",
+    "restore_drill_performed": false,
+    "rollback": "Saved previous deployments and ConfigMap in backup directory; additive migrations retained on image rollback.",
+    "initial_pre_migration_dump": "/var/lib/pay3flow/backups/live-20261111-56078c3/database.dump"
+  },
+  "frontend_packaging": {
+    "application_git_tree": "f0a365ffd3e2b3ac5bef6905460f66306fade5ed",
+    "tested_build_archive_sha256": "857f0f824c0fa6a1ee5f59e921a28cd9c551eb1d53f6d0917e0d2327e410a789",
+    "handler_sha256": "1a15fe79653fbdb0a93f6bec18ec2b4070b52918da61090686408a61e78e90e1",
+    "server_wrapper_sha256": "f29f7ac02e207ac25b0e5c1f9c947d166b2d30eb52c2fbc241d45f3e4910a0d1",
+    "method": "Verified production build inserted into initial rollout runtime image, with unchanged manifests, lockfile and server wrapper. Archive checksum verified remotely. Entrypoint/Cmd preserved. Running pod image ID matches prepared image."
+  },
+  "verification": {
+    "backend_fmt": "passed",
+    "backend_check": "passed",
+    "backend_all_features": {
+      "passed": 490,
+      "ignored": 55
+    },
+    "provider_generator_tests_passed": 33,
+    "live_solunex_test": "passed",
+    "live_reference_feeds_test": "passed",
+    "real_database_polling_regression": "passed",
+    "fixture_guard_negative_test": "passed",
+    "frontend_check": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "frontend_unit_tests_passed": 154,
+    "frontend_build": "passed",
+    "georgian_desktop_mobile_e2e_tests_passed": 6,
+    "live_api": {
+      "verified_at": "2026-11-11T23:47:09.521066+00:00",
+      "banks": 50,
+      "canonical_ids_match_committed_catalog": true,
+      "legacy_bank_rows_retained": 7,
+      "bank_groups": 18,
+      "benchmarks": {
+        "GEL": [
+          {
+            "from": "USD",
+            "to": "GEL",
+            "rate": 2.5933,
+            "sources": [
+              {
+                "name": "NBG",
+                "url": "https://nbg.gov.ge/gw/api/ct/monetarypolicy/currencies/en/json/",
+                "published_at": "2026-11-12",
+                "fetched_at": "2026-11-11T23:47:05.612780631+00:00"
+              }
+            ],
+            "method": "official",
+            "sample_count": 1,
+            "stale": false
+          }
+        ],
+        "EUR": [
+          {
+            "from": "USD",
+            "to": "EUR",
+            "rate": 0.8974909153832844,
+            "sources": [
+              {
+                "name": "NBG",
+                "url": "https://nbg.gov.ge/gw/api/ct/monetarypolicy/currencies/en/json/",
+                "published_at": "2026-11-12",
+                "fetched_at": "2026-11-11T23:47:05.612780631+00:00"
+              }
+            ],
+            "method": "official",
+            "sample_count": 1,
+            "stale": false
+          }
+        ],
+        "RUB": [
+          {
+            "from": "USD",
+            "to": "RUB",
+            "rate": 82.6617,
+            "sources": [
+              {
+                "name": "CBR",
+                "url": "https://www.cbr.ru/scripts/XML_daily.asp",
+                "published_at": "2026-11-12",
+                "fetched_at": "2026-11-11T23:46:49.760882742+00:00"
+              }
+            ],
+            "method": "official",
+            "sample_count": 1,
+            "stale": false
+          }
+        ],
+        "AMD": [
+          {
+            "from": "USD",
+            "to": "AMD",
+            "rate": 360.25,
+            "sources": [
+              {
+                "name": "Rate.am",
+                "url": "https://www.rate.am/en/armenian-dram-exchange-rates/banks",
+                "published_at": "2026-11-11T16:45:02+00:00",
+                "fetched_at": "2026-11-11T23:46:50.296416700+00:00"
+              }
+            ],
+            "method": "median_bank_midpoint",
+            "sample_count": 16,
+            "stale": false
+          }
+        ],
+        "BYN": [
+          {
+            "from": "USD",
+            "to": "BYN",
+            "rate": 3.007,
+            "sources": [
+              {
+                "name": "NBRB",
+                "url": "https://api.nbrb.by/exrates/rates?periodicity=0",
+                "published_at": "2026-11-12",
+                "fetched_at": "2026-11-11T23:46:50.651690570+00:00"
+              }
+            ],
+            "method": "official",
+            "sample_count": 1,
+            "stale": false
+          }
+        ],
+        "UAH": [
+          {
+            "from": "USD",
+            "to": "UAH",
+            "rate": 45.3222,
+            "sources": [
+              {
+                "name": "NBU",
+                "url": "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json",
+                "published_at": "2026-11-12",
+                "fetched_at": "2026-11-11T23:46:50.915315550+00:00"
+              }
+            ],
+            "method": "official",
+            "sample_count": 1,
+            "stale": false
+          }
+        ],
+        "KZT": [
+          {
+            "from": "USD",
+            "to": "KZT",
+            "rate": 444.76000000000005,
+            "sources": [
+              {
+                "name": "NBK",
+                "url": "https://nationalbank.kz/rss/rates_all.xml",
+                "published_at": "2026-11-12",
+                "fetched_at": "2026-11-11T23:46:51.458289313+00:00"
+              }
+            ],
+            "method": "official",
+            "sample_count": 1,
+            "stale": false
+          }
+        ]
+      },
+      "cash_routes": [
+        {
+          "route_id": "711af0bf2725a4347709da921e835e007d52cd49673dbd12a0900349446634f3",
+          "rank": 1,
+          "asset": "USDT",
+          "entry_network": null,
+          "source_network": null,
+          "target_network": "tron",
+          "source_fiat": "GEL",
+          "source_amount": "1000",
+          "acquired_asset_amount": "365.80730693",
+          "target_fiat": "USDT",
+          "target_amount": "365.80730693",
+          "effective_rate": "0.365807306930",
+          "same_venue": false,
+          "requires_asset_transfer": true,
+          "transfer_fee_included": false,
+          "route_kind": "fiat_to_crypto",
+          "bridge_currency": null,
+          "market_path": null,
+          "route_provider": "solunex",
+          "route_provider_url": "https://solunex.ge/en",
+          "provider_quote_id": "cmnu536uj004jhrqocb43386q",
+          "route_path": [
+            "GEL",
+            "USDT@tron"
+          ],
+          "quote_expires_at": "2026-11-11T23:57:07.330Z",
+          "payment_methods_verified": true,
+          "entry_offer": null,
+          "exit_offer": null,
+          "warnings": [
+            "Live dry quote from solunex; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Batumi 6010, Georgia \u00b7 27 Konstantine Gamsakhurdia St, Batumi 6010, Georgia \u00b7 Mon-Sat: 10:00-19:00. Fiat settlement is cash at this office. Confirm availability, AML/KYC requirements, network and final amount with Solunex. Calculator commission is included in the output.."
+          ],
+          "reputation": {
+            "executions_average": 0,
+            "likes_average": 0,
+            "dislikes_average": 0
+          },
+          "feedback": {
+            "likes_total": 0,
+            "dislikes_total": 0
+          }
+        }
+      ],
+      "bank_selection_excludes_cash_provider": true
+    },
+    "b2b_api_status": 404,
+    "b2b_operations_advertised_in_openapi": false,
+    "funds_moved": false,
+    "orders_submitted": false,
+    "public_browser": [
+      {
+        "width": 1440,
+        "selectionRestored": true,
+        "eurAccountSelected": true,
+        "wildcardOptionCount": 1,
+        "pageErrors": [],
+        "fits": true
+      },
+      {
+        "width": 393,
+        "selectionRestored": true,
+        "eurAccountSelected": true,
+        "wildcardOptionCount": 1,
+        "pageErrors": [],
+        "fits": true
+      }
+    ],
+    "compiled_bundle_with_real_production_api": [
+      {
+        "width": 1440,
+        "selectionRestored": true,
+        "eurAccountSelected": true,
+        "wildcardOptionCount": 1,
+        "pageErrors": [],
+        "fits": true
+      },
+      {
+        "width": 393,
+        "selectionRestored": true,
+        "eurAccountSelected": true,
+        "wildcardOptionCount": 1,
+        "pageErrors": [],
+        "fits": true
+      }
+    ],
+    "wildcard_regression": "New production-style ANY fixture reproduced broken selector before fix; all six Georgian/Solunex tests passed after fix.",
+    "scope_notes": "An accidentally unfiltered full e2e invocation was interrupted (exit 130); it is not a passing gate. The correctly filtered six-test run completed with exit 0. A concurrent generated-types warning was cleared by the final standalone type check (0 errors, 0 warnings)."
+  },
+  "independent_review": {
+    "reviewer": "Fresh isolated Claude Code fallback sessions",
+    "rounds": [
+      {
+        "round": 1,
+        "findings": 7,
+        "outcome": "Checked and repaired; settlement interpretation corrected in round 3."
+      },
+      {
+        "round": 2,
+        "outcome": "Aborted on compilation failure; did not clear release."
+      },
+      {
+        "round": 3,
+        "findings": 6,
+        "outcome": "Settlement observation, webhook compatibility, startup refresh, backoff completion and disposable SQL harness repaired; hosted CI fixture wiring deferred."
+      },
+      {
+        "round": 4,
+        "findings": 7,
+        "outcome": "Shared cache and index fixes applied; remaining B2B launch contracts deferred behind default-off gate."
+      },
+      {
+        "round": 5,
+        "findings": 3,
+        "outcome": "No introduced finding above Low; no High or Critical open in enabled release. Two pre-existing catalog limitations and gated-404 observability deferred with reasons and triggers in docs/release-review-20261111.md."
+      },
+      {
+        "round": 6,
+        "findings": 3,
+        "outcome": "Correction confirmed correct. New-assertion harm refuted by existing global discovery contract and passing actual runs; older conflicting browser expectations and About wildcard display deferred with reasons/triggers. Missing receipt completed after rollout. No introduced finding above Low and no open High/Critical after triage."
+      }
+    ],
+    "details": "docs/release-review-20261111.md",
+    "b2b_launch_blockers": "docs/b2b-launch-blockers.md"
+  },
+  "limits": [
+    "Bank catalog availability does not guarantee an executable offer for every bank/currency.",
+    "Solunex supports cash office discovery and external handoff; native execution is not enabled.",
+    "B2B routes, worker and OpenAPI operations are off by default, including older configs."
+  ],
+  "initial_rollout_revision": "56078c3baab94fe2abc24115dc13755f7db6a9fe",
+  "production_revision_before_release": "cca7008db87fa2c86fa8fa2a12509cae060795f3",
+  "backend_build_revision": "56078c3baab94fe2abc24115dc13755f7db6a9fe",
+  "backend_reuse_reason": "No backend, runtime config or dependency changes between backend build and final app source; identical image retagged for final rollout."
+}
