@@ -162,7 +162,7 @@ async fn resolve_region(ip: Option<IpAddr>) -> String {
 
 /// Trust the first hop of `X-Forwarded-For`, which Caddy fills with the real
 /// client address, and fall back to `X-Real-IP`.
-fn client_ip(headers: &HeaderMap) -> Option<IpAddr> {
+pub(crate) fn client_ip(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get("x-forwarded-for")
         .and_then(|value| value.to_str().ok())

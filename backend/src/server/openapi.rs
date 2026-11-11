@@ -283,6 +283,13 @@ fn components() -> Value {
             }
         }
     });
+    components["schemas"]["AuthCodeSendRequest"] = json!({
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+            "email": { "type": "string", "format": "email", "example": "user@example.com" }
+        }
+    });
     let schemas = components["schemas"]
         .as_object_mut()
         .expect("OpenAPI schemas must be an object");
@@ -599,10 +606,28 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/auth/code",
+        "post",
+        "Send a sign-in code",
+        "Send a six-digit code to the email. The response is the same whether or not the email is registered, subject to rate limiting.",
+        "Authentication",
+        true,
+        false,
+    ),
+    (
+        "/api/auth/authenticate",
+        "post",
+        "Register or log in",
+        "Verify the email code and return a bearer token, creating the account when the email is new. A referral code is applied only to new accounts.",
+        "Authentication",
+        true,
+        false,
+    ),
+    (
         "/api/auth/register",
         "post",
-        "Register",
-        "Create an account with an email and one-time code.",
+        "Register (deprecated)",
+        "Create an account with an email and one-time code. Use `/api/auth/authenticate` instead.",
         "Authentication",
         true,
         false,
@@ -1445,7 +1470,7 @@ fn add_operation(paths: &mut Map<String, Value>, operation: Operation) {
         "description": description,
         "tags": [tag],
         "responses": {
-            "200": success_response(path, method),
+            success_status(path, method): success_response(path, method),
             "400": { "description": "Invalid request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
             "401": { "description": "Authentication required" },
             "404": { "description": "Resource not found" }
@@ -1517,7 +1542,10 @@ fn request_schema(path: &str, method: &str) -> Value {
         }});
     }
     let name = match (path, method) {
-        ("/api/auth/register", "post") | ("/api/auth/login", "post") => "AuthCodeRequest",
+        ("/api/auth/code", "post") => "AuthCodeSendRequest",
+        ("/api/auth/authenticate", "post")
+        | ("/api/auth/register", "post")
+        | ("/api/auth/login", "post") => "AuthCodeRequest",
         ("/api/anonymous/register", "post") => "AnonymousRegisterRequest",
         ("/api/market-values", "post") => "MarketValuesRequest",
         ("/api/payments", "post") => "NewPayment",
@@ -1538,7 +1566,8 @@ fn request_schema(path: &str, method: &str) -> Value {
 
 fn response_schema(path: &str, method: &str) -> Value {
     match (path, method) {
-        ("/api/auth/register", "post")
+        ("/api/auth/authenticate", "post")
+        | ("/api/auth/register", "post")
         | ("/api/auth/login", "post")
         | ("/api/auth/oauth/{provider}", "post") => schema_ref("AuthToken"),
         ("/api/auth/me", "get") => schema_ref("User"),
@@ -1585,6 +1614,15 @@ fn response_schema(path: &str, method: &str) -> Value {
     }
 }
 
+/// Most operations answer `200`; sending a code is accepted with `202`.
+fn success_status(path: &str, method: &str) -> &'static str {
+    if path == "/api/auth/code" && method == "post" {
+        "202"
+    } else {
+        "200"
+    }
+}
+
 fn success_response(path: &str, method: &str) -> Value {
     match (path, method) {
         ("/health", "get") => json!({
@@ -1598,6 +1636,9 @@ fn success_response(path: &str, method: &str) -> Value {
         ("/pay/{token}", "get") => json!({
             "description": "Self-contained HTML payment page.",
             "content": { "text/html": { "schema": { "type": "string" } } }
+        }),
+        ("/api/auth/code", "post") => json!({
+            "description": "Code accepted for delivery. The response is identical for registered and unregistered emails."
         }),
         ("/api/exchange/orders/{id}/live", "get")
         | ("/ws", "get")
@@ -1802,6 +1843,23 @@ mod tests {
         let document = api_document();
         let operation = &document["paths"]["/api/admin/exchange/controls"]["post"];
         assert!(operation["security"][0]["adminBearerAuth"].is_array());
+    }
+
+    #[test]
+    fn documents_the_one_time_code_flow() {
+        let document = api_document();
+        let send = &document["paths"]["/api/auth/code"]["post"];
+        assert!(send["responses"]["202"].is_object());
+        assert!(send.get("security").is_none());
+        assert_eq!(
+            send["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/AuthCodeSendRequest"
+        );
+        let authenticate = &document["paths"]["/api/auth/authenticate"]["post"];
+        assert_eq!(
+            authenticate["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/AuthToken"
+        );
     }
 
     #[test]

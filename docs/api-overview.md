@@ -7,14 +7,19 @@ stack. Authenticated routes use `Authorization: Bearer <token>`.
 
 ```text
 GET  /health
-POST /api/auth/register
-POST /api/auth/login
+POST /api/auth/code
+POST /api/auth/authenticate
 GET  /api/auth/me
 GET  /api/referrals/me
 ```
 
-The development auth flow uses an email and demo code. It is not a production
-identity or account-verification system.
+`POST /api/auth/code` sends a six-digit code that expires after ten minutes;
+the response is the same for registered and unregistered emails. Successful
+verification marks the address verified. `POST /api/auth/authenticate` verifies
+the code and returns a bearer token, creating the account when the email is
+new. `/api/auth/register` and `/api/auth/login` remain as deprecated aliases for
+one release. Local development may set `AUTH_DEV_CODE` to a fixed six-digit
+code; production refuses to start with it.
 
 Registration accepts an optional `referral_code`. Attribution is permanent and
 must be set when the referred account is created. `GET /api/referrals/me`

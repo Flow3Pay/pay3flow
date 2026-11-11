@@ -60,6 +60,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/share-links", post(share_links::create))
         .route("/api/share-links/:id", get(share_links::get))
         .route("/api/anonymous/register", post(anonymous::register))
+        .route("/api/auth/code", post(auth::request_code))
+        .route("/api/auth/authenticate", post(auth::authenticate))
+        // Deprecated aliases, kept for one release (§4.3).
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/me", get(auth::me))

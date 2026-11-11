@@ -1,12 +1,14 @@
 use axum::extract::State;
 use axum::http::header::AUTHORIZATION;
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::service::user::{self, UserError};
+
+use super::anonymous::client_ip;
 
 #[derive(Deserialize)]
 pub struct RegisterReq {
@@ -19,6 +21,18 @@ pub struct RegisterReq {
 pub struct LoginReq {
     pub email: String,
     pub code: String,
+}
+
+#[derive(Deserialize)]
+pub struct CodeReq {
+    pub email: String,
+}
+
+#[derive(Deserialize)]
+pub struct AuthenticateReq {
+    pub email: String,
+    pub code: String,
+    pub referral_code: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -60,6 +74,38 @@ pub async fn login(
     Ok(Json(AuthRes { token }))
 }
 
+/// `POST /api/auth/code` — send a sign-in code. The response is the same for a
+/// registered and an unregistered email (§4.3), except for rate limiting.
+pub async fn request_code(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CodeReq>,
+) -> Result<StatusCode, AppError> {
+    let ip = client_ip(&headers).map(|ip| ip.to_string());
+    user::auth::request_code(&state.pool, &state.mail, &req.email, ip.as_deref())
+        .await
+        .map_err(map_user_err)?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// `POST /api/auth/authenticate` — verify the code and return a session for an
+/// existing or a newly created account.
+pub async fn authenticate(
+    State(state): State<AppState>,
+    Json(req): Json<AuthenticateReq>,
+) -> Result<Json<AuthRes>, AppError> {
+    let token = user::authenticate(
+        &state.pool,
+        &state.jwt,
+        &req.email,
+        &req.code,
+        req.referral_code.as_deref(),
+    )
+    .await
+    .map_err(map_user_err)?;
+    Ok(Json(AuthRes { token }))
+}
+
 pub async fn me(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -90,6 +136,12 @@ fn bearer_token(headers: &HeaderMap) -> Result<&str, AppError> {
 fn map_user_err(err: UserError) -> AppError {
     match err {
         UserError::InvalidCode => AppError::BadRequest("invalid auth code".into()),
+        UserError::RateLimited { retry_after_secs } => AppError::TooManyRequests {
+            message: "too many code requests".into(),
+            limit: 0,
+            remaining: 0,
+            reset_unix: chrono::Utc::now().timestamp() + retry_after_secs,
+        },
         UserError::InvalidEmail => AppError::BadRequest("invalid email".into()),
         UserError::NotFound => AppError::NotFound("user not found".into()),
         UserError::AlreadyExists => AppError::Conflict("email already registered".into()),

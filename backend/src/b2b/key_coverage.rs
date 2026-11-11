@@ -69,6 +69,16 @@ pub const ROUTES: &[RouteSpec] = &[
     },
     RouteSpec {
         method: "POST",
+        path: "/api/auth/code",
+        class: RouteClass::Keyless,
+    },
+    RouteSpec {
+        method: "POST",
+        path: "/api/auth/authenticate",
+        class: RouteClass::Keyless,
+    },
+    RouteSpec {
+        method: "POST",
         path: "/api/auth/register",
         class: RouteClass::Keyless,
     },

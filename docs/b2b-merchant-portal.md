@@ -213,8 +213,8 @@ Rules:
 
 ### 4.4 Email code delivery
 
-The current backend accepts only the hardcoded code `1234` and the mail sender
-is a log stub. Phase 2 replaces both.
+Before Phase 2 the backend accepted only the hardcoded code `1234` and the
+mail sender was a log stub. The implementation now follows these rules:
 
 - new `auth_codes` table or Redis key: email, code hash, expiry, attempts,
   sent time;
@@ -1241,8 +1241,8 @@ already contains; recording a step here is not a substitute for the code.
 | --- | --- | --- |
 | 1. Phase 1.1 API keys, project-scoped | Schema done | `migrations/b2b_api_keys.sql` creates `b2b_projects`, `b2b_api_keys`, `b2b_api_key_usage` and adds `project_id` / `api_key_id` on orders and the fee ledger; `db::apply_schema` runs it after `b2b.sql`. Issue/rotate/revoke APIs and key middleware are still later steps. |
 | 2. Business API key middleware | In progress | `b2b::keys` mints/looks up keys; `b2b::key_coverage` classifies every known route (allowlist, legacy `/api/v1`+`/api/b2b`, staff, dated TemporarySite exceptions for browser-called exchange/P2P until the first-party proxy); `b2b::guard::require_key` is layered over the whole router and enforces `sk_` authentication, scope (`403 insufficient_scope`), the daily limit (`429` with `X-RateLimit-*`) and hourly usage. It resolves one `b2b::Caller` per request (merchant, project, key, environment) for both keys and the legacy JWT, so handlers no longer read the token; keyed orders write `project_id`/`api_key_id` and the fee ledger copies `project_id`. A keyed call is pinned to its key's environment and a body `env` naming the other one gets `403 environment_mismatch`. OpenAPI declares `merchantKeyAuth` next to `bearerAuth` on `/api/v1/*` and `/api/b2b/*`. Still open: the end of the legacy `/api/v1`+`/api/b2b` token window, issue/rotate/revoke HTTP endpoints, and the SvelteKit first-party proxy. |
-| 3. `auth_oauth.sql`, real codes and mail adapter | Not started | no `auth_oauth.sql`; `users` has no `email_verified_at`; `service/user/mail.rs` still returns `code == "1234"`; `register::send_auth_code` only logs. |
-| 4. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
+| 3. `auth_oauth.sql`, real codes and mail adapter | Email codes done | `migrations/auth_oauth.sql` adds `users.email_verified_at`, `auth_codes` and `auth_code_sends`; `service/user/codes.rs` stores an Argon2id hash, expires after ten minutes, invalidates after five wrong attempts and enforces one send per minute, five per hour per email and thirty per hour per IP; `service/user/mail.rs` delivers over SMTP configured only from the environment (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`); `AUTH_DEV_CODE` is refused when `PAY3FLOW_ENV=production`, which also requires `SMTP_HOST`. OAuth identity tables wait for step 5. |
+| 4. `/api/auth/code` and `/api/auth/authenticate` | Done | `server/routing/api.rs` registers both routes; `authenticate` registers or logs in with the same response shape, applies a referral code only on creation, and marks the email verified; `register`/`login` stay as deprecated aliases; OpenAPI documents the 202 code response and both request schemas. |
 | 5. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
 | 6. `/register` page | Draft, uncommitted | `src/routes/register/+page.svelte` and `src/lib/auth-session.ts` are untracked; no route links to `/register` yet. |
 | 7–14. Portal, projects/keys UI, Activity, orders, settings | Not started | there is no `src/routes/business/` directory in the frontend, and no route outside the allowlist checks a key. |
