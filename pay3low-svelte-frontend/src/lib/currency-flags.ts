@@ -1,5 +1,7 @@
 // Local SVGs from lipis/flag-icons v7.3.2; license: static/icons/flags/LICENSE.
 const flags: Record<string, string> = {
+  GEL: "/icons/flags/ge.svg",
+  EUR: "/icons/flags/eu.svg",
   AMD: "/icons/flags/am.svg",
   RUB: "/icons/flags/ru.svg",
   USD: "/icons/flags/us.svg",

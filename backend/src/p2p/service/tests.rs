@@ -1247,3 +1247,42 @@ fn payment_filter_keeps_opaque_ids_but_rejects_known_mismatch() {
         PaymentMethodMatch::Exact
     );
 }
+
+#[test]
+fn georgian_banks_do_not_match_other_countries_by_substring() {
+    let mut listing = offer("binance", "2.6", "1", "100000", 20);
+    for (georgian, foreign) in [
+        ("Halyk Bank Georgia", "Halyk Bank"),
+        ("VTB Bank Georgia", "VTB Bank"),
+        ("TBC Bank Georgia", "TBC Bank Uzbekistan"),
+        ("PASHA Bank Georgia", "PASHA Bank Azerbaijan"),
+    ] {
+        listing.payment_methods = vec![foreign.into()];
+        assert_eq!(
+            listing.payment_method_match(georgian),
+            PaymentMethodMatch::No
+        );
+        listing.payment_methods = vec![georgian.into()];
+        assert_eq!(
+            listing.payment_method_match(georgian),
+            PaymentMethodMatch::Exact
+        );
+    }
+    listing.payment_methods = vec!["TBCbank".into()];
+    canonicalize_offer_payment_methods(
+        &mut listing,
+        &BTreeMap::from([(
+            "TBC Bank Georgia".into(),
+            vec!["TBC Bank".into(), "TBCbank".into()],
+        )]),
+    );
+    assert_eq!(
+        listing.payment_method_match("TBC Bank Georgia"),
+        PaymentMethodMatch::Exact
+    );
+    listing.payment_methods = vec!["18".into()];
+    assert_eq!(
+        listing.payment_method_match("TBC Bank Georgia"),
+        PaymentMethodMatch::Unknown
+    );
+}

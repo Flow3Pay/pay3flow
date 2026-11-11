@@ -60,6 +60,62 @@ fn national_bank_parsers_normalize_scale_and_reject_invalid_values() {
     assert!(parse_xml(Source::Cbr, "<broken").is_err());
 }
 
+#[test]
+fn nbg_normalizes_quantity_and_excludes_future_and_invalid_rates() {
+    let today = NaiveDate::from_ymd_opt(2026, 11, 11).unwrap();
+    let data = r#"[{"currencies":[
+      {"code":"USD","rate":2.5,"quantity":1,"validFromDate":"2026-11-11T00:00:00.000Z"},
+      {"code":"EUR","rate":3.0,"quantity":1,"validFromDate":"2026-11-11T00:00:00.000Z"},
+      {"code":"AMD","rate":6.0,"quantity":1000,"validFromDate":"2026-11-11T00:00:00.000Z"},
+      {"code":"USD","rate":99.0,"quantity":1,"validFromDate":"2026-11-12T00:00:00.000Z"},
+      {"code":"BAD","rate":1.0,"quantity":0,"validFromDate":"2026-11-11T00:00:00.000Z"},
+      {"code":"OLD","rate":1.0,"quantity":1,"validFromDate":"2026-10-01T00:00:00.000Z"}
+    ]}]"#;
+    let rates = parse_nbg(data, today).unwrap();
+    assert_eq!(rates.len(), 3);
+    assert_eq!(rates["AMD"].value, 0.006);
+    let s = snapshot(rates);
+    for (from, to, expected) in [
+        ("USD", "GEL", 2.5),
+        ("GEL", "USD", 0.4),
+        ("EUR", "GEL", 3.0),
+        ("USD", "EUR", 2.5 / 3.0),
+    ] {
+        let rate = direct_rate(Source::Nbg, &s, from, to, false).unwrap();
+        assert_eq!(rate.rate, expected);
+        assert_eq!(rate.sources[0].name, "NBG");
+        assert_eq!(rate.sources[0].published_at, "2026-11-11");
+    }
+    assert!(parse_nbg("{}", today).is_err());
+}
+
+#[tokio::test]
+async fn nbg_requests_effective_date_and_reports_unavailability() {
+    use axum::{routing::get, Json, Router};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let today = (Utc::now() + chrono::Duration::hours(4))
+        .date_naive()
+        .to_string();
+    let expected = today.clone();
+    let app = Router::new().route("/", get(move |axum::extract::Query(q): axum::extract::Query<HashMap<String,String>>| async move {
+        assert_eq!(q.get("date"), Some(&expected));
+        Json(serde_json::json!([{"currencies":[{"code":"USD","quantity":1,"rate":2.5,"validFromDate":format!("{expected}T00:00:00.000Z")}]}]))
+    }));
+    let task = tokio::spawn(async { axum::serve(listener, app).await.unwrap() });
+    let mut service = ReferenceRateService::default();
+    Arc::make_mut(&mut service.endpoints).insert(Source::Nbg, endpoint);
+    for market in [Market::Cash, Market::Noncash] {
+        let rate = service.list("USD", "GEL", market).await.unwrap();
+        assert_eq!(rate.rates[0].rate, 2.5);
+        assert!(!rate.rates[0].stale);
+    }
+    let missing = service.list("EUR", "GEL", Market::Noncash).await.unwrap();
+    assert!(missing.rates.is_empty());
+    assert_eq!(missing.unavailable_sources[0].name, "NBG");
+    task.abort();
+}
+
 fn rateam_page() -> String {
     // Representative Flight records: record references, duplicates, summaries and both markets.
     let now = Utc::now().timestamp_millis();
@@ -100,6 +156,18 @@ async fn cross_rates_dual_sources_identity_and_unsupported_currency() {
         (Source::Nbrb, vec![("USD", 3.2)]),
         (Source::Nbu, vec![("USD", 40.0)]),
         (Source::Nbk, vec![("USD", 500.0)]),
+        (
+            Source::Nbg,
+            vec![
+                ("USD", 2.5),
+                ("EUR", 3.0),
+                ("AMD", 0.006),
+                ("RUB", 0.03),
+                ("BYN", 0.8),
+                ("UAH", 0.06),
+                ("KZT", 0.005),
+            ],
+        ),
     ] {
         service.caches[&(source, Market::Noncash)]
             .lock()
@@ -119,6 +187,15 @@ async fn cross_rates_dual_sources_identity_and_unsupported_currency() {
                 })
                 .collect(),
         ));
+        if source == Source::Nbg {
+            service.caches[&(source, Market::Noncash)]
+                .lock()
+                .await
+                .snapshot
+                .as_mut()
+                .unwrap()
+                .fetched_at = Utc::now().to_rfc3339();
+        }
     }
     for market in [Market::Cash, Market::Noncash] {
         service.caches[&(Source::RateAm, market)]
@@ -291,7 +368,7 @@ async fn failed_refresh_preserves_partial_results_with_backoff_and_stale_expiry(
 async fn live_reference_feeds() {
     let service = ReferenceRateService::default();
     for market in [Market::Cash, Market::Noncash] {
-        for currency in ["RUB", "AMD", "BYN", "UAH", "KZT"] {
+        for currency in ["RUB", "AMD", "BYN", "UAH", "KZT", "GEL", "EUR"] {
             let result = service.list("USD", currency, market).await.unwrap();
             println!("USD/{currency} {market:?}: {result:?}");
             assert_eq!(result.rates.len(), 1, "live {currency} {market:?}");

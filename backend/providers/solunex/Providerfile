@@ -1,0 +1,30 @@
+exchange_methods = ["exchanger"]
+
+[code]
+language = "rust"
+source = { path = "solunex.rs" }
+
+[buy]
+source_url = "https://solunex.ge/en"
+name = "Solunex Buy"
+currency = ["gel", "usd", "eur"]
+banks = ["Cash"]
+
+[sell]
+source_url = "https://solunex.ge/en"
+name = "Solunex Sell"
+currency = ["gel", "usd", "eur"]
+banks = ["Cash"]
+
+[fees]
+kind = "quote_dependent"
+description = "The amount-specific calculator output includes Solunex's commission. Confirm the final amount and any additional bank or blockchain charges with the office."
+docs_url = "https://solunex.ge/en"
+
+[guidance]
+description = "Fiat exchanges settle in cash at the quoted Solunex office. Confirm the office, opening hours, network and final amount before travelling or sending funds. Account registration and AML/KYC checks are required to place an order with Solunex."
+steps = ["Open Solunex and select the office, currencies, networks and amount shown in the quote.", "Complete Solunex's account verification and confirm the current quote and office arrangements.", "Follow the instructions issued by Solunex for your confirmed order."]
+
+[[guidance.links]]
+label = "Open Solunex"
+url = "https://solunex.ge/en"

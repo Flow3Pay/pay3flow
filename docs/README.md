@@ -56,3 +56,5 @@ explicitly say `planned`, `research`, or `legacy`.
 - Never document development credentials as production secrets.
 - Keep user-facing settlement, TOKEN, fee, and consent language explicit.
 - Update this index when adding a document.
+
+- [Georgian banks, Solunex and NBG reference rates](georgian-support.md).

@@ -32,6 +32,13 @@ supported_assets = ["ALL"]
 
 [adapter.p2p.payment_method_aliases]
 "SBP" = ["СБП", "Система быстрых платежей", "SBP Fast Payments", "Faster Payments System Russia"]
+"TBC Bank Georgia" = ["TBC Bank", "TBCbank"]
+"Bank of Georgia" = ["BankofGeorgia"]
+"Liberty Bank" = ["LIBERTYBANK"]
+"Credo Bank" = ["CREDOBANK"]
+"Basisbank" = ["BASISBANK"]
+"Terabank" = ["terabank_ge"]
+
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]
 "Sberbank" = ["Sber"]
 "Alfa-Bank Belarus" = ["Alfa Bank Belarus", "A-Bank"]

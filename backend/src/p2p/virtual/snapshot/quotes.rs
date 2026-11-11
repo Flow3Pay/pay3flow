@@ -37,6 +37,14 @@ struct PersistedFiatCoefficient {
 }
 
 impl P2pSearchService {
+    fn allows_provider_coefficient(&self, name: &str) -> bool {
+        !matches!(name, "hex" | "pay3flow-otc")
+            && self
+                .route_providers
+                .iter()
+                .find(|provider| provider.name() == name)
+                .is_none_or(|provider| provider.allows_coefficient_quotes())
+    }
     pub(in crate::p2p) fn mark_background_provider_coefficient_failed(
         &self,
         provider: &str,
@@ -61,6 +69,9 @@ impl P2pSearchService {
         from: &Asset,
         to: &Asset,
     ) -> bool {
+        if !self.allows_provider_coefficient(provider) {
+            return false;
+        }
         let key = provider_coefficient_key(provider, from, to);
         self.provider_coefficient_cache
             .read()
@@ -79,6 +90,9 @@ impl P2pSearchService {
         from: Asset,
         to: Asset,
     ) -> Result<()> {
+        if !provider.allows_coefficient_quotes() {
+            return Ok(());
+        }
         let provider_name = provider.name().to_string();
         let key = provider_coefficient_key(&provider_name, &from, &to);
         let input = Amount::from_f64(BACKGROUND_ROUTE_REFERENCE_AMOUNT, from.clone())?;
@@ -164,6 +178,10 @@ impl P2pSearchService {
         to: &Asset,
         input: &Amount,
     ) -> Option<PublicRouteQuote> {
+        // Books and full-lot advertisements cannot be scaled from a reference quote.
+        if !self.allows_provider_coefficient(provider) {
+            return None;
+        }
         let key = provider_coefficient_key(provider, from, to);
         let cached_coefficient = self
             .provider_coefficient_cache

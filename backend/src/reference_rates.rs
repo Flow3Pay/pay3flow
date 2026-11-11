@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 
 use crate::core::{error::AppError, state::AppState};
 
-const FIAT: &[&str] = &["AMD", "RUB", "USD", "BYN", "UAH", "KZT"];
+const FIAT: &[&str] = &["AMD", "RUB", "USD", "BYN", "UAH", "KZT", "GEL", "EUR"];
 const RETRY: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Deserialize, Serialize, Default)]
@@ -32,6 +32,7 @@ enum Source {
     Nbrb,
     Nbu,
     Nbk,
+    Nbg,
 }
 
 impl Source {
@@ -42,6 +43,7 @@ impl Source {
             Self::Nbrb => "NBRB",
             Self::Nbu => "NBU",
             Self::Nbk => "NBK",
+            Self::Nbg => "NBG",
         }
     }
     fn url(self) -> &'static str {
@@ -51,6 +53,7 @@ impl Source {
             Self::Nbrb => "https://api.nbrb.by/exrates/rates?periodicity=0",
             Self::Nbu => "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json",
             Self::Nbk => "https://nationalbank.kz/rss/rates_all.xml",
+            Self::Nbg => "https://nbg.gov.ge/gw/api/ct/monetarypolicy/currencies/en/json/",
         }
     }
     fn ttl(self) -> Duration {
@@ -70,6 +73,7 @@ impl Source {
             Self::Nbrb => "BYN",
             Self::Nbu => "UAH",
             Self::Nbk => "KZT",
+            Self::Nbg => "GEL",
         }
     }
 }
@@ -131,6 +135,17 @@ struct Snapshot {
     fetched: Instant,
 }
 
+impl Snapshot {
+    fn fresh_for(&self, source: Source) -> bool {
+        self.fetched.elapsed() < source.ttl()
+            && (source != Source::Nbg
+                || DateTime::parse_from_rfc3339(&self.fetched_at).is_ok_and(|fetched| {
+                    (fetched + chrono::Duration::hours(4)).date_naive()
+                        == (Utc::now() + chrono::Duration::hours(4)).date_naive()
+                }))
+    }
+}
+
 #[derive(Default)]
 struct Cache {
     snapshot: Option<Snapshot>,
@@ -154,6 +169,7 @@ impl Default for ReferenceRateService {
             Source::Nbrb,
             Source::Nbu,
             Source::Nbk,
+            Source::Nbg,
         ];
         let mut caches = HashMap::new();
         for source in sources {
@@ -185,10 +201,7 @@ impl ReferenceRateService {
             },
         );
         let mut cache = self.caches[&key].lock().await;
-        let fresh = cache
-            .snapshot
-            .as_ref()
-            .is_some_and(|s| s.fetched.elapsed() < source.ttl());
+        let fresh = cache.snapshot.as_ref().is_some_and(|s| s.fresh_for(source));
         let retry_pending = cache.failed_at.is_some_and(|t| t.elapsed() < RETRY);
         if !(fresh && cache.failed_at.is_none()) && !retry_pending {
             match self.fetch(source, market).await {
@@ -206,21 +219,17 @@ impl ReferenceRateService {
             .snapshot
             .as_ref()
             .filter(|s| s.fetched.elapsed() < source.max_age())
-            .map(|s| {
-                (
-                    s.clone(),
-                    cache.failed_at.is_some() || s.fetched.elapsed() >= source.ttl(),
-                )
-            })
+            .map(|s| (s.clone(), cache.failed_at.is_some() || !s.fresh_for(source)))
     }
 
     async fn fetch(&self, source: Source, market: Market) -> Result<Snapshot> {
-        let mut response = self
-            .client
-            .get(&self.endpoints[&source])
-            .send()
-            .await?
-            .error_for_status()?;
+        let today = (Utc::now() + chrono::Duration::hours(4)).date_naive();
+        let mut request = self.client.get(&self.endpoints[&source]);
+        if source == Source::Nbg {
+            // The undated feed can already contain tomorrow's rates.
+            request = request.query(&[("date", today.to_string())]);
+        }
+        let mut response = request.send().await?.error_for_status()?;
         // Bound unexpected upstream responses, including chunked bodies.
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await? {
@@ -238,6 +247,7 @@ impl ReferenceRateService {
             Source::Cbr | Source::Nbk => parse_xml(source, &text)?,
             Source::Nbrb | Source::Nbu => parse_json(source, &text)?,
             Source::RateAm => parse_rateam(&text, market)?,
+            Source::Nbg => parse_nbg(&text, today)?,
         };
         if !rates.contains_key("USD") {
             bail!("feed has no valid USD benchmark");
@@ -280,7 +290,7 @@ impl ReferenceRateService {
         let from = from.trim().to_ascii_uppercase();
         let to = to.trim().to_ascii_uppercase();
         if !FIAT.contains(&from.as_str()) || !FIAT.contains(&to.as_str()) {
-            bail!("supported fiat: AMD, RUB, USD, BYN, UAH, KZT");
+            bail!("supported fiat: {}", FIAT.join(", "));
         }
         let mut result = ReferenceRatesResponse {
             from: from.clone(),
@@ -299,6 +309,23 @@ impl ReferenceRateService {
                 sample_count: 1,
                 stale: false,
             });
+            return Ok(result);
+        }
+        if from == "GEL"
+            || to == "GEL"
+            || matches!(
+                (from.as_str(), to.as_str()),
+                ("EUR", "USD") | ("USD", "EUR")
+            )
+        {
+            match self
+                .snapshot(Source::Nbg, market)
+                .await
+                .and_then(|(s, stale)| direct_rate(Source::Nbg, &s, &from, &to, stale))
+            {
+                Some(rate) => result.rates.push(rate),
+                None => result.unavailable_sources.push(unavailable(Source::Nbg)),
+            }
             return Ok(result);
         }
         let rub_amd = (from == "RUB" && to == "AMD") || (from == "AMD" && to == "RUB");
@@ -400,6 +427,7 @@ fn currency_source(currency: &str) -> Option<Source> {
         "BYN" => Some(Source::Nbrb),
         "UAH" => Some(Source::Nbu),
         "KZT" => Some(Source::Nbk),
+        "EUR" | "GEL" => Some(Source::Nbg),
         _ => None,
     }
 }
@@ -532,6 +560,56 @@ fn parse_xml(source: Source, text: &str) -> Result<HashMap<String, Observation>>
                     },
                 );
             }
+        }
+    }
+    Ok(rates)
+}
+
+fn parse_nbg(text: &str, today: NaiveDate) -> Result<HashMap<String, Observation>> {
+    let data: Value = serde_json::from_str(text)?;
+    let sets = data.as_array().context("NBG feed must be an array")?;
+    let mut rates = HashMap::new();
+    for set in sets {
+        for row in set["currencies"]
+            .as_array()
+            .context("NBG currencies missing")?
+        {
+            let Some(effective) = row["validFromDate"]
+                .as_str()
+                .and_then(|s| s.get(..10))
+                .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+            else {
+                continue;
+            };
+            if effective > today || effective < today - chrono::Duration::days(7) {
+                continue;
+            }
+            let (Some(code), Some(rate), Some(quantity)) = (
+                row["code"].as_str(),
+                row["rate"].as_f64().filter(|n| valid(*n)),
+                row["quantity"].as_f64().filter(|n| valid(*n)),
+            ) else {
+                continue;
+            };
+            let value = rate / quantity;
+            if !valid(value) || code.len() != 3 || !code.bytes().all(|b| b.is_ascii_uppercase()) {
+                continue;
+            }
+            let published_at = effective.to_string();
+            if rates
+                .get(code)
+                .is_some_and(|old: &Observation| old.published_at >= published_at)
+            {
+                continue;
+            }
+            rates.insert(
+                code.to_string(),
+                Observation {
+                    value,
+                    count: 1,
+                    published_at,
+                },
+            );
         }
     }
     Ok(rates)

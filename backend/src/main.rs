@@ -168,6 +168,11 @@ async fn main() -> anyhow::Result<()> {
     let public_fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>> =
         vec![Arc::new(IdPayRouteProvider::new()?)];
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
+    public_route_providers.push(Arc::new(
+        pay3flow_backend::compiled_provider_code::solunex::SolunexProvider::new(
+            network_catalog.clone(),
+        )?,
+    ));
     let p2p = pay3flow_backend::p2p::P2pSearchService::from_database_with_fmatch(
         &cfg,
         network_catalog,
@@ -329,7 +334,12 @@ async fn main() -> anyhow::Result<()> {
                 Err(error) => tracing::warn!(%error, "NEAR Intents token refresh failed"),
             }
             route_p2p
-                .refresh_provider_capabilities(&["near-intents", "cow-swap", "symbiosis"])
+                .refresh_provider_capabilities(&[
+                    "near-intents",
+                    "cow-swap",
+                    "symbiosis",
+                    "solunex",
+                ])
                 .await;
             match route_engine
                 .refresh(&route_p2p, &route_near, &route_refresh)

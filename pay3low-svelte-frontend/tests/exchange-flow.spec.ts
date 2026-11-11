@@ -817,7 +817,7 @@ test("USD toggle turns the sending field into a USD budget and shows token units
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$100.00");
 });
 
-async function mockBackend(page: Page, options: { includeRestoredTokens?: boolean; includeGram?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean; directSwapProvider?: string } = {}) {
+async function mockBackend(page: Page, options: { includeGeorgia?: boolean; includeRestoredTokens?: boolean; includeGram?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean; directSwapProvider?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
     // These route fixtures use a saved AMD/RUB corridor independently of app defaults.
@@ -869,7 +869,7 @@ async function mockBackend(page: Page, options: { includeRestoredTokens?: boolea
       });
     }
     if (url.pathname === "/api/banks") {
-      if (options.includeRestoredTokens) {
+      if (options.includeRestoredTokens || options.includeGeorgia) {
         const methods = readFileSync(new URL("../../backend/providers/payment-methods/Providerfile", import.meta.url), "utf8")
           .split("\n").filter(line => /^\s*\{ id = /.test(line)).map(line => {
             const fields = Object.fromEntries([...line.matchAll(/(\w+) = "([^"]*)"/g)].map(match => [match[1], match[2]]));
@@ -4293,4 +4293,82 @@ test("reference benchmark waits for a concrete wildcard currency", async ({ page
   await expect(page.getByRole("button", { name: /Select sending currency: ANY/ })).toBeVisible();
   await expect(page.getByTestId("reference-rates")).toHaveCount(0);
   expect(requests).toBe(0);
+});
+
+test("Georgian banks expose GEL USD EUR choices and restore shared selections", async ({ page }) => {
+  await mockBackend(page, { includeGeorgia: true });
+  await openApp(page, "/#/swap/GEL/USD?amount=0&from=ge-tbc&to=ge-bank-of-georgia-usd-account");
+  await expect(page.getByRole("button", { name: "Select sending bank: TBC Bank", exact: true })).toBeVisible();
+  const gelButton = page.getByRole("button", { name: "Select sending currency: GEL", exact: true });
+  await expect(gelButton.locator("img")).toHaveAttribute("src", /\/icons\/flags\/ge\.svg(?:\?v=2)?$/);
+  await gelButton.click();
+  const currencies = page.getByRole("dialog", { name: "Choose currency", exact: true });
+  for (const currency of ["GEL", "USD", "EUR"]) {
+    await expect(currencies.getByRole("option", { name: new RegExp(`^${currency}\\b`) })).toBeVisible();
+  }
+  await currencies.getByRole("option", { name: /^EUR\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending currency: EUR", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.source-method"))).toBe("ge-tbc-eur-account");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Select sending bank: TBC Bank", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select sending currency: EUR", exact: true })).toBeVisible();
+  const picker = await openCryptoPicker(page, "sending");
+  await picker.getByRole("option", { name: /^GEL\b/ }).click();
+  await expect(picker.getByRole("option")).toHaveCount(20); // 18 banks + cash + any method
+  await picker.getByRole("option", { name: /^Cash GEL\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending payment method: Cash GEL", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.source-method"))).toBe("ge-gel-cash");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("Georgian reference rates show NBG attribution and handle unavailable rates", async ({ page }) => {
+  await mockBackend(page, { includeGeorgia: true });
+  let unavailable = false;
+  await page.route("**/api/reference-rates?*", route => {
+    const q = new URL(route.request().url()).searchParams;
+    const from = q.get("from"), to = q.get("to"), market = q.get("market");
+    return route.fulfill({ json: { from, to, market, rates: unavailable ? [] : [{ from, to, rate: 2.5,
+      method: "official", sample_count: 1, stale: false, sources: [{ name: "NBG", url: "https://nbg.gov.ge/en/monetary-policy/currency", published_at: "2026-11-11", fetched_at: "2026-11-11T12:00:00Z" }] }],
+      unavailable_sources: unavailable ? [{ name: "NBG", url: "https://nbg.gov.ge/en/monetary-policy/currency" }] : [] } });
+  });
+  await openApp(page, "/#/swap/USD/GEL?amount=0&from=ge-tbc-usd-account&to=ge-bank-of-georgia");
+  const rates = page.getByTestId("reference-rates");
+  await expect(rates).toContainText("1 USD = 2.5 GEL");
+  await expect(rates.getByRole("link", { name: "NBG", exact: true })).toHaveAttribute("href", "https://nbg.gov.ge/en/monetary-policy/currency");
+  unavailable = true;
+  await page.reload();
+  await expect(rates).toContainText("Reference rate unavailable");
+  await expect(rates.getByTestId("reference-rate-row")).toHaveCount(0);
+});
+
+test("Solunex cash quotes show office instructions and external handoff", async ({ page }) => {
+  await mockBackend(page, { includeGeorgia: true });
+  await page.route("**/api/providers", route => route.fulfill({ json: [{ slug: "solunex", name: "Solunex Buy", side: "buy",
+    source_url: "https://solunex.ge/en", currencies: ["GEL", "USD", "EUR"], banks: ["Cash"], searchable: true, search_mode: "selectable",
+    exchange_methods: ["exchanger"], guidance: { description: "Cash settlement at the quoted office. Confirm the final amount and AML/KYC requirements with Solunex.",
+      steps: ["Visit the quoted Batumi office after confirming the exchange with Solunex."], links: [{ label: "Open Solunex", url: "https://solunex.ge/en" }] } }] }));
+  await page.route("**/api/p2p/routes**", route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get("source_payment_method")).toBe("Cash");
+    const source = q.get("source_fiat")!, target = q.get("target_fiat")!;
+    return route.fulfill({ json: { search_id: "00000000-0000-4000-8000-000000000108", source_fiat: source, target_fiat: target,
+      source_amount: "1000", routes_found: 1, searched_at: new Date().toISOString(), assets_searched: ["USDT"], can_exchange_to_target: true,
+      routes: [{ route_id: "solunex-batumi-cash", rank: 1, asset: "USDT", source_fiat: source, target_fiat: target, source_amount: "1000",
+        target_amount: "365.80730693", acquired_asset_amount: "365.80730693", effective_rate: "0.36580730693", same_venue: true,
+        requires_asset_transfer: true, transfer_fee_included: false, route_kind: "fiat_to_crypto", source_network: null, target_network: "tron",
+        route_provider: "solunex", route_provider_url: "https://solunex.ge/en", provider_quote_id: "batumi", route_path: ["GEL", "USDT@tron"],
+        route_steps: [{ provider: "solunex", from_asset: "GEL", to_asset: "USDT@tron", input_amount: "1000", output_amount: "365.80730693",
+          description: "Batumi · 27 Konstantine Gamsakhurdia St. Cash settlement at this office; commission is included.", source_url: "https://solunex.ge/en", fees: [] }],
+        quote_expires_at: new Date(Date.now()+600000).toISOString(), payment_methods_verified: true, entry_offer: null, exit_offer: null,
+        warnings: ["Batumi · 27 Konstantine Gamsakhurdia St. Fiat settlement is cash at this office. Confirm availability and final amount with Solunex."] }] } });
+  });
+  await openApp(page, "/#/swap/GEL/USDT?amount=1000&from=ge-gel-cash&to=global-usdt&toNetwork=tron&sources=solunex&methods=exchanger");
+  await page.getByTestId("start-search").click();
+  const result = page.getByTestId("complete-route");
+  await expect(result).toHaveCount(1);
+  await expect(result).toContainText("Solunex");
+  await expect(page.getByText(/27 Konstantine Gamsakhurdia St/).first()).toBeVisible();
+  await page.getByTestId("route-guide").getByTestId("start-guide").click();
+  await expect(page.getByText("Visit the quoted Batumi office after confirming the exchange with Solunex.")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open Solunex/ }).first()).toHaveAttribute("href", "https://solunex.ge/en");
 });

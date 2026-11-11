@@ -498,6 +498,18 @@ pub struct SymbiosisExecutionQuote {
 #[async_trait]
 pub trait PublicRouteProvider: Send + Sync {
     fn name(&self) -> &str;
+    /// Amounts with fixed or tiered fees cannot use background coefficients.
+    fn allows_coefficient_quotes(&self) -> bool {
+        true
+    }
+    /// Dynamic catalogs can request a refresh even when service capabilities are cached.
+    fn catalog_refresh_due(&self) -> bool {
+        false
+    }
+    /// A provider can restrict fiat endpoints to a specific settlement method.
+    fn supports_payment_method(&self, _asset: &Asset, _method: Option<&str>) -> bool {
+        true
+    }
     /// Whether the provider can quote in this direction between these networks.
     fn supports_pair(&self, _from: &Asset, _to: &Asset) -> bool {
         true

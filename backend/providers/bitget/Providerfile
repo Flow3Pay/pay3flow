@@ -100,3 +100,11 @@ error_pointer = "/msg"
 language = "rust"
 source = { path = "reviews.rs" }
 profile_host = "www.bitget.com"
+
+[adapter.p2p.payment_method_aliases]
+"TBC Bank Georgia" = ["TBC Bank", "TBCbank"]
+"Bank of Georgia" = ["BankofGeorgia"]
+"Liberty Bank" = ["LIBERTYBANK"]
+"Credo Bank" = ["CREDOBANK"]
+"Basisbank" = ["BASISBANK"]
+"Terabank" = ["terabank_ge"]

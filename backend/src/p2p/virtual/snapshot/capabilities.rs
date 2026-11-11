@@ -17,9 +17,10 @@ impl P2pSearchService {
             let complete = self.provider_capabilities_cache.read().is_ok_and(|cache| {
                 cache.as_ref().is_some_and(|snapshot| {
                     self.route_providers.iter().all(|provider| {
-                        snapshot
-                            .get(provider.name())
-                            .is_some_and(|assets| !assets.is_empty())
+                        !provider.catalog_refresh_due()
+                            && snapshot
+                                .get(provider.name())
+                                .is_some_and(|assets| !assets.is_empty())
                     })
                 })
             });
@@ -151,6 +152,9 @@ impl P2pSearchService {
         let mut capabilities = providers
             .iter()
             .filter_map(|provider| {
+                if provider.catalog_refresh_due() {
+                    return None;
+                }
                 snapshot
                     .get(provider.name())
                     .filter(|assets| !assets.is_empty())
@@ -164,9 +168,10 @@ impl P2pSearchService {
         let missing = providers
             .iter()
             .filter(|provider| {
-                snapshot
-                    .get(provider.name())
-                    .is_none_or(|assets| assets.is_empty())
+                provider.catalog_refresh_due()
+                    || snapshot
+                        .get(provider.name())
+                        .is_none_or(|assets| assets.is_empty())
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -215,6 +220,11 @@ impl P2pSearchService {
         } else {
             Self::provider_assets_for(&providers).await
         };
+        // A cash or bank balance is not a transferable crypto intermediary.
+        let provider_assets = provider_assets
+            .into_iter()
+            .filter(|asset| asset.location.is_some())
+            .collect::<Vec<_>>();
         let allowed_symbols = query.assets.iter().collect::<HashSet<_>>();
         let mut assets = if query.assets_explicit {
             provider_assets

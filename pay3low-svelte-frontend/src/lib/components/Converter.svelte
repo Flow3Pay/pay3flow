@@ -330,7 +330,7 @@
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const methodNoun = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "asset" : method?.kind === "cash" ? "payment method" : "bank";
   const methodTitle = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? method.currency : method?.name ?? "Select payment method";
-  const currencyMark = (currency: string) => currency === "USD" ? "$" : currency === "RUB" ? "₽" : currency === "AMD" ? "֏" : currency === "BYN" ? "Br" : currency === "UAH" ? "₴" : currency === "KZT" ? "₸" : currency.slice(0, 1);
+  const currencyMark = (currency: string) => currency === "GEL" ? "₾" : currency === "EUR" ? "€" : currency === "USD" ? "$" : currency === "RUB" ? "₽" : currency === "AMD" ? "֏" : currency === "BYN" ? "Br" : currency === "UAH" ? "₴" : currency === "KZT" ? "₸" : currency.slice(0, 1);
 
   function providerLabel(provider: ProviderDefinition) {
     const label = provider.name.replace(/\s+(buy|sell)$/i, "").trim();

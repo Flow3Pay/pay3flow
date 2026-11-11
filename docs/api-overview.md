@@ -218,3 +218,13 @@ The profile shows explicit empty/error states instead of illustrative statistics
 
 Profile review ratings and filters use only the collected external-review sample.
 Sharing copies the profile URL and period.
+
+## Informational reference rates
+
+`GET /api/reference-rates?from=USD&to=GEL&market=noncash` returns attributed
+benchmarks independently of route search. Supported codes are AMD, RUB, USD,
+BYN, UAH, KZT, GEL and EUR; `market` is `cash` or `noncash` (default).
+Responses retain `rates` and `unavailable_sources`, including source publication
+dates and cache freshness. NBG official rates use the effective Georgia date
+and are informational for both cash and bank accounts. See
+[Georgian support](georgian-support.md) for sources and normalization.

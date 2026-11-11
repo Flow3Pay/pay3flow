@@ -1,4 +1,4 @@
-//! Crypto-to-crypto workflow route production.
+//! Amount-specific direct provider routes, including explicit cash endpoints.
 
 use super::*;
 
@@ -13,16 +13,23 @@ impl P2pSearchService {
             .iter()
             .flat_map(|capability| capability.assets.iter().cloned())
             .collect::<Vec<_>>();
-        let source_networks = self.assets_on_network(
+        let mut source_networks = self.assets_on_network(
             &query.source_currency,
             query.source_network.as_deref(),
             &provider_assets,
         );
-        let target_networks = self.assets_on_network(
+        let mut target_networks = self.assets_on_network(
             &query.target_currency,
             query.target_network.as_deref(),
             &provider_assets,
         );
+        // Unqualified fiat searches must never select a token sharing the code.
+        if query.source_network.is_none() && is_fiat_currency(&query.source_currency) {
+            source_networks.retain(|asset| asset.location.is_none());
+        }
+        if query.target_network.is_none() && is_fiat_currency(&query.target_currency) {
+            target_networks.retain(|asset| asset.location.is_none());
+        }
         let network_pairs = source_networks
             .iter()
             .flat_map(|source| {
@@ -58,6 +65,14 @@ impl P2pSearchService {
             for (source, target) in network_pairs
                 .iter()
                 .filter(|(source, target)| capability.supports(source, target))
+                .filter(|(source, target)| {
+                    capability
+                        .provider
+                        .supports_payment_method(source, query.source_payment_method.as_deref())
+                        && capability
+                            .provider
+                            .supports_payment_method(target, query.target_payment_method.as_deref())
+                })
                 .take(MAX_PROVIDER_NETWORK_PAIRS)
             {
                 let from = source.clone();
@@ -122,7 +137,10 @@ impl P2pSearchService {
                 if let Some(description) = quote.description.as_deref() {
                     warnings.push(format!("Quoted exchanger: {description}."));
                 }
-                if source_network != target_network {
+                if source_network.is_some()
+                    && target_network.is_some()
+                    && source_network != target_network
+                {
                     warnings.push("Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending.".into());
                 }
                 if [&quote.from, &quote.to].iter().any(|asset| {
@@ -145,9 +163,17 @@ impl P2pSearchService {
                     target_amount: quote.output.value,
                     effective_rate: fixed(output_value / input_value, 12),
                     same_venue: false,
-                    requires_asset_transfer: true,
+                    requires_asset_transfer: quote.from.location.is_some()
+                        || quote.to.location.is_some(),
                     transfer_fee_included: !quote.fees.is_empty(),
-                    route_kind: "crypto_to_crypto".into(),
+                    route_kind:
+                        match (quote.from.location.is_some(), quote.to.location.is_some()) {
+                            (false, false) => "fiat_to_fiat",
+                            (false, true) => "fiat_to_crypto",
+                            (true, false) => "crypto_to_fiat",
+                            (true, true) => "crypto_to_crypto",
+                        }
+                        .into(),
                     profitability: None,
                     cycle_legs: Vec::new(),
                     profitability_decimals: None,
@@ -211,7 +237,10 @@ impl P2pSearchService {
                 .await;
             }
         }
-        if query.allow_cross_venue {
+        if query.allow_cross_venue
+            && (query.source_network.is_some() || !is_fiat_currency(&query.source_currency))
+            && (query.target_network.is_some() || !is_fiat_currency(&query.target_currency))
+        {
             routes.extend(
                 self.search_composed_crypto_routes(
                     query,

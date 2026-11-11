@@ -1609,7 +1609,7 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
     let mut parameters = Vec::new();
     if path == "/api/reference-rates" && method == "get" {
         for name in ["from", "to"] {
-            parameters.push(json!({"name":name,"in":"query","required":true,"schema":{"type":"string","enum":["AMD","RUB","USD","BYN","UAH","KZT"]}}));
+            parameters.push(json!({"name":name,"in":"query","required":true,"schema":{"type":"string","enum":["AMD","RUB","USD","BYN","UAH","KZT","GEL","EUR"]}}));
         }
         parameters.push(json!({"name":"market","in":"query","schema":{"type":"string","enum":["cash","noncash"],"default":"noncash"}}));
     }

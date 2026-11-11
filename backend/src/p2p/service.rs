@@ -188,10 +188,15 @@ impl P2pOffer {
         let requested = canonical_payment_method(requested);
         if self.payment_methods.iter().any(|method| {
             let method = canonical_payment_method(method);
+            // Region-qualified banks must not inherit another country's brand.
+            // Provider-specific aliases are canonicalized before this comparison.
+            let regional = requested.contains("georgia") || method.contains("georgia");
             !method.is_empty()
                 && !is_generic_payment_method(&method)
-                && (method.contains(&requested)
-                    || (method.len() >= 6 && requested.contains(&method)))
+                && (method == requested
+                    || (!regional
+                        && (method.contains(&requested)
+                            || (method.len() >= 6 && requested.contains(&method)))))
         }) {
             return PaymentMethodMatch::Exact;
         }

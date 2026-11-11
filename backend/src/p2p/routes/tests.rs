@@ -31,6 +31,35 @@ struct DelayedRouteSource {
 
 struct FixedIntentProvider;
 
+#[tokio::test]
+async fn nonlinear_providers_ignore_existing_background_coefficients() {
+    let provider = crate::compiled_provider_code::solunex::SolunexProvider::new(
+        crate::networks::NetworkCatalog::test_default(),
+    )
+    .unwrap();
+    let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(provider)]);
+    let from = Asset::parse("USDT@tron").unwrap();
+    let to = Asset::parse("USDC@ethereum").unwrap();
+    service.provider_coefficient_cache.write().unwrap().insert(
+        provider_coefficient_key("solunex", &from, &to),
+        crate::p2p::service::CachedProviderCoefficient {
+            inserted_at: std::time::Instant::now(),
+            output_per_input: Some(99.0),
+        },
+    );
+    assert!(!service.background_provider_coefficient_is_due("solunex", &from, &to));
+    assert!(service
+        .cached_provider_coefficient_quote(
+            "solunex",
+            &from,
+            &to,
+            &Amount::new("100", from.clone()).unwrap()
+        )
+        .await
+        .is_none());
+}
+
 #[test]
 fn fiat_codes_require_an_explicit_network_to_select_a_colliding_token() {
     let networks = crate::networks::NetworkCatalog::test_default();

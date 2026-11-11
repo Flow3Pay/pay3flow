@@ -48,10 +48,9 @@ impl P2pSearchService {
                             || destinations.contains(middle)
                             || (query.assets_explicit && !query.assets.contains(&middle.symbol))
                             || !capability.supports(from, middle)
-                            || !capabilities.iter().any(|exit| {
-                                exit.provider.name() != capability.provider.name()
-                                    && destinations.iter().any(|to| exit.supports(middle, to))
-                            })
+                            || !capabilities
+                                .iter()
+                                .any(|exit| destinations.iter().any(|to| exit.supports(middle, to)))
                         {
                             return None;
                         }
@@ -95,7 +94,7 @@ impl P2pSearchService {
                     emit_status(statuses, &name, &result, started, batches).await;
                     let Ok(quotes) = result else { continue };
                     for entry in quotes.into_iter().filter(|quote| valid_quote(quote, &from, &middle, &amount)).take(MAX_PROVIDER_OFFERS_PER_LEG) {
-                        for exit in capabilities.iter().filter(|exit| exit.provider.name() != name) {
+                        for exit in capabilities.iter() {
                             for to in destinations.iter().filter(|to| exit.supports(&middle, to)) {
                                 let key = provider_quote_key(exit.provider.name(), &middle, to, &entry.output);
                                 let job = if let Some(job) = jobs.get(&key) { job.clone() } else {

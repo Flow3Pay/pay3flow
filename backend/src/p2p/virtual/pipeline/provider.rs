@@ -36,6 +36,10 @@ pub(super) async fn produce_workflow_routes(
     // Larger catalogs retain all supported networks, but a search must stay bounded.
     // Dropping this future cancels pending quote jobs; completed batches are retained.
     let search = async {
+        // Some amount-specific providers quote cash fiat endpoints directly.
+        if !source_is_crypto || !target_is_crypto {
+            service.search_provider_routes(query, Some(&batches)).await;
+        }
         let result = match (source_is_crypto, target_is_crypto) {
             (false, false) => {
                 service

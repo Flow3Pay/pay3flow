@@ -1211,6 +1211,60 @@ price_pointer = "/price"
     }
 
     #[test]
+    fn georgian_catalog_covers_all_banks_with_distinct_currency_groups_and_assets() {
+        let parsed = parse_document_with_path(
+            include_str!("providers/payment-methods/Providerfile"),
+            "payment-methods",
+            "payment-methods/Providerfile",
+            None,
+        )
+        .unwrap();
+        let methods = parsed.payment_methods;
+        let banks = methods
+            .iter()
+            .filter(|m| m.country == "GE" && m.kind == "bank")
+            .collect::<Vec<_>>();
+        let groups = banks
+            .iter()
+            .map(|m| m.currency_group.as_deref().unwrap())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(groups.len(), 18);
+        assert!(groups.iter().all(|g| g.starts_with("ge-")));
+        for group in groups {
+            let currencies = banks
+                .iter()
+                .filter(|m| m.currency_group.as_deref() == Some(group))
+                .map(|m| m.currency.as_str())
+                .collect::<Vec<_>>();
+            if matches!(group, "ge-neo" | "ge-vtb") {
+                assert_eq!(currencies, ["GEL"]);
+            } else {
+                assert_eq!(currencies, ["GEL", "USD", "EUR"]);
+            }
+        }
+        assert_eq!(
+            methods
+                .iter()
+                .map(|m| &m.id)
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            methods.len()
+        );
+        for id in ["currency-gel", "currency-eur", "ge-gel-cash", "ge-eur-cash"] {
+            assert!(methods.iter().any(|m| m.id == id), "{id}");
+        }
+        for method in banks {
+            assert!(method.bank_fee_percent.is_none());
+            if !method.icon_url.is_empty() {
+                assert!(Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../pay3low-svelte-frontend/static")
+                    .join(method.icon_url.trim_start_matches('/'))
+                    .is_file());
+            }
+        }
+    }
+
+    #[test]
     fn accepts_backend_owned_currency_and_wallet_cards() {
         let document = r##"
 payment_methods = [
