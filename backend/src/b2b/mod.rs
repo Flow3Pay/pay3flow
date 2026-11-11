@@ -29,6 +29,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::core::crypto::SecretBox;
+use crate::core::error::AppError;
 use crate::db::DbPool;
 use crate::route_engine::{Amount, AppFee, Asset, NearIntentsProvider, NearQuoteRequest};
 
@@ -90,6 +91,31 @@ impl From<serde_json::Error> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<Error> for AppError {
+    fn from(error: Error) -> Self {
+        match error {
+            Error::Invalid(message) => AppError::BadRequest(message),
+            Error::Unauthorized(message) => AppError::Unauthorized(message),
+            Error::NotFound => AppError::NotFound("transfer not found".into()),
+            Error::Conflict(message) => AppError::Conflict(message),
+            Error::Unavailable(message) => AppError::Unavailable(message),
+            Error::Internal(error) => AppError::Internal(error),
+        }
+    }
+}
+
+/// Who is acting on the B2B API: the merchant account plus project and key
+/// attribution when the call arrived with a project API key. `env` is the
+/// key's environment, so a request cannot use a test key to create live
+/// orders (§8.1).
+#[derive(Debug, Clone, Copy)]
+pub struct Caller {
+    pub merchant_id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub api_key_id: Option<Uuid>,
+    pub env: Option<keys::KeyEnv>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Exact {
@@ -198,9 +224,9 @@ impl Service {
     }
 
     /// Resolve the caller's merchant account, creating the v1 internal
-    /// merchant on first use. API keys are deferred, so the user account is
-    /// the merchant identity for now.
-    async fn merchant(&self, user_id: Uuid) -> Result<Uuid> {
+    /// merchant on first use. Only the legacy user-token path needs this;
+    /// a project key already names its merchant.
+    pub async fn merchant_for_user(&self, user_id: Uuid) -> Result<Uuid> {
         let client = self.client().await?;
         if let Some(row) = client
             .query_opt(
@@ -428,11 +454,11 @@ RETURNING id
     /// Create a quote (and its `quoted` order) for the caller.
     pub async fn create_quote(
         &self,
-        user_id: Uuid,
+        caller: Caller,
         request: &QuoteRequest,
         idempotency_key: Option<&str>,
     ) -> Result<QuoteView> {
-        let merchant_id = self.merchant(user_id).await?;
+        let merchant_id = caller.merchant_id;
         let env = Self::env_value(request.env.as_deref())?;
         let target = Self::validated_target(request)?;
         let request_hash = Self::request_hash(request)?;
@@ -461,8 +487,8 @@ RETURNING id
 INSERT INTO b2b_orders
     (merchant_id, env, kind, external_id, input_asset, input_network,
      output_asset, output_network, recipient, refund_address, status,
-     metadata, idempotency_key)
-VALUES ($1, $2, 'transfer', $3, $4, $5, $6, $7, $8, $9, 'quoted', $10, $11)
+     metadata, idempotency_key, project_id, api_key_id)
+VALUES ($1, $2, 'transfer', $3, $4, $5, $6, $7, $8, $9, 'quoted', $10, $11, $12, $13)
 RETURNING id
 "#,
                 &[
@@ -477,6 +503,8 @@ RETURNING id
                     &request.refund_address.trim(),
                     &metadata,
                     &key,
+                    &caller.project_id,
+                    &caller.api_key_id,
                 ],
             )
             .await?;
@@ -529,11 +557,11 @@ RETURNING id
     /// Accept a quote and move the order to `awaiting_deposit`.
     pub async fn create_transfer(
         &self,
-        user_id: Uuid,
+        caller: Caller,
         request: &CreateTransferRequest,
         idempotency_key: &str,
     ) -> Result<TransferView> {
-        let merchant_id = self.merchant(user_id).await?;
+        let merchant_id = caller.merchant_id;
         let key = idempotency_key.trim();
         if key.is_empty() || key.len() > 128 {
             return Err(Error::Invalid(
@@ -625,8 +653,8 @@ WHERE id = $1 AND merchant_id = $5 AND status = 'quoted'
         self.load_transfer(merchant_id, order_id).await
     }
 
-    pub async fn cancel_transfer(&self, user_id: Uuid, order_id: Uuid) -> Result<TransferView> {
-        let merchant_id = self.merchant(user_id).await?;
+    pub async fn cancel_transfer(&self, caller: Caller, order_id: Uuid) -> Result<TransferView> {
+        let merchant_id = caller.merchant_id;
         let mut client = self.client().await?;
         let tx = client.transaction().await?;
         let updated = tx
@@ -659,13 +687,12 @@ WHERE id = $1 AND merchant_id = $5 AND status = 'quoted'
         self.load_transfer(merchant_id, order_id).await
     }
 
-    pub async fn transfer(&self, user_id: Uuid, order_id: Uuid) -> Result<TransferView> {
-        let merchant_id = self.merchant(user_id).await?;
-        self.load_transfer(merchant_id, order_id).await
+    pub async fn transfer(&self, caller: Caller, order_id: Uuid) -> Result<TransferView> {
+        self.load_transfer(caller.merchant_id, order_id).await
     }
 
-    pub async fn transfers(&self, user_id: Uuid, limit: i64) -> Result<Vec<TransferView>> {
-        let merchant_id = self.merchant(user_id).await?;
+    pub async fn transfers(&self, caller: Caller, limit: i64) -> Result<Vec<TransferView>> {
+        let merchant_id = caller.merchant_id;
         let client = self.client().await?;
         let limit = limit.clamp(1, 100);
         let rows = client
@@ -832,14 +859,14 @@ WHERE q.id = $1 AND o.merchant_id = $2
     /// accepted immediately, so the payer can fund it from the page.
     pub async fn create_checkout(
         &self,
-        user_id: Uuid,
+        caller: Caller,
         request: &CreateCheckoutRequest,
         idempotency_key: Option<&str>,
     ) -> Result<CheckoutView> {
         if let Some(url) = request.success_url.as_deref() {
             validate_http_url(url)?;
         }
-        let merchant_id = self.merchant(user_id).await?;
+        let merchant_id = caller.merchant_id;
         let env = Self::env_value(request.quote.env.as_deref())?;
         let target = Self::validated_target(&request.quote)?;
         let request_hash = Self::request_hash(&request.quote)?;
@@ -875,8 +902,8 @@ WHERE q.id = $1 AND o.merchant_id = $2
 INSERT INTO b2b_orders
     (merchant_id, env, kind, external_id, input_asset, input_network,
      output_asset, output_network, recipient, refund_address, status,
-     metadata, idempotency_key)
-VALUES ($1, $2, 'checkout', $3, $4, $5, $6, $7, $8, $9, 'awaiting_deposit', $10, $11)
+     metadata, idempotency_key, project_id, api_key_id)
+VALUES ($1, $2, 'checkout', $3, $4, $5, $6, $7, $8, $9, 'awaiting_deposit', $10, $11, $12, $13)
 RETURNING id
 "#,
                 &[
@@ -891,6 +918,8 @@ RETURNING id
                     &request.quote.refund_address.trim(),
                     &metadata,
                     &key,
+                    &caller.project_id,
+                    &caller.api_key_id,
                 ],
             )
             .await?;
@@ -1111,8 +1140,8 @@ RETURNING id
         })
     }
 
-    pub async fn analytics(&self, user_id: Uuid) -> Result<AnalyticsView> {
-        let merchant_id = self.merchant(user_id).await?;
+    pub async fn analytics(&self, caller: Caller) -> Result<AnalyticsView> {
+        let merchant_id = caller.merchant_id;
         let client = self.client().await?;
         let totals = client
             .query_one(

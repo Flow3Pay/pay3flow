@@ -1053,6 +1053,9 @@ Rules:
   not enough. Unknown or revoked key → `401`; key from the other environment →
   `403`; missing scope → `403 insufficient_scope`; over the daily limit → `429`
   with the `X-RateLimit-*` headers (§5.3.2);
+- a keyed request inherits the key's environment: the body may omit `env` or
+  repeat the key's one, and naming the other environment is a
+  `403 environment_mismatch` rather than a silent switch;
 - each route declares its scope in OpenAPI, and the middleware reads that
   declaration instead of duplicating checks inside handlers;
 - `/api/admin/*` and staff tooling never accept merchant keys; they keep their
@@ -1237,7 +1240,7 @@ already contains; recording a step here is not a substitute for the code.
 | §10 step | State | Evidence |
 | --- | --- | --- |
 | 1. Phase 1.1 API keys, project-scoped | Schema done | `migrations/b2b_api_keys.sql` creates `b2b_projects`, `b2b_api_keys`, `b2b_api_key_usage` and adds `project_id` / `api_key_id` on orders and the fee ledger; `db::apply_schema` runs it after `b2b.sql`. Issue/rotate/revoke APIs and key middleware are still later steps. |
-| 2. Business API key middleware | In progress | `b2b::keys` mints/looks up keys; `b2b::key_coverage` classifies every known route (allowlist, legacy `/api/v1`+`/api/b2b`, staff, dated TemporarySite exceptions for browser-called exchange/P2P until the first-party proxy); `b2b::guard::require_key` is layered over the whole router and enforces `sk_` authentication, scope (`403 insufficient_scope`), the daily limit (`429` with `X-RateLimit-*`) and hourly usage, and puts the key into request extensions. OpenAPI declares `merchantKeyAuth` next to `bearerAuth` on `/api/v1/*` and `/api/b2b/*`. Still open: pinning each handler to the key's environment, the end of the legacy `/api/v1`+`/api/b2b` token window, issue/rotate/revoke HTTP endpoints and the SvelteKit first-party proxy. |
+| 2. Business API key middleware | In progress | `b2b::keys` mints/looks up keys; `b2b::key_coverage` classifies every known route (allowlist, legacy `/api/v1`+`/api/b2b`, staff, dated TemporarySite exceptions for browser-called exchange/P2P until the first-party proxy); `b2b::guard::require_key` is layered over the whole router and enforces `sk_` authentication, scope (`403 insufficient_scope`), the daily limit (`429` with `X-RateLimit-*`) and hourly usage. It resolves one `b2b::Caller` per request (merchant, project, key, environment) for both keys and the legacy JWT, so handlers no longer read the token; keyed orders write `project_id`/`api_key_id` and the fee ledger copies `project_id`. A keyed call is pinned to its key's environment and a body `env` naming the other one gets `403 environment_mismatch`. OpenAPI declares `merchantKeyAuth` next to `bearerAuth` on `/api/v1/*` and `/api/b2b/*`. Still open: the end of the legacy `/api/v1`+`/api/b2b` token window, issue/rotate/revoke HTTP endpoints, and the SvelteKit first-party proxy. |
 | 3. `auth_oauth.sql`, real codes and mail adapter | Not started | no `auth_oauth.sql`; `users` has no `email_verified_at`; `service/user/mail.rs` still returns `code == "1234"`; `register::send_auth_code` only logs. |
 | 4. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
 | 5. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |

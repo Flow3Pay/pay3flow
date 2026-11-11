@@ -143,8 +143,8 @@ impl Service {
         tx.execute(
             r#"
 INSERT INTO b2b_fee_ledger
-    (merchant_id, order_id, asset, amount, captured_bps, recipient)
-SELECT $1, $2, input_asset, $3, $4, $5 FROM b2b_orders WHERE id = $2
+    (merchant_id, order_id, asset, amount, captured_bps, recipient, project_id)
+SELECT $1, $2, input_asset, $3, $4, $5, project_id FROM b2b_orders WHERE id = $2
 "#,
             &[
                 &order.merchant_id,

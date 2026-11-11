@@ -11,7 +11,7 @@ use tokio_postgres::Transaction;
 use uuid::Uuid;
 
 use super::model::{CreateWebhookRequest, WebhookEndpointView};
-use super::{Error, Result, Service, WEBHOOK_EVENTS};
+use super::{Caller, Error, Result, Service, WEBHOOK_EVENTS};
 
 const MAX_ATTEMPTS: i32 = 8;
 const MAX_RESPONSE_BODY: usize = 500;
@@ -21,7 +21,7 @@ impl Service {
     /// AES-GCM ciphertext is stored.
     pub async fn create_webhook(
         &self,
-        user_id: Uuid,
+        caller: Caller,
         request: &CreateWebhookRequest,
     ) -> Result<WebhookEndpointView> {
         validate_webhook_url(&request.url)?;
@@ -43,7 +43,7 @@ impl Service {
                 .map(|event| event.to_string())
                 .collect(),
         };
-        let merchant_id = self.merchant(user_id).await?;
+        let merchant_id = caller.merchant_id;
         let secret = format!("whsec_{}", super::random_token());
         let ciphertext = self.secrets.encrypt(&secret)?;
         let client = self.client().await?;

@@ -5,25 +5,27 @@
 //! handler runs. Allowlisted routes pass through untouched; `/api/v1/*` and
 //! `/api/b2b/*` still accept the legacy user JWT during the deprecation window.
 //!
-//! The authenticated key is put into request extensions, so a handler can read
-//! the project and key without looking at the token again. Usage is recorded
-//! after the response, whatever its status, per §5.3.2.
+//! The resolved [`Caller`] is put into request extensions, so a handler never
+//! reads the token itself: a keyed call carries the key's merchant, project,
+//! key and environment, and a legacy call carries the merchant of the JWT.
+//! Usage is recorded after the response, whatever its status, per §5.3.2.
 
 use std::time::Instant;
 
 use axum::extract::{Request, State};
-use axum::http::{header::AUTHORIZATION, Method, StatusCode};
+use axum::http::{header::AUTHORIZATION, HeaderMap, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::Utc;
 use serde_json::json;
+use uuid::Uuid;
 
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 
 use super::keys::{self, Scope};
-use super::{key_coverage, Error};
+use super::{key_coverage, Caller, Error};
 
 /// Authenticate a business route with a project key.
 pub async fn require_key(
@@ -51,26 +53,28 @@ pub async fn require_key(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| keys::bearer_token(Some(value)))
         .map(str::to_string);
-    let Some(token) = token else {
-        return unauthorized("API key required");
-    };
-    if !token.starts_with("sk_") {
-        // The legacy user token stays valid only where the plan allows it; the
-        // handler still verifies it through `auth_user_id`.
-        return match class {
-            key_coverage::RouteClass::LegacyUserOrKey(_) => next.run(request).await,
-            _ => unauthorized("API key required"),
-        };
-    }
-
-    let key = match keys::authenticate(&state.pool, &token).await {
-        Ok(key) => key,
-        Err(Error::Unauthorized(message)) => return unauthorized(&message),
-        Err(error) => {
-            tracing::error!(error = %error, "could not authenticate merchant API key");
-            return AppError::Internal(anyhow::anyhow!("api key authentication failed"))
-                .into_response();
+    let key = match token.as_deref() {
+        Some(secret) if secret.starts_with("sk_") => {
+            match keys::authenticate(&state.pool, secret).await {
+                Ok(key) => key,
+                Err(Error::Unauthorized(message)) => return unauthorized(&message),
+                Err(error) => {
+                    tracing::error!(error = %error, "could not authenticate merchant API key");
+                    return AppError::Internal(anyhow::anyhow!("api key authentication failed"))
+                        .into_response();
+                }
+            }
         }
+        // The legacy user token stays valid only where the plan allows it.
+        Some(_) if matches!(class, key_coverage::RouteClass::LegacyUserOrKey(_)) => {
+            let caller = match legacy_caller(&state, request.headers()).await {
+                Ok(caller) => caller,
+                Err(error) => return error.into_response(),
+            };
+            request.extensions_mut().insert(caller);
+            return next.run(request).await;
+        }
+        _ => return unauthorized("API key required"),
     };
 
     if !key.allows(scope) {
@@ -105,7 +109,12 @@ pub async fn require_key(
     }
 
     let key_id = key.id;
-    request.extensions_mut().insert(key);
+    request.extensions_mut().insert(Caller {
+        merchant_id: key.merchant_id,
+        project_id: Some(key.project_id),
+        api_key_id: Some(key.id),
+        env: Some(key.env),
+    });
     let started = Instant::now();
     let response = next.run(request).await;
     let latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -135,6 +144,31 @@ fn required_scope(class: key_coverage::RouteClass) -> Option<Scope> {
 
 fn unauthorized(message: &str) -> Response {
     AppError::Unauthorized(message.into()).into_response()
+}
+
+/// Resolve the legacy user token into a caller without key attribution. The
+/// signature of the token alone proves the user; `merchant_for_user` maps that
+/// user to the merchant account, creating it on first use.
+async fn legacy_caller(state: &AppState, headers: &HeaderMap) -> Result<Caller, AppError> {
+    let token = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .filter(|token| !token.is_empty())
+        .ok_or_else(|| AppError::Unauthorized("missing authorization header".into()))?;
+    let subject = state
+        .jwt
+        .verify(token)
+        .map_err(|_| AppError::Unauthorized("invalid or expired token".into()))?;
+    let user_id = Uuid::parse_str(&subject)
+        .map_err(|_| AppError::Unauthorized("malformed token subject".into()))?;
+    let merchant_id = state.b2b.merchant_for_user(user_id).await?;
+    Ok(Caller {
+        merchant_id,
+        project_id: None,
+        api_key_id: None,
+        env: None,
+    })
 }
 
 #[cfg(test)]

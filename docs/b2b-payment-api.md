@@ -10,9 +10,10 @@ executes, and the business makes no manual swap.
 
 - Visible commission for the business: **0%**.
 - Pay3Flow margin: embedded in the rate and collected by the platform.
-- V1 is described in OpenAPI first. Authentication reuses the existing user
-  Bearer token; merchant API keys are deferred until after the implementation
-  works (see §20–21).
+- V1 is described in OpenAPI first. Business routes authenticate with a
+  project API key (`sk_…`); the existing user Bearer token is still accepted
+  on `/api/v1/*` and `/api/b2b/*` during the deprecation window
+  ([portal §8.1](b2b-merchant-portal.md)).
 - Sources: NEAR Intents now; Pay3Flow OTC when it becomes instant and covers the
   assets B2B needs.
 - Excluded: spot, P2P ads and ordinary exchangers (indicative only), and
@@ -163,7 +164,7 @@ webhooks. It does not control the deposit address or the recipient.
 | Intents provider | `NearIntentsProvider` | yes, add app fees and exact-in/out |
 | Chain confirmation | `otc_observers` policy | extract shared helpers |
 | Retries | `otc_outbox` | new webhook outbox |
-| Auth | `users`, Bearer token | API-key middleware |
+| Auth | `users`, Bearer token | `b2b::guard`, project API keys |
 | Idempotency | existing `Idempotency-Key` | same convention |
 | Money | `payments` uses `f64` | **no**, integer strings |
 
@@ -182,8 +183,9 @@ CREATE TABLE b2b_merchants (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Phase 1.1 API keys live in b2b_api_keys.sql (projects, keys, usage). V1 still
--- authenticates with the user Bearer token until the key middleware ships.
+-- Phase 1.1 API keys live in b2b_api_keys.sql (projects, keys, usage). V1
+-- accepts a project key or the legacy user Bearer token until the deprecation
+-- window ends.
 
 CREATE TABLE b2b_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -290,7 +292,8 @@ both the audit log and the webhook source.
 
 ## 11. API
 
-Merchant API (`Authorization: Bearer <user token>`; API keys deferred):
+Merchant API (`Authorization: Bearer sk_…`; the legacy user token is still
+accepted during the deprecation window):
 
 ```text
 POST /api/v1/quotes          get a quote (input or output amount)
@@ -326,7 +329,7 @@ Add the B2B endpoints to `backend/src/server/openapi.rs` under a new `B2B`
 tag. The v1 document contains:
 
 - schemas `B2BQuoteRequest`, `B2BQuote`, `B2BTransfer`, `B2BTransferEvent`;
-- the existing `bearerAuth` security scheme, no API-key scheme yet;
+- `merchantKeyAuth` next to `bearerAuth` on `/api/v1/*` and `/api/b2b/*`;
 - request/response examples for quote, transfer and `order.paid`;
 - `Idempotency-Key` documented on create operations.
 
@@ -339,7 +342,7 @@ paths:
     post:
       tags: [B2B]
       summary: Quote a crypto transfer
-      security: [{ bearerAuth: [] }]
+      security: [{ merchantKeyAuth: [] }, { bearerAuth: [] }]
       requestBody:
         required: true
         content:
@@ -355,7 +358,7 @@ paths:
     post:
       tags: [B2B]
       summary: Accept a quote and create a transfer
-      security: [{ bearerAuth: [] }]
+      security: [{ merchantKeyAuth: [] }, { bearerAuth: [] }]
       parameters:
         - in: header
           name: Idempotency-Key
@@ -463,12 +466,13 @@ exponential backoff, dead-letter, replay from the dashboard. Reuse the
 
 ## 14. Security
 
-- V1 uses the existing user Bearer token. Merchant API keys are deferred to
-  phase 1.1; until then the API serves the internal/first merchant account.
+- Business routes authenticate with a project API key (`sk_…`); the existing
+  user Bearer token still works on `/api/v1/*` and `/api/b2b/*` during the
+  deprecation window. A keyed request is pinned to the key's environment.
   Phase 2 adds one-page business registration (email code + GitHub OAuth2 /
   Telegram OIDC), membership and the portal; see
   [`b2b-merchant-portal.md`](b2b-merchant-portal.md).
-- When keys land: `sk_` secrets shown once, stored as an Argon2id hash + prefix;
+- Keys: `sk_` secrets shown once, stored as an Argon2id hash + prefix;
   `pk_` identifiers are not secrets; separate test/live environments; scopes
   `rates:read`, `quotes:write`, `orders:read`, `orders:write`, `refunds:write`,
   `otc:write`; every key belongs to a project and has a daily request limit.
@@ -516,11 +520,10 @@ mark paid.
   attribution on orders and the fee ledger;
 - key material helpers in `b2b::keys` (Argon2id hash, prefix lookup, scopes,
   daily limit, usage upsert) and the router-wide `b2b::guard` layer
-  (authentication, scope, daily limit, usage); still open: issue/rotate/revoke
-  HTTP APIs and environment pinning in the handlers;
-- switch authentication from the user Bearer token to `sk_`/`pk_`;
-- document the security scheme in OpenAPI;
-- remind the user about this step when v1 is running.
+  (authentication, scope, daily limit, usage, a single `Caller` per request,
+  environment pinning); still open: issue/rotate/revoke HTTP APIs;
+- the deprecation window: `/api/v1/*` and `/api/b2b/*` keep accepting the
+  user Bearer token for one release, then require `sk_` only.
 
 ### Phase 2 — merchant accounts, registration and portal (weeks 4–8)
 
