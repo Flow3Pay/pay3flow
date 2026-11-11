@@ -1,7 +1,8 @@
 # B2B merchant portal and registration
 
 Status: plan · 2026-11-11 · extends [`b2b-payment-api.md`](b2b-payment-api.md) ·
-UI designs: registration page received (Figma); other portal pages pending
+UI designs: registration page received (Figma); “Для бизнеса” and other portal
+pages pending
 
 Parent plan: [`b2b-payment-api.md`](b2b-payment-api.md) — this document inherits
 its model, money rules, delivery rules and security constraints. Where the two
@@ -35,8 +36,9 @@ balances and payouts remain Phase 3.
   `users` identity;
 - business workspace creation, membership and roles;
 - onboarding checklist for a first quote/checkout;
-- overview, orders, order detail, balances, fees, webhooks, analytics, settings,
-  team and API-key pages;
+- “Для бизнеса” workspace home with all-time cashbox, metrics and graphs;
+- orders, order detail, balances, fees, webhooks, analytics, settings, team and
+  API-key pages;
 - read-only balance monitoring: watch-only on-chain addresses, fee ledger,
   volume and settlement status;
 - test/live environments per merchant;
@@ -326,7 +328,7 @@ applies to the registration page and to the portal pages below.
 | Route | Purpose | Key data / actions |
 | --- | --- | --- |
 | `/register` | Public registration and sign-in | email code, GitHub/Telegram OAuth2, one-page register-or-login, no separate login prompt |
-| `/business` | Overview | volume, paid orders, conversion, captured fees, recent orders, onboarding checklist, environment switch |
+| `/business` | “Для бизнеса” workspace home | all-time cashbox, metrics and graphs, API-key creation, recent orders, environment switch |
 | `/business/onboarding` | Guided setup | profile, address, webhook, first quote, KYB |
 | `/business/orders` | All orders | filters (env, kind, status, asset, date), pagination, export |
 | `/business/orders/:id` | Order detail | quote, deposit address, deposit/delivery tx, timeline, captured fee, re-quote link, webhook delivery log |
@@ -344,9 +346,110 @@ applies to the registration page and to the portal pages below.
 Every page must define loading, empty, error and permission-denied states. The
 test environment gets a persistent banner; live gets a red/orange marker.
 
-### 5.1 "Balances" semantics (important)
+### 5.1 “Для бизнеса” workspace home
 
-Phase 2 is **watch-only monitoring**, not a Pay3Flow wallet:
+Route: `/business`; navigation label: “Для бизнеса”. If a shorter public alias
+is useful, `/for-business` redirects to `/business`. The same route has two
+states:
+
+- **guest** — a short product pitch, “Создать аккаунт” → `/register`, and
+  “API-документация”. No merchant data and no auth-only widgets;
+- **authenticated** — the workspace home described below.
+
+Top strip:
+
+- business name and current environment (`test` / `live`);
+- primary action “Создать API-ключ”;
+- secondary actions “Новый checkout”, “Webhooks”, “Настройки”;
+- account menu with the signed-in email and logout.
+
+#### 5.1.1 “Касса” — all-time totals
+
+The owner wants a single place that shows what has accumulated over the whole
+life of the merchant account. Phase 2 defines it as a **read-only cumulative
+report**, not a spendable wallet:
+
+| Metric | Definition |
+| --- | --- |
+| Получено за всё время | cumulative target amount delivered to the merchant's payout addresses, per asset |
+| Оборот | cumulative paid order value, per source asset, plus a clearly labelled USD estimate |
+| Комиссия Pay3Flow | cumulative platform margin/fees recorded in `b2b_fee_ledger` |
+| Заказы | paid and delivered order counts; failed and cancelled excluded and shown separately |
+| Последний расчёт | timestamp of the latest settlement, plus a freshness/stale marker |
+
+Rules:
+
+- “за всё время” means from the merchant's first paid order, never a rolling
+  window;
+- show each asset separately; do not add BTC, USDT and RUB into one number
+  without an explicit valuation method;
+- state the timezone and the data timestamp in the UI;
+- if a spendable balance or withdrawal is required, that is Phase 3 custody;
+  the Phase 2 page must not imply it;
+- empty state is zero values with “Пока нет оплаченных заказов”, not fake
+  placeholders.
+
+#### 5.1.2 Metrics and graphs
+
+- volume, fees, order count, conversion and settlement duration over time;
+- failure reasons and pending/failed order counts;
+- ranges: 24 hours, 7 days, 30 days, 90 days, all time;
+- filters: environment, asset, corridor, order kind;
+- one main chart (volume) and compact secondary charts; no decorative charts
+  without data;
+- pre-aggregate per day/asset in a materialized view or summary table so “all
+  time” and 90-day views do not scan the full order table on every request;
+- CSV export for the current filter;
+- respect permissions: members and viewers see metrics but not API secrets.
+
+#### 5.1.3 API keys
+
+A compact block on the workspace home and the full management page at
+`/business/settings/api-keys`:
+
+- create a key with name, environment (`test`/`live`) and scopes;
+- show `sk_` once at creation, with copy and “I saved it” confirmation;
+- list prefix, environment, scopes, created date, last used and status;
+- rotate and revoke; a revoked key stops working immediately;
+- owners and admins only; members/viewers see metadata without secrets;
+- keys are never rendered in SSR or written to logs;
+- backend contract is Phase 1.1 (`b2b_api_keys`), surfaced here.
+
+The home block shows the two or three most recent keys and a “Создать ключ”
+button; management stays on the settings page.
+
+#### 5.1.4 Recent orders and quick actions
+
+- the latest 10 orders with status, amount, asset and created time;
+- quick links to orders, balances, checkout links and webhooks;
+- onboarding checklist until the first live transfer (profile, payout/refund
+  address, verified webhook, first test quote, first test checkout, KYB);
+- guest state never renders any of these widgets.
+
+#### 5.1.5 Page rules
+
+- full-width shell with side padding; no centred fixed-width grid;
+- same visual language as `/register` unless a separate design says otherwise:
+  dark surface, lime accent, **no glows, no hover effects, no decorative
+  animation**;
+- no fake metrics, fake logos or invented partner names;
+- one `<h1>`, semantic sections, keyboard navigation, reduced-motion support;
+- add “Для бизнеса” to the header navigation (mobile menu included) only when
+  the page is ready; do not ship a dead link;
+- SEO for the guest state: title, description, canonical URL and Open Graph;
+  the authenticated state is `noindex` and never cached publicly.
+
+The layout and final copy need a Figma frame. Until it arrives, this section is
+the content and data contract.
+
+### 5.2 "Balances" semantics (important)
+
+This page is separate from the “Касса” block on `/business`:
+
+- “Касса” is a cumulative all-time report (received, volume, fees, orders);
+- `/business/balances` is **watch-only monitoring** of saved on-chain addresses.
+
+Neither is a Pay3Flow wallet in Phase 2:
 
 - on-chain balances of addresses the merchant saved, grouped by network/asset;
 - fees earned from `b2b_fee_ledger`;
@@ -505,6 +608,8 @@ to a merchant membership. OpenAPI gets a `B2B Portal` tag in the same pass.
 ```text
 GET    /api/b2b/profile
 PUT    /api/b2b/profile
+GET    /api/b2b/summary        all-time cashbox totals and freshness
+GET    /api/b2b/metrics        time series for volume, fees, orders, conversion
 GET    /api/b2b/members
 POST   /api/b2b/members/invites
 PATCH  /api/b2b/members/:id
@@ -580,7 +685,7 @@ Rules:
    no-glow/no-hover/one-page rules.
 6. `b2b_portal.sql`, membership/profile backfill, authorization middleware.
 7. Business onboarding and workspace creation.
-8. Overview, orders, order detail, fees.
+8. “Для бизнеса” home: cashbox, metrics and graphs, recent orders, compact API-key block; then orders list, order detail and fees.
 9. Balance monitoring (watch-only) and analytics.
 10. Webhooks, addresses, team, settings, audit.
 11. API-key UI and live-enablement/KYB gate.
@@ -595,6 +700,8 @@ Each step updates this document and the OpenAPI document.
 - the `/register` page has no glow, no hover effect and no separate login
   prompt; an existing email signs in and a new email registers through the same
   form;
+- the “Для бизнеса” home shows the all-time cashbox, dated graphs and API-key
+  creation; totals match the summary and fee-ledger APIs and mark stale data;
 - GitHub OAuth2 and Telegram OIDC complete a full round trip, reject bad state
   and link to an existing account only through a verified email;
 - production auth rejects the demo code; a real code is emailed, expires,
@@ -614,9 +721,11 @@ Each step updates this document and the OpenAPI document.
 
 ## 12. Open questions
 
-1. **Balance definition.** Watch-only on-chain addresses, fees earned, or a
-   spendable prefunded balance? A spendable balance pulls Phase 3 (custody,
-   safeguarding, reconciliation) forward and needs a compliance decision.
+1. **Balance and cashbox definition.** Phase 2 treats “Касса” as a cumulative
+   read-only report: received to payout addresses, gross volume, fees and order
+   counts. If it must instead be a spendable prefunded balance, that pulls
+   Phase 3 (custody, safeguarding, reconciliation) forward and needs a
+   compliance decision.
 2. **Legal entity and KYB.** Who approves, what documents, which jurisdictions.
 3. **Team model.** Are invites needed at launch, or owner-only first?
 4. **Session transport.** Cookie sessions for the portal vs the current Bearer

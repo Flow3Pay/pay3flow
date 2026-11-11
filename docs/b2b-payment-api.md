@@ -528,6 +528,9 @@ need a persistent workspace.
   email code, and existing email signs in while a new email registers;
 - GitHub OAuth2 and Telegram OIDC handled on the backend, with verified-email
   account linking;
+- “Для бизнеса” workspace home: all-time cashbox, metrics and graphs, API-key
+  creation, recent orders and environment switch; cashbox is a read-only
+  cumulative report in Phase 2, not a spendable wallet;
 - workspace, membership and roles (owner/admin/member/viewer);
 - onboarding and test/live environments;
 - portal pages: overview, orders, order detail, balances, fees, checkout links,
@@ -547,9 +550,9 @@ need a persistent workspace.
 
 Acceptance: a new business can register, finish onboarding and quote in test
 without support; an existing email signs in through the same page; GitHub and
-Telegram OAuth2 round trips work; roles and audit are enforced; balances and fees
-match the ledger; live stays disabled until approval; anonymous checkout still
-works.
+Telegram OAuth2 round trips work; the “Для бизнеса” home shows cashbox, graphs
+and API-key creation; roles and audit are enforced; balances and fees match the
+ledger; live stays disabled until approval; anonymous checkout still works.
 
 ### Phase 2.1 — instant OTC (weeks 4–8, only with a counterparty)
 
