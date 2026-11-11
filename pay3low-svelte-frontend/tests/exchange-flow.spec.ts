@@ -875,6 +875,8 @@ async function mockBackend(page: Page, options: { includeGeorgia?: boolean; incl
             const fields = Object.fromEntries([...line.matchAll(/(\w+) = "([^"]*)"/g)].map(match => [match[1], match[2]]));
             return { ...fields, method_id: fields.id, display_name: fields.name, role: "both", kind: fields.kind ?? "bank", icon_url: fields.icon_url ?? "", popular: line.includes("popular = true") };
           });
+        // Production includes a legacy wildcard currency alongside concrete methods.
+        if (options.includeGeorgia) methods.push({ method_id: "legacy-any", name: "ANY", display_name: "Any currency", currency: "ANY", country: "GLOBAL", role: "both", kind: "currency", icon_url: "", popular: false });
         // Put the restored tokens beyond the first 100 rows to catch truncated catalogs.
         methods.sort((a, b) => Number(["10SET", "ACNON"].includes(a.currency)) - Number(["10SET", "ACNON"].includes(b.currency)));
         const offset = Number(url.searchParams.get("offset") ?? 0);
@@ -4303,6 +4305,7 @@ test("Georgian banks expose GEL USD EUR choices and restore shared selections", 
   await expect(gelButton.locator("img")).toHaveAttribute("src", /\/icons\/flags\/ge\.svg(?:\?v=2)?$/);
   await gelButton.click();
   const currencies = page.getByRole("dialog", { name: "Choose currency", exact: true });
+  await expect(currencies.getByRole("option", { name: /^ANY\b/ })).toHaveCount(1);
   for (const currency of ["GEL", "USD", "EUR"]) {
     await expect(currencies.getByRole("option", { name: new RegExp(`^${currency}\\b`) })).toBeVisible();
   }

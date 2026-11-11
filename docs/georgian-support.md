@@ -126,3 +126,7 @@ missing rates. Browser tests use the actual payment-method catalog with mocked
 route/reference APIs to cover selection, sharing and provider instructions.
 
 The production release is rebased onto current `master`; its checks and deployed revision are recorded separately in the release receipt.
+
+The currency selector includes the wildcard once even when the stored catalog
+already contains an `ANY` currency entry. The browser regression includes that
+legacy production entry alongside the Georgian catalog.

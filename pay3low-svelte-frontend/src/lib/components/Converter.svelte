@@ -841,7 +841,7 @@
       ?? null;
   }
   function currencyChoicesFor(currencies: string[]) {
-    return [{id:"ANY",name:t("Any currency",{},activeLocale),mark:"ANY",color:"#272727"},...currencies.map(currency => ({id:currency,name:currencyCards.find(card=>card.currency===currency)?.name ?? currency,mark:currencyMark(currency),color:"#272727"}))];
+    return [{id:"ANY",name:t("Any currency",{},activeLocale),mark:"ANY",color:"#272727"},...currencies.filter(currency => currency !== "ANY").map(currency => ({id:currency,name:currencyCards.find(card=>card.currency===currency)?.name ?? currency,mark:currencyMark(currency),color:"#272727"}))];
   }
   function chooseCurrency(side: Exclude<PickerSide, null>, choice: string) {
     const role = side === "source" ? "sender" : "recipient";
