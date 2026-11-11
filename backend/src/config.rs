@@ -73,6 +73,14 @@ pub struct Config {
     pub symbiosis_execution_contracts: Vec<String>,
     /// Enables non-custodial wallet execution descriptors and API endpoints.
     pub wallet_execution_enabled: bool,
+    /// B2B margin embedded in the quoted rate, in basis points. Capped below so
+    /// a bad route can never be sold at a large markup.
+    pub b2b_margin_bps: u32,
+    pub b2b_margin_cap_bps: u32,
+    /// Locked payment window for a B2B quote, in seconds (hard maximum 3600).
+    pub b2b_quote_ttl_secs: u64,
+    /// NEAR Intents account that receives the platform's `appFees`.
+    pub b2b_fee_recipient: Option<String>,
 }
 
 /// The checked-in TOML surface deliberately contains no credentials. Unknown
@@ -122,6 +130,9 @@ struct FileConfig {
     symbiosis_slippage_bps: u32,
     symbiosis_execution_contracts: Vec<String>,
     wallet_execution_enabled: bool,
+    b2b_margin_bps: u32,
+    b2b_margin_cap_bps: u32,
+    b2b_quote_ttl_secs: u64,
 }
 
 impl Default for FileConfig {
@@ -171,6 +182,9 @@ impl Default for FileConfig {
             // exposed do not contain this key. Enable the capability by
             // default there; local config.toml keeps it explicitly disabled.
             wallet_execution_enabled: true,
+            b2b_margin_bps: 50,
+            b2b_margin_cap_bps: 70,
+            b2b_quote_ttl_secs: 900,
         }
     }
 }
@@ -234,6 +248,10 @@ impl Config {
             symbiosis_slippage_bps: file.symbiosis_slippage_bps,
             symbiosis_execution_contracts: file.symbiosis_execution_contracts,
             wallet_execution_enabled: file.wallet_execution_enabled,
+            b2b_margin_bps: file.b2b_margin_bps,
+            b2b_margin_cap_bps: file.b2b_margin_cap_bps,
+            b2b_quote_ttl_secs: file.b2b_quote_ttl_secs,
+            b2b_fee_recipient: optional_secret_env("B2B_FEE_RECIPIENT"),
         })
     }
 

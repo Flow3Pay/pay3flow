@@ -214,6 +214,22 @@ async fn main() -> anyhow::Result<()> {
 
     let market_prices = pay3flow_backend::market_prices::MarketPriceService::new()?;
     market_prices.initialize().await;
+    let b2b = pay3flow_backend::b2b::Service::new(
+        pool.clone(),
+        near_intents.clone(),
+        &cfg.secrets_key,
+        cfg.b2b_fee_recipient.clone(),
+        cfg.b2b_margin_bps,
+        cfg.b2b_margin_cap_bps,
+        std::time::Duration::from_secs(cfg.b2b_quote_ttl_secs),
+        cfg.ap_origin.clone(),
+    );
+    if b2b.fee_recipient().is_none() {
+        tracing::warn!(
+            "B2B_FEE_RECIPIENT is not configured; the B2B API will quote without margin"
+        );
+    }
+    b2b.clone().start();
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),
@@ -234,6 +250,7 @@ async fn main() -> anyhow::Result<()> {
         market_prices,
         otc,
         telegram,
+        b2b,
     );
 
     // Provider refresh work is paced independently from interactive searches:

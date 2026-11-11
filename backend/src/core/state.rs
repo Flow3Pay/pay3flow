@@ -52,6 +52,8 @@ pub struct AppState {
     pub otc: crate::otc::Service,
     /// Optional Telegram notifications for new anonymous users.
     pub telegram: Option<crate::tg::bot::BotNotifier>,
+    /// B2B crypto routing API and hosted payment page.
+    pub b2b: crate::b2b::Service,
 }
 
 impl AppState {
@@ -76,6 +78,7 @@ impl AppState {
         market_prices: MarketPriceService,
         otc: crate::otc::Service,
         telegram: Option<crate::tg::bot::BotNotifier>,
+        b2b: crate::b2b::Service,
     ) -> Self {
         Self {
             pool,
@@ -98,6 +101,7 @@ impl AppState {
             reference_rates: crate::reference_rates::ReferenceRateService::default(),
             otc,
             telegram,
+            b2b,
         }
     }
 }

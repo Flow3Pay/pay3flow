@@ -1,6 +1,6 @@
 # B2B crypto routing API
 
-Status: proposal · 2026-11-10 · scope: v1
+Status: phase 1 implemented · 2026-11-10 · scope: v1
 
 ## 1. Model
 
@@ -453,6 +453,7 @@ order.overpaid
 order.expired
 order.failed
 order.refunded
+order.cancelled
 ```
 
 Headers: `Pay3Flow-Event-Id`, `Pay3Flow-Delivery-Id`,
@@ -569,4 +570,55 @@ mark paid.
   (`b2b_api_keys`, issue/rotate/revoke, test/live, scopes) and switch the API
   from the user Bearer token to `sk_`/`pk_`. Remind the user about this at that
   point.
+
+## 22. Phase 1 implementation notes (2026-11-11)
+
+What is in the tree:
+
+- `backend/migrations/b2b.sql` and its registration in `db::apply_schema`.
+  Besides the tables above it adds `b2b_orders.accepted_quote_id` (the quote the
+  merchant actually funded after a re-quote), `b2b_orders.transfer_key`
+  (transfer-creation idempotency, separate from quote idempotency) and
+  `b2b_checkout_sessions` (hosted page token, `success_url`, expiry).
+- `backend/src/b2b/`: quote/transfer/checkout service, fee ledger, analytics,
+  webhook outbox with HMAC signatures, background settlement worker and the
+  dependency-free QR renderer for the hosted page.
+- Each quote is requested twice when a margin is configured: a fee-free
+  reference quote records `best_output` in the ledger, and the executable quote
+  carries `appFees = margin`. Without `B2B_FEE_RECIPIENT` the margin is zero and
+  no fee is charged.
+- `backend/src/server/routing/b2b.rs`: `/api/v1/quotes`, `/api/v1/transfers`,
+  `/api/v1/payments`, `/pay/{token}` (page), `/pay/{token}/status`,
+  `/pay/{token}/quote`, `POST /api/b2b/webhooks`, `GET /api/b2b/orders` and
+  `GET /api/b2b/analytics`.
+- OpenAPI operations under the `B2B` tag with the schemas and examples listed
+  above, including `Idempotency-Key` on create operations.
+- `NearIntentsProvider` now accepts `app_fees` in `NearQuoteRequest` and sends
+  them as `appFees`; every other caller passes an empty list.
+
+Configuration:
+
+- `config.toml`: `b2b_margin_bps` (default 50), `b2b_margin_cap_bps`
+  (default 70, hard maximum 70) and `b2b_quote_ttl_secs` (default 900, clamped
+  to 60–3600).
+- Environment: `B2B_FEE_RECIPIENT` — the NEAR Intents account that receives
+  `appFees`. Keep it out of the TOML file.
+- The hosted page URL uses `ap_origin`, so set it to the public origin.
+
+Behaviour and deviations to keep in mind:
+
+- `order.quoted` and `order.awaiting_deposit` are emitted when a transfer is
+  created (or a checkout is created/re-quoted), not when the provisional quote
+  is first requested. A cancelled transfer emits `order.cancelled`.
+- `paid` follows the provider's delivered status, never the deposit hash.
+  `underpaid` is terminal until the provider refunds or the order is handled
+  manually.
+- The worker polls accepted orders every 15 seconds, expires stale quotes and
+  delivers webhooks with a 5-minute lease, exponential backoff and a dead
+  letter after 8 attempts.
+- Re-quoting is exposed on the hosted page only
+  (`POST /pay/{token}/quote`). The merchant transfer API creates a new quote
+  instead of mutating an accepted one.
+- `Unavailable` B2B provider failures map to HTTP 503.
+
 

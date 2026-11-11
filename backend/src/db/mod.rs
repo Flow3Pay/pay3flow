@@ -96,6 +96,10 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
     client
         .batch_execute(include_str!("../../migrations/providers.sql"))
         .await?;
+    client
+        .batch_execute(include_str!("../../migrations/b2b.sql"))
+        .await
+        .context("apply B2B migration")?;
     Ok(())
 }
 
@@ -103,6 +107,18 @@ fn manager() -> ManagerConfig {
     ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     }
+}
+
+/// Lazy pool for unit tests that never touch the database. Building a pool does
+/// not open a connection, so tests that only exercise validation or formatting
+/// do not need a running PostgreSQL.
+#[cfg(test)]
+pub fn build_pool_for_tests() -> DbPool {
+    let mut cfg = PoolCfg::new();
+    cfg.url = Some("postgres://pay3flow:pay3flow@127.0.0.1:1/pay3flow".into());
+    cfg.manager = Some(manager());
+    cfg.create_pool(Some(Runtime::Tokio1), NoTls)
+        .expect("test pool configuration must be valid")
 }
 
 /// Round-trip the database so readiness can report a pool that cannot serve.

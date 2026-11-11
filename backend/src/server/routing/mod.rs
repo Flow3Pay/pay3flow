@@ -2,6 +2,7 @@ pub mod activitypub;
 pub mod anonymous;
 pub mod api;
 pub mod auth;
+pub mod b2b;
 pub mod banks;
 pub mod discovery;
 pub mod exchange;

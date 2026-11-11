@@ -18,8 +18,8 @@ use crate::external_reviews;
 use crate::market_prices;
 use crate::server::openapi;
 use crate::server::routing::{
-    activitypub, anonymous, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
-    payments_ws, providers, rates, referrals, route_executions, share_links, solver, ws,
+    activitypub, anonymous, auth, b2b, banks, exchange, matcher, networks, oauth, p2p, pairs,
+    payments, payments_ws, providers, rates, referrals, route_executions, share_links, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -72,6 +72,18 @@ pub fn router(state: AppState) -> Router {
         .route("/api/payments", post(payments::create))
         .route("/api/payments", get(payments::list))
         .route("/api/payments/:id", get(payments::get))
+        .route("/api/v1/quotes", post(b2b::create_quote))
+        .route("/api/v1/transfers", post(b2b::create_transfer))
+        .route("/api/v1/transfers", get(b2b::list_transfers))
+        .route("/api/v1/transfers/:id", get(b2b::get_transfer))
+        .route("/api/v1/transfers/:id/cancel", post(b2b::cancel_transfer))
+        .route("/api/v1/payments", post(b2b::create_checkout))
+        .route("/pay/:token", get(b2b::checkout_page))
+        .route("/pay/:token/status", get(b2b::checkout_status))
+        .route("/pay/:token/quote", post(b2b::checkout_requote))
+        .route("/api/b2b/webhooks", post(b2b::create_webhook))
+        .route("/api/b2b/orders", get(b2b::list_orders))
+        .route("/api/b2b/analytics", get(b2b::analytics))
         .route("/api/exchange/orders", post(exchange::create_order))
         .route("/api/exchange/orders", get(exchange::list_orders))
         .route("/api/exchange/corridors", get(exchange::list_corridors))
@@ -147,7 +159,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/banks", get(banks::list))
         .route("/api/networks", get(networks::list))
         .route("/api/market-prices", get(market_prices::market_prices))
-        .route("/api/reference-rates", get(crate::reference_rates::reference_rates))
+        .route(
+            "/api/reference-rates",
+            get(crate::reference_rates::reference_rates),
+        )
         .route(
             "/api/reviews/providers/:slug",
             get(external_reviews::provider_reviews),

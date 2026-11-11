@@ -15,6 +15,7 @@ pub enum AppError {
     Conflict(String),
     Unauthorized(String),
     NotImplemented(String),
+    Unavailable(String),
     Internal(anyhow::Error),
 }
 
@@ -32,6 +33,7 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
             AppError::NotImplemented(msg) => (StatusCode::NOT_IMPLEMENTED, msg),
+            AppError::Unavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
             AppError::Internal(e) => {
                 tracing::error!("internal error: {e:?}");
                 (

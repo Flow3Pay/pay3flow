@@ -754,7 +754,8 @@ fn error_message(error: AppError) -> String {
         | AppError::NotFound(message)
         | AppError::Conflict(message)
         | AppError::Unauthorized(message)
-        | AppError::NotImplemented(message) => message,
+        | AppError::NotImplemented(message)
+        | AppError::Unavailable(message) => message,
         AppError::Internal(error) => error.to_string(),
     }
 }

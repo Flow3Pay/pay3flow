@@ -823,6 +823,7 @@ impl Service {
                         recipient: recipient.to_string(),
                         refund_to: leg.sender.clone(),
                         slippage_bps: 0,
+                        app_fees: Vec::new(),
                         dry: true,
                     })
                     .await
@@ -1083,6 +1084,7 @@ impl Service {
                     recipient: fee_recipient.to_string(),
                     refund_to: source_address.to_string(),
                     slippage_bps: 0,
+                    app_fees: Vec::new(),
                     dry: true,
                 })
                 .await
@@ -1152,6 +1154,7 @@ impl Service {
                 recipient: recipient.to_string(),
                 refund_to: refund_to.to_string(),
                 slippage_bps: slippage_bps.min(10_000),
+                app_fees: Vec::new(),
                 dry: false,
             })
             .await
@@ -1385,6 +1388,7 @@ impl Service {
                 recipient: recipient.to_string(),
                 refund_to: source_address.to_string(),
                 slippage_bps: 0,
+                app_fees: Vec::new(),
                 dry: false,
             })
             .await

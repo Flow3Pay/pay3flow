@@ -87,6 +87,13 @@ symbiosis_execution_contracts = [
 # Set false to keep this deployment limited to read-only route discovery.
 wallet_execution_enabled = true
 
+# B2B routing API. The margin is embedded in the rate and collected through
+# NEAR Intents appFees; it is capped at 0.7% (70 bps) by the backend.
+# B2B_FEE_RECIPIENT (a NEAR Intents account) stays environment-only.
+b2b_margin_bps = 50
+b2b_margin_cap_bps = 70
+b2b_quote_ttl_secs = 900
+
 # Public NEAR Intents addresses for the Avalanche -> Solana preview.
 # Executable quotes always use the connected wallet and chosen recipient.
 near_intents_quote_recipient = "So11111111111111111111111111111111111111112"

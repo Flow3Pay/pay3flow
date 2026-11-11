@@ -428,7 +428,15 @@ impl NearIntentsProvider {
         let amount_value = truncate_decimal(&request.amount.value, amount_decimals)?;
         let quoted_amount = Amount::new(amount_value, request.amount.asset.clone())?;
         let atomic_amount = decimal_to_atomic(&quoted_amount.value, amount_decimals)?;
-        let body = json!({
+        for fee in &request.app_fees {
+            if fee.recipient.trim().is_empty() {
+                bail!("NEAR Intents app fee recipient cannot be empty");
+            }
+            if fee.fee_bps > 10_000 {
+                bail!("NEAR Intents app fee must be at most 10000 basis points");
+            }
+        }
+        let mut body = json!({
             "dry": request.dry,
             "swapType": if exact_output { "EXACT_OUTPUT" } else { "EXACT_INPUT" },
             "slippageTolerance": request.slippage_bps,
@@ -443,6 +451,14 @@ impl NearIntentsProvider {
             "deadline": (Utc::now() + chrono::Duration::from_std(self.quote_ttl)?).to_rfc3339(),
             "quoteWaitingTimeMs": DEFAULT_QUOTE_WAITING_TIME_MS,
         });
+        let app_fees = request
+            .app_fees
+            .iter()
+            .map(|fee| json!({"recipient": fee.recipient, "fee": fee.fee_bps}))
+            .collect::<Vec<_>>();
+        if !app_fees.is_empty() {
+            body["appFees"] = Value::Array(app_fees);
+        }
         let mut builder = self.client.post(self.endpoint("quote"));
         if let Some(jwt) = &self.jwt {
             builder = builder.bearer_auth(jwt);
@@ -538,6 +554,7 @@ impl QuoteProvider for NearIntentsProvider {
             recipient,
             refund_to,
             slippage_bps: self.slippage_bps,
+            app_fees: Vec::new(),
             dry: true,
         };
         self.request_quote(request).await

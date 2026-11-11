@@ -540,6 +540,15 @@ pub struct NearSwapStatus {
     pub raw: Value,
 }
 
+/// A platform fee passed to the provider as `appFees`. The provider deducts it
+/// from the input token and pays `recipient` inside Intents, so the business
+/// only ever sees a net rate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppFee {
+    pub recipient: String,
+    pub fee_bps: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct NearQuoteRequest {
     pub from: Asset,
@@ -550,6 +559,7 @@ pub struct NearQuoteRequest {
     pub recipient: String,
     pub refund_to: String,
     pub slippage_bps: u32,
+    pub app_fees: Vec<AppFee>,
     pub dry: bool,
 }
 
@@ -1262,6 +1272,7 @@ mod tests {
                 recipient: "recipient".into(),
                 refund_to: "refund".into(),
                 slippage_bps: 100,
+                app_fees: Vec::new(),
                 dry: false,
             })
             .await
@@ -1326,6 +1337,7 @@ mod tests {
                 recipient: "recipient".into(),
                 refund_to: "refund".into(),
                 slippage_bps: 0,
+                app_fees: Vec::new(),
                 dry: false,
             })
             .await

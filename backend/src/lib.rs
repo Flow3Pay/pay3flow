@@ -1,4 +1,5 @@
 pub mod activitypub;
+pub mod b2b;
 pub mod banks;
 pub mod config;
 pub mod compiled_provider_code {
@@ -23,14 +24,14 @@ pub mod provider_adapter;
 pub mod provider_profile;
 pub mod providers;
 pub mod quotes;
-pub mod referrals;
 pub mod reference_rates;
+pub mod referrals;
 pub mod route_engine;
 pub mod route_execution;
 pub mod routing;
 pub mod server;
 pub mod service;
 pub mod service_reputation;
+pub mod tg;
 pub mod trustfile;
 pub mod trustfile_model;
-pub mod tg;

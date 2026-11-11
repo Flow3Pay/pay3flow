@@ -30,6 +30,7 @@ fn api_document() -> Value {
             { "name": "Catalogs", "description": "Public banks, networks, providers and exchange-pair catalogs." },
             { "name": "HEX", "description": "Read-only GNK/USDT market, account and simulation data. Wallets publish trading intents directly." },
             { "name": "Routing", "description": "P2P search, route execution and route reputation." },
+            { "name": "B2B", "description": "Crypto routing for businesses: executable quotes, transfers, hosted checkout pages, webhooks and a fee ledger. V1 authenticates with the user bearer token; merchant API keys arrive in phase 1.1." },
             { "name": "Administration", "description": "Protected operational controls. These endpoints require the configured admin bearer token." },
             { "name": "WebSockets", "description": "Real-time rates, payment events and route updates." },
             { "name": "ActivityPub", "description": "Federation and marketplace discovery endpoints." },
@@ -288,7 +289,219 @@ fn components() -> Value {
         submit_route_execution_schema(),
     );
     schemas.insert("RouteExecution".into(), route_execution_schema());
+    schemas.insert("B2BQuoteRequest".into(), b2b_quote_request_schema());
+    schemas.insert("B2BTransferRequest".into(), b2b_transfer_request_schema());
+    schemas.insert("B2BCheckoutRequest".into(), b2b_checkout_request_schema());
+    schemas.insert("B2BWebhookRequest".into(), b2b_webhook_request_schema());
+    schemas.insert("B2BQuote".into(), b2b_quote_schema());
+    schemas.insert("B2BTransfer".into(), b2b_transfer_schema());
+    schemas.insert("B2BCheckout".into(), b2b_checkout_schema());
+    schemas.insert("B2BCheckoutStatus".into(), b2b_checkout_status_schema());
+    schemas.insert("B2BWebhookEndpoint".into(), b2b_webhook_endpoint_schema());
+    schemas.insert("B2BAnalytics".into(), b2b_analytics_schema());
     components
+}
+
+fn b2b_quote_side_schema(with_amount: bool) -> Value {
+    let mut properties = json!({
+        "asset": { "type": "string", "example": "USDT" },
+        "network": { "type": "string", "example": "ethereum" }
+    });
+    if with_amount {
+        properties["amount"] = json!({
+            "type": "string",
+            "description": "Exact decimal string. Provide an amount on exactly one side of the quote.",
+            "example": "1000.00"
+        });
+    }
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["asset", "network"],
+        "properties": properties
+    })
+}
+
+fn b2b_quote_request_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["input", "output", "recipient", "refund_address"],
+        "properties": {
+            "input": b2b_quote_side_schema(true),
+            "output": b2b_quote_side_schema(true),
+            "recipient": { "type": "string", "description": "Destination chain address for the delivered amount." },
+            "refund_address": { "type": "string", "description": "Address that receives an unfilled deposit." },
+            "env": { "type": "string", "enum": ["test", "live"], "default": "live" },
+            "external_id": { "type": "string", "description": "Merchant-side identifier echoed on the order." },
+            "metadata": { "type": "object", "additionalProperties": true }
+        },
+        "example": {
+            "input": { "asset": "USDT", "network": "ethereum", "amount": "1000.00" },
+            "output": { "asset": "USDT", "network": "tron" },
+            "recipient": "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+            "refund_address": "0x8ba1f109551bD432803012645Ac136ddd64DBA72"
+        }
+    })
+}
+
+fn b2b_transfer_request_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["quote_id"],
+        "properties": {
+            "quote_id": { "type": "string", "format": "uuid" },
+            "external_id": { "type": "string" },
+            "env": { "type": "string", "enum": ["test", "live"] }
+        }
+    })
+}
+
+fn b2b_checkout_request_schema() -> Value {
+    let mut schema = b2b_quote_request_schema();
+    schema["properties"]["success_url"] = json!({
+        "type": "string",
+        "format": "uri",
+        "description": "Optional merchant URL shown after delivery."
+    });
+    schema
+}
+
+fn b2b_webhook_request_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+            "url": { "type": "string", "format": "uri" },
+            "events": {
+                "type": "array",
+                "items": { "type": "string", "enum": ["order.quoted", "order.awaiting_deposit", "order.processing", "order.paid", "order.underpaid", "order.overpaid", "order.expired", "order.failed", "order.refunded", "order.cancelled"] }
+            }
+        }
+    })
+}
+
+fn b2b_quote_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["quote_id", "order_id", "provider", "status", "exact", "input_asset", "input_network", "output_asset", "output_network", "input_amount", "output_amount", "best_output", "captured_bps", "app_fee_bps", "recipient", "refund_address", "deposit_address", "expires_at"],
+        "properties": {
+            "quote_id": { "type": "string", "format": "uuid" },
+            "order_id": { "type": "string", "format": "uuid" },
+            "provider": { "type": "string", "example": "near-intents" },
+            "status": { "type": "string" },
+            "exact": { "type": "string", "enum": ["input", "output"] },
+            "input_asset": { "type": "string" },
+            "input_network": { "type": "string" },
+            "output_asset": { "type": "string" },
+            "output_network": { "type": "string" },
+            "input_amount": { "type": "string", "example": "1000.00" },
+            "output_amount": { "type": "string", "example": "994.50" },
+            "best_output": { "type": "string", "example": "995.00" },
+            "captured_bps": { "type": "integer", "example": 50 },
+            "app_fee_bps": { "type": "integer", "example": 50 },
+            "recipient": { "type": "string" },
+            "refund_address": { "type": "string" },
+            "deposit_address": { "type": "string" },
+            "deposit_memo": { "type": "string", "nullable": true },
+            "expires_at": { "type": "string", "format": "date-time" },
+            "created_at": { "type": "string", "format": "date-time" }
+        }
+    })
+}
+
+fn b2b_transfer_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["id", "merchant_id", "env", "kind", "status", "input_asset", "input_network", "output_asset", "output_network", "recipient", "events", "created_at", "updated_at"],
+        "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "merchant_id": { "type": "string", "format": "uuid" },
+            "env": { "type": "string", "enum": ["test", "live"] },
+            "kind": { "type": "string", "enum": ["transfer", "checkout"] },
+            "external_id": { "type": "string", "nullable": true },
+            "status": { "type": "string", "enum": ["quoted", "awaiting_deposit", "processing", "paid", "underpaid", "overpaid", "expired", "failed", "cancelled", "refunded"] },
+            "input_asset": { "type": "string" },
+            "input_network": { "type": "string" },
+            "output_asset": { "type": "string" },
+            "output_network": { "type": "string" },
+            "recipient": { "type": "string" },
+            "refund_address": { "type": "string", "nullable": true },
+            "quote": { "$ref": "#/components/schemas/B2BQuote" },
+            "events": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+        },
+        "example": {
+            "id": "3f3a4b5c-6d7e-4f80-9102-334455667788",
+            "status": "awaiting_deposit",
+            "input_asset": "USDT",
+            "input_network": "ethereum",
+            "output_asset": "USDT",
+            "output_network": "tron"
+        }
+    })
+}
+
+fn b2b_checkout_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["order_id", "token", "url", "status", "quote"],
+        "properties": {
+            "order_id": { "type": "string", "format": "uuid" },
+            "token": { "type": "string" },
+            "url": { "type": "string", "format": "uri", "example": "https://pay3flow.example/pay/abc123" },
+            "status": { "type": "string" },
+            "success_url": { "type": "string", "nullable": true },
+            "quote": { "$ref": "#/components/schemas/B2BQuote" }
+        }
+    })
+}
+
+fn b2b_checkout_status_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["order_id", "status", "quote"],
+        "properties": {
+            "order_id": { "type": "string", "format": "uuid" },
+            "status": { "type": "string" },
+            "success_url": { "type": "string", "nullable": true },
+            "quote": { "$ref": "#/components/schemas/B2BQuote" }
+        }
+    })
+}
+
+fn b2b_webhook_endpoint_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["id", "url", "events", "secret", "active"],
+        "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "url": { "type": "string", "format": "uri" },
+            "events": { "type": "array", "items": { "type": "string" } },
+            "secret": { "type": "string", "description": "Returned once. Verify `Pay3Flow-Signature: t=...,v1=HMAC-SHA256(\"t.body\")` with it." },
+            "active": { "type": "boolean" }
+        }
+    })
+}
+
+fn b2b_analytics_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["orders", "paid_orders", "conversion", "average_ticket", "volume", "captured", "margin_bps", "failure_reasons"],
+        "properties": {
+            "orders": { "type": "integer", "format": "int64" },
+            "paid_orders": { "type": "integer", "format": "int64" },
+            "conversion": { "type": "number", "format": "double" },
+            "average_ticket": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+            "volume": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+            "captured": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+            "margin_bps": { "type": "integer" },
+            "failure_reasons": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } }
+        }
+    })
 }
 
 fn create_route_execution_schema() -> Value {
@@ -1109,6 +1322,114 @@ const OPERATIONS: &[Operation] = &[
         true,
         false,
     ),
+    (
+        "/api/v1/quotes",
+        "post",
+        "Quote a crypto transfer",
+        "Search executable sources (NEAR Intents in v1) and lock a deposit address. Provide an exact amount on one side only. The quoted rate includes a capped platform margin and charges 0% visible commission. Pass `Idempotency-Key` to safely retry.",
+        "B2B",
+        true,
+        true,
+    ),
+    (
+        "/api/v1/transfers",
+        "post",
+        "Create a transfer",
+        "Accept a quote and move the order to `awaiting_deposit`. The `Idempotency-Key` header is required.",
+        "B2B",
+        true,
+        true,
+    ),
+    (
+        "/api/v1/transfers",
+        "get",
+        "List transfers",
+        "Return the caller's transfers, newest first.",
+        "B2B",
+        false,
+        true,
+    ),
+    (
+        "/api/v1/transfers/{id}",
+        "get",
+        "Get a transfer",
+        "Return one transfer with its quote and event timeline.",
+        "B2B",
+        false,
+        true,
+    ),
+    (
+        "/api/v1/transfers/{id}/cancel",
+        "post",
+        "Cancel a transfer",
+        "Cancel an order that is still `quoted` or `awaiting_deposit`.",
+        "B2B",
+        false,
+        true,
+    ),
+    (
+        "/api/v1/payments",
+        "post",
+        "Create a hosted checkout",
+        "Quote and accept an order in one step, returning a public `/pay/{token}` URL.",
+        "B2B",
+        true,
+        true,
+    ),
+    (
+        "/pay/{token}",
+        "get",
+        "Hosted payment page",
+        "Public mobile-first page with deposit address, QR code, countdown and live status. No wallet connection or signature.",
+        "B2B",
+        false,
+        false,
+    ),
+    (
+        "/pay/{token}/status",
+        "get",
+        "Checkout status",
+        "Poll the order state shown on the hosted page. `paid` means delivery to the recipient, not the payer's deposit hash.",
+        "B2B",
+        false,
+        false,
+    ),
+    (
+        "/pay/{token}/quote",
+        "post",
+        "Re-quote a checkout",
+        "Replace an expired quote with a new deposit address and a fresh payment window.",
+        "B2B",
+        false,
+        false,
+    ),
+    (
+        "/api/b2b/webhooks",
+        "post",
+        "Create a webhook endpoint",
+        "Register a signed merchant webhook endpoint. The signing secret is returned once; deliveries are at-least-once with exponential backoff.",
+        "B2B",
+        true,
+        true,
+    ),
+    (
+        "/api/b2b/orders",
+        "get",
+        "Dashboard orders",
+        "Return the merchant's orders for the dashboard, newest first.",
+        "B2B",
+        false,
+        true,
+    ),
+    (
+        "/api/b2b/analytics",
+        "get",
+        "Dashboard analytics",
+        "Volume, conversion, average ticket, captured margin and failure reasons for the merchant.",
+        "B2B",
+        false,
+        true,
+    ),
 ];
 
 fn add_operation(paths: &mut Map<String, Value>, operation: Operation) {
@@ -1196,6 +1517,10 @@ fn request_schema(path: &str, method: &str) -> Value {
         ("/api/exchange/orders/{id}/proof", "post") => "SubmitProofRequest",
         ("/api/p2p/route-executions", "post") => "CreateRouteExecution",
         ("/api/p2p/route-executions/{id}/submissions", "post") => "SubmitRouteExecution",
+        ("/api/v1/quotes", "post") => "B2BQuoteRequest",
+        ("/api/v1/transfers", "post") => "B2BTransferRequest",
+        ("/api/v1/payments", "post") => "B2BCheckoutRequest",
+        ("/api/b2b/webhooks", "post") => "B2BWebhookRequest",
         _ => "JsonObject",
     };
     schema_ref(name)
@@ -1223,6 +1548,17 @@ fn response_schema(path: &str, method: &str) -> Value {
         ("/api/p2p/route-executions", "post")
         | ("/api/p2p/route-executions/{id}", "get")
         | ("/api/p2p/route-executions/{id}/submissions", "post") => schema_ref("RouteExecution"),
+        ("/api/v1/quotes", "post") => schema_ref("B2BQuote"),
+        ("/api/v1/transfers", "post")
+        | ("/api/v1/transfers/{id}", "get")
+        | ("/api/v1/transfers/{id}/cancel", "post") => schema_ref("B2BTransfer"),
+        ("/api/v1/transfers", "get") | ("/api/b2b/orders", "get") => array_schema("B2BTransfer"),
+        ("/api/v1/payments", "post") => schema_ref("B2BCheckout"),
+        ("/pay/{token}/status", "get") | ("/pay/{token}/quote", "post") => {
+            schema_ref("B2BCheckoutStatus")
+        }
+        ("/api/b2b/webhooks", "post") => schema_ref("B2BWebhookEndpoint"),
+        ("/api/b2b/analytics", "get") => schema_ref("B2BAnalytics"),
         ("/api/p2p/route-activity", "get") => json!({
             "type": "object",
             "required": ["source_currency", "target_currency", "hours"],
@@ -1248,6 +1584,10 @@ fn success_response(path: &str, method: &str) -> Value {
         ("/metrics", "get") => json!({
             "description": "Prometheus metrics.",
             "content": { "text/plain": { "schema": { "type": "string" } } }
+        }),
+        ("/pay/{token}", "get") => json!({
+            "description": "Self-contained HTML payment page.",
+            "content": { "text/html": { "schema": { "type": "string" } } }
         }),
         ("/api/exchange/orders/{id}/live", "get")
         | ("/ws", "get")
@@ -1292,11 +1632,37 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
         }));
     }
     if path == "/api/p2p/discovery" && method == "get" {
-        for name in ["mode", "source_fiat", "target_fiat", "source_amount", "source_network", "target_network", "source_payment_method", "target_payment_method", "intermediary_assets", "sources", "exchange_mode", "cursor"] {
+        for name in [
+            "mode",
+            "source_fiat",
+            "target_fiat",
+            "source_amount",
+            "source_network",
+            "target_network",
+            "source_payment_method",
+            "target_payment_method",
+            "intermediary_assets",
+            "sources",
+            "exchange_mode",
+            "cursor",
+        ] {
             parameters.push(json!({ "name": name, "in": "query", "required": name == "source_amount", "schema": {"type":"string"} }));
         }
-        for name in ["allow_cross_venue", "merchant_only"] { parameters.push(json!({"name":name,"in":"query","required":false,"schema":{"type":"boolean"}})); }
-        for name in ["max_actions", "min_orders", "max_price_deviation_bps", "limit"] { parameters.push(json!({"name":name,"in":"query","required":false,"schema":{"type":"integer"}})); }
+        for name in ["allow_cross_venue", "merchant_only"] {
+            parameters.push(
+                json!({"name":name,"in":"query","required":false,"schema":{"type":"boolean"}}),
+            );
+        }
+        for name in [
+            "max_actions",
+            "min_orders",
+            "max_price_deviation_bps",
+            "limit",
+        ] {
+            parameters.push(
+                json!({"name":name,"in":"query","required":false,"schema":{"type":"integer"}}),
+            );
+        }
         parameters.push(json!({"name":"min_completion_rate","in":"query","required":false,"schema":{"type":"number"}}));
     }
     if path == "/api/p2p/routes" && method == "get" {
@@ -1343,6 +1709,35 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
             "schema": { "type": "string", "example": "payment-2026-09-26-001" }
         }));
     }
+    if path == "/api/v1/quotes" && method == "post"
+        || path == "/api/v1/payments" && method == "post"
+    {
+        parameters.push(json!({
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Optional stable key. The same key with the same body returns the original quote or checkout; a different body conflicts.",
+            "required": false,
+            "schema": { "type": "string", "example": "quote-2026-11-11-001" }
+        }));
+    }
+    if path == "/api/v1/transfers" && method == "post" {
+        parameters.push(json!({
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required stable key for accepting the quote.",
+            "required": true,
+            "schema": { "type": "string", "example": "transfer-2026-11-11-001" }
+        }));
+    }
+    if matches!(path, "/api/v1/transfers" | "/api/b2b/orders") && method == "get" {
+        parameters.push(json!({
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of orders to return (1–100).",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+        }));
+    }
     if path == "/api/p2p/route-executions/{id}" && method == "get" {
         parameters.push(json!({
             "name": "anonymous_id",
@@ -1381,10 +1776,15 @@ mod tests {
     fn documents_reference_rates() {
         let document = api_document();
         let operation = &document["paths"]["/api/reference-rates"]["get"];
-        assert_eq!(operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"], "#/components/schemas/ReferenceRatesResponse");
+        assert_eq!(
+            operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ReferenceRatesResponse"
+        );
         assert_eq!(operation["parameters"].as_array().unwrap().len(), 3);
         assert!(operation.get("security").is_none());
-        assert!(document["components"]["schemas"]["ReferenceRate"]["properties"]["sources"].is_object());
+        assert!(
+            document["components"]["schemas"]["ReferenceRate"]["properties"]["sources"].is_object()
+        );
     }
 
     #[test]
@@ -1405,6 +1805,40 @@ mod tests {
             document["paths"]["/api/referrals/me"]["get"]["responses"]["200"]["content"]
                 ["application/json"]["schema"]["$ref"],
             "#/components/schemas/ReferralProfile"
+        );
+    }
+
+    #[test]
+    fn documents_b2b_quotes_transfers_and_checkout() {
+        let document = api_document();
+        let quote = &document["paths"]["/api/v1/quotes"]["post"];
+        assert_eq!(
+            quote["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/B2BQuoteRequest"
+        );
+        assert!(quote["security"][0]["bearerAuth"].is_array());
+        assert_eq!(
+            quote["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/B2BQuote"
+        );
+        let transfer = &document["paths"]["/api/v1/transfers"]["post"];
+        let parameters = transfer["parameters"].as_array().unwrap();
+        assert!(parameters.iter().any(|parameter| {
+            parameter["name"] == "Idempotency-Key" && parameter["required"] == true
+        }));
+        assert_eq!(
+            document["paths"]["/pay/{token}"]["get"]["responses"]["200"]["content"]["text/html"]
+                ["schema"]["type"],
+            "string"
+        );
+        assert_eq!(
+            document["paths"]["/api/b2b/analytics"]["get"]["responses"]["200"]["content"]
+                ["application/json"]["schema"]["$ref"],
+            "#/components/schemas/B2BAnalytics"
+        );
+        assert!(
+            document["components"]["schemas"]["B2BCheckoutRequest"]["properties"]["success_url"]
+                .is_object()
         );
     }
 }

@@ -440,6 +440,7 @@ impl RouteExecutionService {
                             .clone()
                             .unwrap_or_else(|| request.source_address.clone()),
                         slippage_bps: request.slippage_bps.unwrap_or(100).min(10_000),
+                        app_fees: Vec::new(),
                         dry: false,
                     })
                     .await?;
@@ -1082,11 +1083,27 @@ mod tests {
                 true,
             ),
             ("sui", "alice.near", false),
-            ("aptos", "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true),
+            (
+                "aptos",
+                "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                true,
+            ),
             ("aptos", "0x1", true),
-            ("ton", "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ", true),
-            ("ton", "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true),
-            ("ton", "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", false),
+            (
+                "ton",
+                "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ",
+                true,
+            ),
+            (
+                "ton",
+                "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                true,
+            ),
+            (
+                "ton",
+                "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                false,
+            ),
             ("unsupported", "alice.near", false),
         ] {
             assert_eq!(
