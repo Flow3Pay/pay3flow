@@ -47,3 +47,14 @@ Backend image assembly copies application inputs in one step, preserving the
 separate dependency-cache layer. This avoids repeated snapshots of the large
 Rust dependency layer on the production host; environment files remain excluded
 from the build context.
+
+
+Round 4 identified remaining B2B launch issues (observation capacity, expiry
+notifications, address replacement and webhook transport). They are recorded in
+`b2b-launch-blockers.md`. They do not belong to the Georgian-support launch:
+B2B routes, OpenAPI operations and worker execution are now disabled by default,
+including for older production configurations. The already deployed service did
+not expose this API (public `/api/b2b/orders` returned 404 before the change).
+The shared warm-cache regression was reproduced (one failing test, three gate
+checks passed) and repaired; a failed refresh now preserves non-empty assets.
+The index-name change also handles earlier prototype databases safely.

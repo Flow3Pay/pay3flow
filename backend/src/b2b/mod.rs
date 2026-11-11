@@ -115,6 +115,7 @@ pub struct Service {
     margin_cap_bps: u32,
     quote_ttl: Duration,
     public_origin: String,
+    enabled: bool,
 }
 
 struct PreparedQuote {
@@ -164,6 +165,7 @@ impl Service {
             margin_cap_bps,
             quote_ttl: Duration::from_secs(quote_ttl.as_secs().clamp(60, MAX_QUOTE_TTL_SECS)),
             public_origin: public_origin.trim_end_matches('/').to_string(),
+            enabled: false,
         }
     }
 
@@ -171,6 +173,15 @@ impl Service {
     /// request asked for, so the router always caps it locally.
     pub fn quote_ttl(&self) -> Duration {
         self.quote_ttl
+    }
+
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
     }
 
     pub fn margin_bps(&self) -> u32 {
@@ -1474,6 +1485,7 @@ mod tests {
             margin_cap_bps: 70,
             quote_ttl: Duration::from_secs(900),
             public_origin: "https://pay3flow.test".into(),
+            enabled: true,
         };
         assert_eq!(service.margin_bps(), 0);
     }
@@ -1488,6 +1500,7 @@ mod tests {
             margin_cap_bps: 70,
             quote_ttl: Duration::from_secs(ttl.as_secs().clamp(60, MAX_QUOTE_TTL_SECS)),
             public_origin: "https://pay3flow.test".into(),
+            enabled: true,
         }
     }
 

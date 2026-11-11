@@ -1,5 +1,9 @@
 # B2B merchant portal and registration
 
+The business API and workspace are not enabled by the Georgian-support release.
+The API/worker launch gate defaults off; [B2B launch blockers](b2b-launch-blockers.md)
+remain part of its separate acceptance work.
+
 Status: plan · 2026-11-11 · extends [`b2b-payment-api.md`](b2b-payment-api.md) ·
 UI designs: registration page received (Figma); “Для бизнеса” and other portal
 pages pending

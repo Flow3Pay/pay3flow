@@ -34,7 +34,11 @@ impl P2pSearchService {
             .iter()
             .cloned()
             .map(|provider| async move {
-                let assets = provider.supported_assets().await.into_iter().collect();
+                let assets = provider
+                    .supported_assets()
+                    .await
+                    .into_iter()
+                    .collect::<HashSet<_>>();
                 RouteProviderCapability { provider, assets }
             })
             .collect::<FuturesUnordered<_>>();
@@ -72,7 +76,11 @@ impl P2pSearchService {
                 .cloned()
                 .map(|provider| async move {
                     let name = provider.name().to_string();
-                    let assets = provider.supported_assets().await.into_iter().collect();
+                    let assets = provider
+                        .supported_assets()
+                        .await
+                        .into_iter()
+                        .collect::<HashSet<_>>();
                     (name, assets)
                 })
                 .collect::<FuturesUnordered<_>>();
@@ -109,7 +117,11 @@ impl P2pSearchService {
             .cloned()
             .map(|provider| async move {
                 let name = provider.name().to_string();
-                let assets = provider.supported_assets().await.into_iter().collect();
+                let assets = provider
+                    .supported_assets()
+                    .await
+                    .into_iter()
+                    .collect::<HashSet<_>>();
                 (name, assets)
             })
             .collect::<FuturesUnordered<_>>();
@@ -118,7 +130,18 @@ impl P2pSearchService {
             refreshed.push(capability);
         }
         if let Ok(mut cache) = self.provider_capabilities_cache.write() {
-            cache.get_or_insert_with(HashMap::new).extend(refreshed);
+            let snapshot = cache.get_or_insert_with(HashMap::new);
+            for (name, assets) in refreshed {
+                if assets.is_empty()
+                    && snapshot
+                        .get(&name)
+                        .is_some_and(|previous| !previous.is_empty())
+                {
+                    tracing::debug!(provider = %name, "keeping warm capabilities after empty refresh");
+                    continue;
+                }
+                snapshot.insert(name, assets);
+            }
         }
     }
 

@@ -73,6 +73,8 @@ pub struct Config {
     pub symbiosis_execution_contracts: Vec<String>,
     /// Enables non-custodial wallet execution descriptors and API endpoints.
     pub wallet_execution_enabled: bool,
+    /// Enables the separately gated, unfinished merchant payment API.
+    pub b2b_enabled: bool,
     /// B2B margin embedded in the quoted rate, in basis points. Capped below so
     /// a bad route can never be sold at a large markup.
     pub b2b_margin_bps: u32,
@@ -130,6 +132,7 @@ struct FileConfig {
     symbiosis_slippage_bps: u32,
     symbiosis_execution_contracts: Vec<String>,
     wallet_execution_enabled: bool,
+    b2b_enabled: bool,
     b2b_margin_bps: u32,
     b2b_margin_cap_bps: u32,
     b2b_quote_ttl_secs: u64,
@@ -182,6 +185,7 @@ impl Default for FileConfig {
             // exposed do not contain this key. Enable the capability by
             // default there; local config.toml keeps it explicitly disabled.
             wallet_execution_enabled: true,
+            b2b_enabled: false,
             b2b_margin_bps: 50,
             b2b_margin_cap_bps: 70,
             b2b_quote_ttl_secs: 900,
@@ -248,6 +252,7 @@ impl Config {
             symbiosis_slippage_bps: file.symbiosis_slippage_bps,
             symbiosis_execution_contracts: file.symbiosis_execution_contracts,
             wallet_execution_enabled: file.wallet_execution_enabled,
+            b2b_enabled: file.b2b_enabled,
             b2b_margin_bps: file.b2b_margin_bps,
             b2b_margin_cap_bps: file.b2b_margin_cap_bps,
             b2b_quote_ttl_secs: file.b2b_quote_ttl_secs,
@@ -327,6 +332,14 @@ mod tests {
         assert_eq!(config.http_addr, "127.0.0.1:9090");
         assert_eq!(config.route_source_fiats, ["RUB"]);
         assert_eq!(config.cow_api_urls.len(), 1);
+    }
+
+    #[test]
+    fn release_gate_b2b_is_off_unless_explicitly_configured() {
+        let old: FileConfig = toml::from_str("").unwrap();
+        assert!(!old.b2b_enabled);
+        let enabled: FileConfig = toml::from_str("b2b_enabled = true").unwrap();
+        assert!(enabled.b2b_enabled);
     }
 
     #[test]

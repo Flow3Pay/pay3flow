@@ -1,5 +1,12 @@
 # B2B crypto routing API
 
+> Unreleased prototype. The Georgian-support production release keeps
+> `b2b_enabled = false`. Merchant/payer routes are blocked before their handlers,
+> omitted from live OpenAPI, and the settlement/webhook worker does not start.
+> The contracts below describe the intended B2B launch, not a production offer.
+> See [launch blockers](b2b-launch-blockers.md) before enabling it.
+
+
 Status: phase 1 implemented · 2026-11-10 · scope: v1
 
 ## 1. Model
@@ -659,6 +666,8 @@ What is in the tree:
 
 Configuration:
 
+- `config.toml`: `b2b_enabled` defaults to false, including older config maps
+  that omit it. Enable only after the separate B2B acceptance checks pass.
 - `config.toml`: `b2b_margin_bps` (default 50), `b2b_margin_cap_bps`
   (default 70, hard maximum 70) and `b2b_quote_ttl_secs` (default 900, clamped
   to 60–3600).

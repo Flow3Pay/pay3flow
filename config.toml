@@ -90,6 +90,8 @@ wallet_execution_enabled = true
 # B2B routing API. The margin is embedded in the rate and collected through
 # NEAR Intents appFees; it is capped at 0.7% (70 bps) by the backend.
 # B2B_FEE_RECIPIENT (a NEAR Intents account) stays environment-only.
+# Merchant payment API awaits its separate launch acceptance.
+b2b_enabled = false
 b2b_margin_bps = 50
 b2b_margin_cap_bps = 70
 b2b_quote_ttl_secs = 900

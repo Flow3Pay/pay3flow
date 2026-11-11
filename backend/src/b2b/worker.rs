@@ -13,6 +13,9 @@ const WORKER_LOCK: i64 = 0x4232_424C_4F43_4B31;
 
 impl Service {
     pub fn start(self) {
+        if !self.is_enabled() {
+            return;
+        }
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(15));
             loop {

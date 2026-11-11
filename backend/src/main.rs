@@ -228,8 +228,9 @@ async fn main() -> anyhow::Result<()> {
         cfg.b2b_margin_cap_bps,
         std::time::Duration::from_secs(cfg.b2b_quote_ttl_secs),
         cfg.ap_origin.clone(),
-    );
-    if b2b.fee_recipient().is_none() {
+    )
+    .with_enabled(cfg.b2b_enabled);
+    if b2b.is_enabled() && b2b.fee_recipient().is_none() {
         tracing::warn!(
             "B2B_FEE_RECIPIENT is not configured; the B2B API will quote without margin"
         );

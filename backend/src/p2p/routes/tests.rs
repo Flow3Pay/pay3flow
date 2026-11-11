@@ -3525,3 +3525,16 @@ async fn release_regression_warm_assets_do_not_wait_for_unavailable_catalog() {
         .expect("a stale/empty provider must not block a warm snapshot");
     assert!(assets.contains(&asset));
 }
+
+#[tokio::test]
+async fn release_gate_catalog_failure_preserves_a_warm_snapshot() {
+    let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(SlowUnavailableCatalog)]);
+    let asset = Asset::parse("USDT@tron").unwrap();
+    *service.provider_capabilities_cache.write().unwrap() = Some(HashMap::from([(
+        "unavailable-catalog".into(),
+        HashSet::from([asset.clone()]),
+    )]));
+    service.refresh_all_provider_capabilities().await;
+    assert!(service.cached_provider_assets().contains(&asset));
+}

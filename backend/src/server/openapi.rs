@@ -2,16 +2,21 @@ use axum::Json;
 use serde_json::{json, Map, Value};
 
 /// Return the OpenAPI document used by the Scalar API reference.
-pub async fn document() -> Json<Value> {
-    Json(api_document())
+pub async fn document(
+    axum::extract::State(state): axum::extract::State<crate::core::state::AppState>,
+) -> Json<Value> {
+    Json(api_document(state.b2b.is_enabled()))
 }
 
-fn api_document() -> Value {
+fn api_document(b2b_enabled: bool) -> Value {
     let mut paths = Map::new();
     for operation in OPERATIONS {
         add_operation(&mut paths, *operation);
     }
 
+    if !b2b_enabled {
+        paths.retain(|path, _| !crate::server::routing::api::is_b2b_path(path));
+    }
     json!({
         "openapi": "3.0.3",
         "info": {
@@ -1756,7 +1761,7 @@ mod tests {
 
     #[test]
     fn documents_auth_and_real_request_schemas() {
-        let document = api_document();
+        let document = api_document(true);
         let login = &document["paths"]["/api/auth/login"]["post"];
         assert_eq!(
             login["requestBody"]["content"]["application/json"]["schema"]["$ref"],
@@ -1774,7 +1779,7 @@ mod tests {
 
     #[test]
     fn documents_reference_rates() {
-        let document = api_document();
+        let document = api_document(true);
         let operation = &document["paths"]["/api/reference-rates"]["get"];
         assert_eq!(
             operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
@@ -1789,14 +1794,14 @@ mod tests {
 
     #[test]
     fn uses_admin_security_for_admin_operations() {
-        let document = api_document();
+        let document = api_document(true);
         let operation = &document["paths"]["/api/admin/exchange/controls"]["post"];
         assert!(operation["security"][0]["adminBearerAuth"].is_array());
     }
 
     #[test]
     fn documents_referral_registration_and_profile() {
-        let document = api_document();
+        let document = api_document(true);
         assert!(
             document["components"]["schemas"]["AuthCodeRequest"]["properties"]["referral_code"]
                 .is_object()
@@ -1810,7 +1815,7 @@ mod tests {
 
     #[test]
     fn documents_b2b_quotes_transfers_and_checkout() {
-        let document = api_document();
+        let document = api_document(true);
         let quote = &document["paths"]["/api/v1/quotes"]["post"];
         assert_eq!(
             quote["requestBody"]["content"]["application/json"]["schema"]["$ref"],
@@ -1840,5 +1845,21 @@ mod tests {
             document["components"]["schemas"]["B2BCheckoutRequest"]["properties"]["success_url"]
                 .is_object()
         );
+    }
+}
+
+#[cfg(test)]
+mod launch_document_tests {
+    use super::*;
+    #[test]
+    fn release_gate_hides_disabled_business_endpoints() {
+        let disabled = api_document(false);
+        assert!(disabled["paths"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .all(|path| !crate::server::routing::api::is_b2b_path(path)));
+        assert!(disabled["paths"].get("/api/banks").is_some());
+        assert!(api_document(true)["paths"].get("/api/v1/quotes").is_some());
     }
 }

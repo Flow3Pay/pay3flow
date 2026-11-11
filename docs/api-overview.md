@@ -228,3 +228,11 @@ Responses retain `rates` and `unavailable_sources`, including source publication
 dates and cache freshness. NBG official rates use the effective Georgia date
 and are informational for both cash and bank accounts. See
 [Georgian support](georgian-support.md) for sources and normalization.
+
+
+### Business API launch gate
+
+`b2b_enabled` is a non-secret TOML setting, default false. Disabled business and
+payer endpoints return 404 before their handlers and are omitted from live
+OpenAPI. The business settlement/webhook worker also remains stopped. Georgian
+banks, Solunex and public route discovery do not depend on this prototype API.

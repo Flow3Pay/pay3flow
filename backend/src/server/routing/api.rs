@@ -23,6 +23,7 @@ use crate::server::routing::{
 };
 
 pub fn router(state: AppState) -> Router {
+    let b2b_enabled = state.b2b.is_enabled();
     let scalar_configuration = json!({
         "url": "/openapi.json",
         "pageTitle": "Pay3Flow API Reference",
@@ -259,6 +260,7 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             anonymous::track_request,
         ))
+        .layer(middleware::from_fn_with_state(b2b_enabled, b2b_launch_gate))
         .with_state(state)
 }
 
@@ -320,4 +322,89 @@ pub async fn metrics(
             sessions_previous_7_days,
         ),
     ))
+}
+
+pub(crate) fn is_b2b_path(path: &str) -> bool {
+    ["/api/v1", "/api/b2b", "/pay"].iter().any(|prefix| {
+        path == *prefix
+            || path
+                .strip_prefix(prefix)
+                .is_some_and(|suffix| suffix.starts_with('/'))
+    })
+}
+
+async fn b2b_launch_gate(
+    State(enabled): State<bool>,
+    request: Request<axum::body::Body>,
+    next: middleware::Next,
+) -> axum::response::Response {
+    if !enabled && is_b2b_path(request.uri().path()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    next.run(request).await
+}
+
+#[cfg(test)]
+mod launch_gate_tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    #[tokio::test]
+    async fn release_gate_blocks_registered_b2b_handlers_before_side_effects() {
+        for enabled in [false, true] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let writes = calls.clone();
+            let app = Router::new()
+                .route(
+                    "/api/v1/quotes",
+                    post(move || {
+                        let writes = writes.clone();
+                        async move {
+                            writes.fetch_add(1, Ordering::SeqCst);
+                            StatusCode::OK
+                        }
+                    }),
+                )
+                .route("/api/b2b/webhooks", post(|| async { StatusCode::OK }))
+                .route("/pay/token", get(|| async { StatusCode::OK }))
+                .route("/api/p2p/routes", get(|| async { StatusCode::OK }))
+                .layer(middleware::from_fn_with_state(enabled, b2b_launch_gate));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                axum::serve(listener, app).await.unwrap();
+            });
+            let client = reqwest::Client::builder().no_proxy().build().unwrap();
+            for (method, path) in [
+                ("POST", "/api/v1/quotes"),
+                ("POST", "/api/b2b/webhooks"),
+                ("GET", "/pay/token"),
+            ] {
+                let response = client
+                    .request(method.parse().unwrap(), format!("http://{address}{path}"))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    if enabled {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::NOT_FOUND
+                    }
+                );
+            }
+            assert_eq!(calls.load(Ordering::SeqCst), usize::from(enabled));
+            let response = client
+                .get(format!("http://{address}/api/p2p/routes"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            server.abort();
+        }
+    }
 }
