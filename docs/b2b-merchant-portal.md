@@ -148,9 +148,16 @@ Visual rules:
   any other glow;
 - no `:hover` selector, no `transition`, no animation on this page. Only
   `:focus-visible` may draw a visible outline;
-- desktop grid: headline/routes on the left, auth card on the right; the card
-  is about 500 px wide and the content container is capped near 1280 px;
-- at ≤1100 px the columns stack, the card is centred and capped at 560 px;
+- no conventional centred, fixed-width container: the page stretches to the
+  full viewport width while keeping the horizontal padding. The logo row,
+  headline, route cards and auth card all use the available width;
+- desktop layout stays two-column — headline/routes on the left, auth card on
+  the right — but both columns grow horizontally instead of being capped near
+  1280 px. The auth card keeps a usable minimum width, not a fixed maximum;
+- only long text blocks may keep a readable measure; the layout shell, cards and
+  tables do not;
+- at ≤1100 px the columns stack and the card fills the content width minus
+  padding instead of being capped at 560 px;
 - at ≤680 px the route cards stack, the second card is inset instead of
   overlapping, and the card padding shrinks;
 - the page is usable with keyboard only, has visible labels, `role="alert"`
@@ -310,6 +317,11 @@ Phase 1 `b2b_merchants.status` already has `draft|active|suspended`; Phase 2 add
 
 The registration frame is available; the remaining portal layouts are pending.
 Routes and data requirements below are the contract the designs should cover.
+
+All Phase 2 pages use the full-width shell: the content spans the viewport with
+the shared horizontal padding, not a centred fixed-width grid. Cards, tables and
+charts expand horizontally; only long prose keeps a readable measure. This
+applies to the registration page and to the portal pages below.
 
 | Route | Purpose | Key data / actions |
 | --- | --- | --- |
@@ -631,7 +643,8 @@ Each step updates this document and the OpenAPI document.
 
 The registration design is dark and includes the route cards and the social
 buttons. It must be implemented with the modifications in §4.1: no glow, no
-hover effects and no separate login prompt.
+hover effects and no separate login prompt, plus the full-width shell with side
+padding described in §4.2 and §5.
 
 The remaining designs should cover: desktop and mobile, empty/loading/error
 states, test/live banners, permission-denied states and the onboarding

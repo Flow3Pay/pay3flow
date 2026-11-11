@@ -540,7 +540,10 @@ need a persistent workspace.
 - the registration Figma is received: implement it without the green glow,
   without hover effects, and without the separate login prompt/button; other
   portal Figma pages are still pending, so their routes and data contracts are
-  fixed in the portal plan until designs arrive.
+  fixed in the portal plan until designs arrive;
+- Phase 2 pages use a full-width shell with side padding instead of the usual
+  centred fixed-width grid; cards, tables and columns expand horizontally to
+  use the available space.
 
 Acceptance: a new business can register, finish onboarding and quote in test
 without support; an existing email signs in through the same page; GitHub and
