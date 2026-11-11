@@ -674,12 +674,27 @@ Behaviour and deviations to keep in mind:
 - `paid` follows the provider's delivered status, never the deposit hash.
   `underpaid` is terminal until the provider refunds or the order is handled
   manually.
-- The worker polls accepted orders every 15 seconds, expires stale quotes and
-  delivers webhooks with a 5-minute lease, exponential backoff and a dead
+- The worker polls pending accepted orders every 15 seconds, rotating batches
+  by `last_polled_at` so unchanged or unavailable orders cannot starve others.
+  Completed underpaid/overpaid orders leave the poll queue. Pending deposits
+  expire after the quote deadline plus 60 seconds even while the provider
+  still reports `PENDING_DEPOSIT`.
+- Provider quotes without a valid future deadline are refused with HTTP 503.
+- Webhooks require HTTPS on port 443, with no URL credentials or fragment.
+  Registration and each delivery resolve and validate public destinations;
+  connections pin those addresses, disable proxies and do not follow redirects.
+- The worker delivers webhooks with a 5-minute lease, exponential backoff and a dead
   letter after 8 attempts.
 - Re-quoting is exposed on the hosted page only
-  (`POST /pay/{token}/quote`). The merchant transfer API creates a new quote
-  instead of mutating an accepted one.
+  (`POST /pay/{token}/quote`) for quoted or expired orders. Cancelled and failed
+  orders cannot be reopened by a payer. A concurrent state change refuses the
+  re-quote. The merchant transfer API creates a new quote instead of mutating
+  an accepted one.
+- Idempotent checkout replay returns the stored return URL and order status.
+- The polling regression harness uses an explicitly named disposable PostgreSQL
+  container: run `python3 backend/tests/b2b-polling-regression.py` after starting
+  `postgres:17-alpine` as `pay3flow-georgia-regression` with database
+  `pay3flow_test`. It recreates only that test container's public schema.
 - `Unavailable` B2B provider failures map to HTTP 503.
 
 Process note (2026-11-11): deferring merchant API keys and business

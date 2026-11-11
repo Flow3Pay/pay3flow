@@ -71,14 +71,9 @@ impl Service {
                 }
             };
             let mapped = map_provider_status(&status.status, &status.raw, &order.input_amount);
-            if let Some(mapped) = mapped {
-                if mapped != order.status {
-                    self.apply_status(&order, mapped, &status.raw).await?;
-                }
-            } else if order.status == "awaiting_deposit"
-                && Utc::now() > order.expires_at + ChronoDuration::seconds(60)
-            {
-                self.apply_status(&order, "expired", &json!({})).await?;
+            let expired = Utc::now() > order.expires_at + ChronoDuration::seconds(60);
+            if let Some(next) = next_order_status(&order.status, mapped, expired) {
+                self.apply_status(&order, next, &status.raw).await?;
             }
         }
         Ok(())
@@ -245,6 +240,15 @@ ON CONFLICT (chain, tx_hash, kind) DO NOTHING
     }
 }
 
+fn next_order_status<'a>(current: &str, mapped: Option<&'a str>, expired: bool) -> Option<&'a str> {
+    if current == "awaiting_deposit" && expired && matches!(mapped, None | Some("awaiting_deposit"))
+    {
+        Some("expired")
+    } else {
+        mapped.filter(|mapped| *mapped != current)
+    }
+}
+
 fn tx_hashes(details: &Value, key: &str) -> Vec<String> {
     details
         .get(key)
@@ -294,6 +298,21 @@ fn map_provider_status(provider: &str, raw: &Value, input_amount: &str) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn release_regression_pending_deposits_expire_without_losing_delivery() {
+        assert_eq!(
+            next_order_status("awaiting_deposit", Some("awaiting_deposit"), true),
+            Some("expired")
+        );
+        assert_eq!(
+            next_order_status("awaiting_deposit", Some("paid"), true),
+            Some("paid")
+        );
+        assert_eq!(
+            next_order_status("processing", Some("processing"), true),
+            None
+        );
+    }
 
     #[test]
     fn provider_statuses_follow_the_state_machine() {

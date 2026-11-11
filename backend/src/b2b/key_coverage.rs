@@ -1,9 +1,8 @@
 //! Route coverage for project API keys (§8.1).
 //!
-//! Every HTTP route the backend serves must fall into one of these classes so a
-//! new business endpoint cannot ship unprotected. The table mirrors
-//! `server/routing/api.rs` plus the OTC and Hex routers; the unit test fails if
-//! an entry is missing a classification.
+//! Hand-maintained inventory of known HTTP routes and intended key classes.
+//! The tests check this table's internal consistency; they do not compare it
+//! with the Axum router. Router-wide coverage enforcement remains pending.
 
 use super::keys::Scope;
 

@@ -54,7 +54,7 @@ pub struct SolunexProvider {
     base_url: String,
     networks: NetworkCatalog,
     catalog: Arc<RwLock<Option<Catalog>>>,
-    refresh: Arc<Mutex<()>>,
+    refresh: Arc<Mutex<Option<Instant>>>,
 }
 
 impl SolunexProvider {
@@ -64,7 +64,7 @@ impl SolunexProvider {
             base_url: "https://solunex.ge".into(),
             networks,
             catalog: Arc::new(RwLock::new(None)),
-            refresh: Arc::new(Mutex::new(())),
+            refresh: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -90,10 +90,14 @@ impl SolunexProvider {
     }
 
     async fn load_catalog(&self) -> Result<Catalog> {
-        let _guard = self.refresh.lock().await;
+        let mut attempt = self.refresh.lock().await;
         if let Some(catalog) = self.cached_catalog() {
             return Ok(catalog);
         }
+        if attempt.is_some_and(|at| at.elapsed() < Duration::from_secs(30)) {
+            bail!("Solunex catalog refresh is backing off");
+        }
+        *attempt = Some(Instant::now());
         let data = Self::response_json(
             self.client
                 .get(format!("{}/api/offices", self.base_url))
@@ -299,9 +303,6 @@ impl PublicRouteProvider for SolunexProvider {
     }
     fn allows_coefficient_quotes(&self) -> bool {
         false
-    }
-    fn catalog_refresh_due(&self) -> bool {
-        self.cached_catalog().is_none()
     }
     fn supports_payment_method(&self, asset: &Asset, method: Option<&str>) -> bool {
         asset.location.is_some() || method.is_some_and(|m| m.eq_ignore_ascii_case("Cash"))

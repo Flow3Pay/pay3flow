@@ -11,23 +11,18 @@ use crate::route_engine::{canonical_network_id, Asset, PublicRouteProvider};
 
 impl P2pSearchService {
     pub(in crate::p2p) async fn provider_assets(&self) -> Vec<Asset> {
+        // A warm snapshot, including unavailable provider entries, must never
+        // make unrelated searches wait for another provider's catalog refresh.
+        if self
+            .provider_capabilities_cache
+            .read()
+            .is_ok_and(|cache| cache.is_some())
+        {
+            return self.cached_provider_assets();
+        }
         if self.has_fmatch_backend() {
             self.warm_provider_capabilities();
-            let assets = self.cached_provider_assets();
-            let complete = self.provider_capabilities_cache.read().is_ok_and(|cache| {
-                cache.as_ref().is_some_and(|snapshot| {
-                    self.route_providers.iter().all(|provider| {
-                        !provider.catalog_refresh_due()
-                            && snapshot
-                                .get(provider.name())
-                                .is_some_and(|assets| !assets.is_empty())
-                    })
-                })
-            });
-            if complete && !assets.is_empty() {
-                return assets;
-            }
-            return Self::provider_assets_for(&self.route_providers).await;
+            return self.cached_provider_assets();
         }
         Self::provider_assets_for(&self.route_providers).await
     }
@@ -136,10 +131,9 @@ impl P2pSearchService {
         query: &NormalizedRouteQuery,
     ) -> Arc<[RouteProviderCapability]> {
         let providers = self.route_providers_for_query(query);
-        if !self.has_fmatch_backend() {
-            return Self::provider_capabilities(&providers).await;
+        if self.has_fmatch_backend() {
+            self.warm_provider_capabilities();
         }
-        self.warm_provider_capabilities();
         let snapshot = self
             .provider_capabilities_cache
             .read()
@@ -152,12 +146,8 @@ impl P2pSearchService {
         let mut capabilities = providers
             .iter()
             .filter_map(|provider| {
-                if provider.catalog_refresh_due() {
-                    return None;
-                }
                 snapshot
                     .get(provider.name())
-                    .filter(|assets| !assets.is_empty())
                     .cloned()
                     .map(|assets| RouteProviderCapability {
                         provider: provider.clone(),
@@ -167,12 +157,7 @@ impl P2pSearchService {
             .collect::<Vec<_>>();
         let missing = providers
             .iter()
-            .filter(|provider| {
-                provider.catalog_refresh_due()
-                    || snapshot
-                        .get(provider.name())
-                        .is_none_or(|assets| assets.is_empty())
-            })
+            .filter(|provider| !snapshot.contains_key(provider.name()))
             .cloned()
             .collect::<Vec<_>>();
         capabilities.extend(Self::provider_capabilities(&missing).await.iter().cloned());

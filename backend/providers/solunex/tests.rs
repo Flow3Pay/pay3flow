@@ -262,3 +262,23 @@ async fn live_catalog_and_quotes() {
     assert!(positive(&quote.output.value).is_some());
     assert!(quote.expires_at.unwrap() > Utc::now());
 }
+
+#[tokio::test]
+async fn catalog_failure_backs_off_before_another_request() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    let app = axum::Router::new().route("/api/offices", axum::routing::get(move || {
+        let count = count.clone();
+        async move { count.fetch_add(1, Ordering::SeqCst); axum::http::StatusCode::SERVICE_UNAVAILABLE }
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap(); });
+    let mut provider = SolunexProvider::new(NetworkCatalog::test_default()).unwrap();
+    provider.base_url = format!("http://{addr}");
+    assert!(provider.supported_assets().await.is_empty());
+    assert!(provider.supported_assets().await.is_empty());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    server.abort();
+}

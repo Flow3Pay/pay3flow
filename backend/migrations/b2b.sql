@@ -163,3 +163,10 @@ CREATE TABLE IF NOT EXISTS b2b_checkout_sessions (
 
 CREATE INDEX IF NOT EXISTS b2b_checkout_sessions_order_idx
     ON b2b_checkout_sessions (order_id);
+
+-- Fair polling rotates unchanged/temporarily unavailable orders without
+-- changing their business updated_at timestamp.
+ALTER TABLE b2b_orders ADD COLUMN IF NOT EXISTS last_polled_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS b2b_orders_poll_idx
+    ON b2b_orders (last_polled_at NULLS FIRST, created_at, id)
+    WHERE status IN ('awaiting_deposit','processing');

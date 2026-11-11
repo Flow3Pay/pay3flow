@@ -24,7 +24,7 @@ impl Service {
         user_id: Uuid,
         request: &CreateWebhookRequest,
     ) -> Result<WebhookEndpointView> {
-        validate_webhook_url(&request.url)?;
+        public_webhook_client(&request.url).await?;
         let events = match request.events.as_deref() {
             Some(events) if !events.is_empty() => {
                 let mut validated = Vec::with_capacity(events.len());
@@ -151,8 +151,15 @@ RETURNING d.id, d.endpoint_id, d.event_id, d.payload, d.attempts
         let body = serde_json::to_string(payload)?;
         let timestamp = Utc::now().timestamp();
         let signature = sign(&secret, timestamp, body.as_bytes());
-        let response = self
-            .http
+        let http = match public_webhook_client(&url).await {
+            Ok(http) => http,
+            Err(error) => {
+                self.retry(delivery_id, attempts, None, &error.to_string())
+                    .await?;
+                return Ok(());
+            }
+        };
+        let response = http
             .post(&url)
             .header(CONTENT_TYPE, "application/json")
             .header("Pay3Flow-Event-Id", format!("evt_{event_id}"))
@@ -285,16 +292,84 @@ fn truncate(value: &str) -> String {
 }
 
 fn validate_webhook_url(url: &str) -> Result<()> {
-    let url = url.trim();
-    if url.len() > 2048 {
+    if url.trim().len() > 2048 {
         return Err(Error::Invalid("webhook URL is too long".into()));
     }
-    let parsed = reqwest::Url::parse(url)
+    let parsed = reqwest::Url::parse(url.trim())
         .map_err(|_| Error::Invalid("webhook URL must be absolute".into()))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(Error::Invalid("webhook URL must use http or https".into()));
+    if parsed.scheme() != "https"
+        || parsed.port_or_known_default() != Some(443)
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.fragment().is_some()
+        || parsed.host_str().is_none()
+    {
+        return Err(Error::Invalid(
+            "webhooks require an HTTPS URL on port 443 without credentials or fragments".into(),
+        ));
+    }
+    if let Ok(ip) = parsed.host_str().unwrap().trim_matches(['[', ']']).parse() {
+        if !public_ip(ip) {
+            return Err(Error::Invalid("webhook destination must be public".into()));
+        }
     }
     Ok(())
+}
+
+fn public_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(ip) => {
+            let [a, b, c, _] = ip.octets();
+            !(ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_multicast()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || a == 0
+                || a >= 240
+                || (a == 100 && (64..=127).contains(&b))
+                || (a == 198 && (18..=19).contains(&b))
+                || (a == 192 && b == 0 && c == 0))
+        }
+        std::net::IpAddr::V6(ip) => {
+            let s = ip.segments();
+            // Only global unicast; reject documentation and transition ranges.
+            (s[0] & 0xe000) == 0x2000
+                && s[0] != 0x2002
+                && !(s[0] == 0x2001 && (s[1] < 0x200 || s[1] == 0xdb8))
+        }
+    }
+}
+
+async fn public_webhook_client(url: &str) -> Result<reqwest::Client> {
+    validate_webhook_url(url)?;
+    let parsed = reqwest::Url::parse(url.trim())
+        .map_err(|_| Error::Invalid("invalid webhook URL".into()))?;
+    let host = parsed.host_str().unwrap().trim_matches(['[', ']']);
+    let addresses = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::net::lookup_host((host, 443)),
+    )
+    .await
+    .map_err(|_| Error::Invalid("webhook DNS timed out".into()))?
+    .map_err(|_| Error::Invalid("webhook DNS failed".into()))?
+    .collect::<Vec<_>>();
+    if addresses.is_empty() || addresses.iter().any(|address| !public_ip(address.ip())) {
+        return Err(Error::Invalid(
+            "webhook destination must resolve only to public addresses".into(),
+        ));
+    }
+    // Pin validated addresses for this request; redirects/proxies cannot bypass
+    // the check, and a later DNS response cannot redirect the connection inside.
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("Pay3Flow-B2B/0.1")
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve_to_addrs(host, &addresses)
+        .build()
+        .map_err(|error| Error::Internal(error.into()))
 }
 
 #[cfg(test)]
@@ -316,6 +391,41 @@ mod tests {
         );
         assert_ne!(signature, sign("whsec_test", 1_700_000_001, body));
         assert_ne!(signature, sign("whsec_other", 1_700_000_000, body));
+    }
+
+    #[test]
+    fn release_regression_webhooks_reject_private_targets() {
+        for url in [
+            "http://127.0.0.1/hook",
+            "https://127.0.0.1/hook",
+            "https://10.0.0.1/hook",
+            "https://169.254.169.254/hook",
+            "https://[::1]/hook",
+            "https://example.test:8443/hook",
+            "https://user:pass@example.test/hook",
+        ] {
+            assert!(validate_webhook_url(url).is_err(), "{url}");
+        }
+    }
+
+    #[tokio::test]
+    async fn release_regression_dns_cannot_resolve_to_private_networks() {
+        assert!(public_webhook_client("https://localhost/hook")
+            .await
+            .is_err());
+        for ip in [
+            "10.0.0.1",
+            "100.64.0.1",
+            "169.254.169.254",
+            "198.18.0.1",
+            "::ffff:127.0.0.1",
+            "fc00::1",
+            "2002:7f00:1::1",
+        ] {
+            assert!(!public_ip(ip.parse().unwrap()), "{ip}");
+        }
+        assert!(public_ip("8.8.8.8".parse().unwrap()));
+        assert!(public_ip("2606:4700::1111".parse().unwrap()));
     }
 
     #[test]

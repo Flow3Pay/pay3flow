@@ -115,7 +115,6 @@ pub struct Service {
     margin_cap_bps: u32,
     quote_ttl: Duration,
     public_origin: String,
-    http: reqwest::Client,
 }
 
 struct PreparedQuote {
@@ -153,11 +152,6 @@ impl Service {
         quote_ttl: Duration,
         public_origin: String,
     ) -> Self {
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .user_agent("Pay3Flow-B2B/0.1")
-            .build()
-            .unwrap_or_default();
         let margin_cap_bps = margin_cap_bps.min(DEFAULT_MARGIN_CAP_BPS);
         Self {
             pool,
@@ -170,7 +164,6 @@ impl Service {
             margin_cap_bps,
             quote_ttl: Duration::from_secs(quote_ttl.as_secs().clamp(60, MAX_QUOTE_TTL_SECS)),
             public_origin: public_origin.trim_end_matches('/').to_string(),
-            http,
         }
     }
 
@@ -371,8 +364,10 @@ impl Service {
             // from the input side.
             Exact::Output => quote.output.value.clone(),
         };
-        let expires_at = (Utc::now() + ChronoDuration::seconds(self.quote_ttl.as_secs() as i64))
-            .min(quote.expires_at.unwrap_or_else(Utc::now));
+        let expires_at = quote_expiry(
+            Utc::now() + ChronoDuration::seconds(self.quote_ttl.as_secs() as i64),
+            quote.expires_at,
+        )?;
         Ok(PreparedQuote {
             exact: target.exact,
             input: quote.input.clone(),
@@ -494,7 +489,7 @@ RETURNING id
         let client = self.client().await?;
         let Some(row) = client
             .query_opt(
-                "SELECT id, metadata->>'request_hash' FROM b2b_orders \
+                "SELECT id, metadata->>'request_hash', status FROM b2b_orders \
                  WHERE merchant_id = $1 AND env = $2 AND idempotency_key = $3",
                 &[&merchant_id, &env, &key],
             )
@@ -934,12 +929,12 @@ RETURNING id
         env: &str,
         key: &str,
         request_hash: &str,
-        success_url: Option<&str>,
+        _success_url: Option<&str>,
     ) -> Result<Option<CheckoutView>> {
         let client = self.client().await?;
         let Some(row) = client
             .query_opt(
-                "SELECT id, metadata->>'request_hash' FROM b2b_orders \
+                "SELECT id, metadata->>'request_hash', status FROM b2b_orders \
                  WHERE merchant_id = $1 AND env = $2 AND idempotency_key = $3",
                 &[&merchant_id, &env, &key],
             )
@@ -954,15 +949,17 @@ RETURNING id
             ));
         }
         let order_id: Uuid = row.get(0);
+        let stored_status: String = row.get(2);
         let row = client
             .query_one(
-                "SELECT token FROM b2b_checkout_sessions WHERE order_id = $1 \
+                "SELECT token, success_url FROM b2b_checkout_sessions WHERE order_id = $1 \
                  ORDER BY created_at DESC LIMIT 1",
                 &[&order_id],
             )
             .await
             .map_err(|_| Error::Conflict("existing checkout has no page token".into()))?;
         let token: String = row.get(0);
+        let stored_success_url: Option<String> = row.get(1);
         let quote = self
             .load_quote(
                 &client,
@@ -980,8 +977,8 @@ RETURNING id
             order_id,
             url: format!("{}/pay/{token}", self.public_origin),
             token,
-            status: "awaiting_deposit".into(),
-            success_url: success_url.map(str::to_string),
+            status: stored_status,
+            success_url: stored_success_url,
             quote,
         }))
     }
@@ -1040,10 +1037,7 @@ RETURNING id
             .await?
             .ok_or(Error::NotFound)?;
         let status: String = order.get(0);
-        if !matches!(
-            status.as_str(),
-            "quoted" | "expired" | "failed" | "cancelled"
-        ) {
+        if !checkout_can_requote(&status) {
             return Err(Error::Conflict(format!(
                 "checkout is `{status}` and cannot be re-quoted"
             )));
@@ -1085,12 +1079,18 @@ RETURNING id
         let prepared = self.request_provider_quote(&target).await?;
         let tx = client.transaction().await?;
         let quote_id = self.insert_quote(&tx, order_id, &prepared).await?;
-        tx.execute(
-            "UPDATE b2b_orders SET status = 'awaiting_deposit', accepted_quote_id = $2, \
-             updated_at = now() WHERE id = $1",
-            &[&order_id, &quote_id],
-        )
-        .await?;
+        let updated = tx
+            .execute(
+                "UPDATE b2b_orders SET status = 'awaiting_deposit', accepted_quote_id = $2, \
+             updated_at = now() WHERE id = $1 AND status = $3",
+                &[&order_id, &quote_id, &status],
+            )
+            .await?;
+        if updated == 0 {
+            return Err(Error::Conflict(
+                "checkout changed while being re-quoted".into(),
+            ));
+        }
         tx.execute(
             "UPDATE b2b_checkout_sessions SET expires_at = $2 WHERE token = $1",
             &[&token, &prepared.expires_at],
@@ -1220,14 +1220,21 @@ GROUP BY status ORDER BY status
         let rows = client
             .query(
                 r#"
+WITH selected AS (
+    SELECT id FROM b2b_orders
+    WHERE status IN ('awaiting_deposit','processing')
+    ORDER BY last_polled_at ASC NULLS FIRST, created_at ASC, id ASC
+    LIMIT 50
+    FOR UPDATE SKIP LOCKED
+), polled AS (
+    UPDATE b2b_orders o SET last_polled_at = now()
+    FROM selected s WHERE o.id = s.id RETURNING o.*
+)
 SELECT o.id, o.merchant_id, o.status, o.input_network, o.output_network,
        q.id, q.input_amount, q.output_amount, q.captured_bps, q.deposit_address,
        q.expires_at, q.raw
-FROM b2b_orders o
+FROM polled o
 JOIN b2b_quotes q ON q.id = o.accepted_quote_id
-WHERE o.status IN ('awaiting_deposit','processing','underpaid','overpaid')
-ORDER BY o.updated_at ASC
-LIMIT 50
 "#,
                 &[],
             )
@@ -1371,9 +1378,39 @@ fn decimal_greater(left: &str, right: &str) -> bool {
     }
 }
 
+fn checkout_can_requote(status: &str) -> bool {
+    matches!(status, "quoted" | "expired")
+}
+
+fn quote_expiry(local: DateTime<Utc>, provider: Option<DateTime<Utc>>) -> Result<DateTime<Utc>> {
+    let deadline =
+        provider.ok_or_else(|| Error::Unavailable("provider quote has no expiry".into()))?;
+    let expiry = local.min(deadline);
+    if expiry <= Utc::now() {
+        return Err(Error::Unavailable("provider quote has expired".into()));
+    }
+    Ok(expiry)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_regression_cancelled_checkout_stays_cancelled() {
+        assert!(!checkout_can_requote("cancelled"));
+        assert!(!checkout_can_requote("failed"));
+        assert!(checkout_can_requote("expired"));
+    }
+
+    #[test]
+    fn release_regression_missing_and_expired_deadlines_are_refused() {
+        let local = Utc::now() + ChronoDuration::minutes(15);
+        assert!(quote_expiry(local, None).is_err());
+        assert!(quote_expiry(local, Some(Utc::now() - ChronoDuration::seconds(1))).is_err());
+        let provider = Utc::now() + ChronoDuration::minutes(5);
+        assert_eq!(quote_expiry(local, Some(provider)).unwrap(), provider);
+    }
 
     #[test]
     fn margin_capture_uses_exact_decimal_arithmetic() {
@@ -1433,7 +1470,6 @@ mod tests {
             margin_cap_bps: 70,
             quote_ttl: Duration::from_secs(900),
             public_origin: "https://pay3flow.test".into(),
-            http: reqwest::Client::new(),
         };
         assert_eq!(service.margin_bps(), 0);
     }
@@ -1448,7 +1484,6 @@ mod tests {
             margin_cap_bps: 70,
             quote_ttl: Duration::from_secs(ttl.as_secs().clamp(60, MAX_QUOTE_TTL_SECS)),
             public_origin: "https://pay3flow.test".into(),
-            http: reqwest::Client::new(),
         }
     }
 

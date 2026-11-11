@@ -50,7 +50,12 @@ impl P2pSearchService {
         updates: Option<mpsc::Sender<P2pRouteSearchResponse>>,
     ) -> Result<P2pRouteSearchResponse> {
         let started = Instant::now();
-        let provider_assets = self.provider_assets().await;
+        let provider_assets = tokio::time::timeout(
+            self.timeout.min(std::time::Duration::from_secs(2)),
+            self.provider_assets(),
+        )
+        .await
+        .unwrap_or_else(|_| self.cached_provider_assets());
         let provider_assets_elapsed = started.elapsed();
         let query = normalize_query(
             query,

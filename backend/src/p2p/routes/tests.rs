@@ -3498,3 +3498,32 @@ fn route_action_limit_is_validated_and_optional_in_json() {
         .contains("max_actions"));
     }
 }
+
+struct SlowUnavailableCatalog;
+#[async_trait]
+impl PublicRouteProvider for SlowUnavailableCatalog {
+    fn name(&self) -> &str {
+        "unavailable-catalog"
+    }
+    async fn supported_assets(&self) -> Vec<Asset> {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        vec![]
+    }
+    async fn quote(&self, _: Asset, _: Asset, _: Amount) -> anyhow::Result<PublicRouteQuote> {
+        anyhow::bail!("unavailable")
+    }
+}
+#[tokio::test]
+async fn release_regression_warm_assets_do_not_wait_for_unavailable_catalog() {
+    let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(SlowUnavailableCatalog)]);
+    let asset = Asset::parse("USDT@tron").unwrap();
+    *service.provider_capabilities_cache.write().unwrap() = Some(HashMap::from([
+        ("unavailable-catalog".into(), HashSet::new()),
+        ("available".into(), HashSet::from([asset.clone()])),
+    ]));
+    let assets = tokio::time::timeout(Duration::from_millis(100), service.provider_assets())
+        .await
+        .expect("a stale/empty provider must not block a warm snapshot");
+    assert!(assets.contains(&asset));
+}
