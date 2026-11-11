@@ -465,6 +465,8 @@ exponential backoff, dead-letter, replay from the dashboard. Reuse the
 
 - V1 uses the existing user Bearer token. Merchant API keys are deferred to
   phase 1.1; until then the API serves the internal/first merchant account.
+  Phase 2 adds business registration, membership and the portal; see
+  [`b2b-merchant-portal.md`](b2b-merchant-portal.md).
 - When keys land: `sk_` secrets shown once, stored as an Argon2id hash + prefix;
   `pk_` identifiers are not secrets; separate test/live environments; scopes
   `quotes:write`, `orders:read`, `orders:write`, `refunds:write`.
@@ -482,6 +484,11 @@ exponential backoff, dead-letter, replay from the dashboard. Reuse the
 - settings: default recipients and refund addresses;
 - test mode with simulated chain events;
 - API-key management is added with the keys in phase 1.1.
+
+Phase 2 replaces this read-only dashboard with a registered merchant portal
+(account, team, watch-only balances, fees, settings, API-key UI). The detailed
+page, data-model and registration plan is
+[`b2b-merchant-portal.md`](b2b-merchant-portal.md).
 
 ## 16. Phases
 
@@ -507,7 +514,33 @@ mark paid.
 - document the security scheme in OpenAPI;
 - remind the user about this step when v1 is running.
 
-### Phase 2 — instant OTC (weeks 4–8, only with a counterparty)
+### Phase 2 — merchant accounts, registration and portal (weeks 4–8)
+
+Full plan: [`b2b-merchant-portal.md`](b2b-merchant-portal.md).
+
+Phase 1 works without registration, and that stays true for anonymous swaps,
+quotes and hosted checkout. A business product cannot run on anonymous mode
+alone: balances, team access, webhooks, analytics, API keys and live limits all
+need a persistent workspace.
+
+- business registration on the existing email one-time-code identity;
+- workspace, membership and roles (owner/admin/member/viewer);
+- onboarding and test/live environments;
+- portal pages: overview, orders, order detail, balances, fees, checkout links,
+  webhooks, analytics, settings, team and API keys;
+- **read-only balance monitoring** — watch-only on-chain addresses, fee ledger,
+  volume and settlement status; no custody and no withdrawals in Phase 2;
+- audit log for account/settings mutations;
+- API-key lifecycle surfaced in settings (backend keys land in Phase 1.1);
+- manual KYB/sanctions gate before live volume;
+- Figma designs are pending; routes and data contracts are fixed in the portal
+  plan so the UI can be built when designs arrive.
+
+Acceptance: a new business can register, finish onboarding and quote in test
+without support; roles and audit are enforced; balances and fees match the
+ledger; live stays disabled until approval; anonymous checkout still works.
+
+### Phase 2.1 — instant OTC (weeks 4–8, only with a counterparty)
 
 - firm OTC quote API with a TTL and reserved size;
 - automatic accept and settlement agent, no two-wallet dance;
@@ -535,7 +568,7 @@ mark paid.
 ## 18. Open decisions
 
 1. Margin cap and the exact disclosure wording ("0% fee, rate includes margin").
-2. OTC timing: phase 2 unless a counterparty with instant fills is ready.
+2. OTC timing: Phase 2.1 unless a counterparty with instant fills is ready.
 3. KYB/sanctions owner and launch gate.
 
 ## 19. Risks
@@ -570,6 +603,11 @@ mark paid.
   (`b2b_api_keys`, issue/rotate/revoke, test/live, scopes) and switch the API
   from the user Bearer token to `sk_`/`pk_`. Remind the user about this at that
   point.
+- [ ] **Phase 2:** registration, merchant workspace, team roles and the portal
+  documented in [`b2b-merchant-portal.md`](b2b-merchant-portal.md). Do not
+  remove anonymous swap/checkout.
+- [ ] **Figma:** the owner will send designs later; map the page inventory in
+  the portal plan to frames before implementing UI.
 
 ## 22. Phase 1 implementation notes (2026-11-11)
 
@@ -620,5 +658,11 @@ Behaviour and deviations to keep in mind:
   (`POST /pay/{token}/quote`). The merchant transfer API creates a new quote
   instead of mutating an accepted one.
 - `Unavailable` B2B provider failures map to HTTP 503.
+
+Process note (2026-11-11): deferring merchant API keys and business
+registration without asking the owner was a mistake. API keys return in
+Phase 1.1; registration, the merchant workspace and the portal are Phase 2,
+documented in [`b2b-merchant-portal.md`](b2b-merchant-portal.md). Anonymous
+swaps and checkout remain supported.
 
 

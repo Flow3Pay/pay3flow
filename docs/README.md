@@ -33,6 +33,10 @@ explicitly say `planned`, `research`, or `legacy`.
 ## Product, research, and operations
 
 - [`p2p-search.md`](p2p-search.md) — read-only P2P route search.
+- [`b2b-payment-api.md`](b2b-payment-api.md) — B2B crypto routing API: quotes,
+  transfers, hosted checkout, webhooks and fee ledger.
+- [`b2b-merchant-portal.md`](b2b-merchant-portal.md) — Phase 2 registered
+  merchant accounts, portal pages and balance monitoring.
 - [`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) — подробный
   runtime-пайплайн виртуализации, top-K, snapshots и background refresh.
 - [`planned-routing-and-reputation.md`](planned-routing-and-reputation.md) — historical requirements with a current implementation-status map.
