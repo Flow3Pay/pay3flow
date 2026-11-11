@@ -259,6 +259,13 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             anonymous::track_request,
         ))
+        // Outermost of the request layers: a business call must present a
+        // project key (or the legacy user token where the plan allows it)
+        // before it is counted as anonymous traffic.
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::b2b::guard::require_key,
+        ))
         .with_state(state)
 }
 

@@ -712,11 +712,40 @@ pub fn class_for(method: &str, path: &str) -> Option<RouteClass> {
         .map(|route| route.class)
 }
 
-/// Classify a route, including prefix rules for the OTC and Hex surfaces that
-/// still use their own sessions until merchant-key OTC lands.
+/// Match a concrete request path against a route template such as
+/// `/api/v1/transfers/:id` or `/api/auth/oauth/{provider}`. A parameter segment
+/// matches any non-empty segment; everything else must match literally.
+pub fn matches_template(template: &str, path: &str) -> bool {
+    let mut template_parts = template.split('/');
+    let mut path_parts = path.split('/');
+    loop {
+        match (template_parts.next(), path_parts.next()) {
+            (None, None) => return true,
+            (Some(expected), Some(actual)) => {
+                let parameter = expected.starts_with(':')
+                    || (expected.starts_with('{') && expected.ends_with('}'));
+                if parameter {
+                    if actual.is_empty() {
+                        return false;
+                    }
+                } else if expected != actual {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+}
+
+/// Classify a request by its concrete path, including prefix rules for the OTC
+/// and Hex surfaces that still use their own sessions until merchant-key OTC
+/// lands.
 pub fn classify(method: &str, path: &str) -> Option<RouteClass> {
-    if let Some(class) = class_for(method, path) {
-        return Some(class);
+    if let Some(route) = ROUTES
+        .iter()
+        .find(|route| route.method == method && matches_template(route.path, path))
+    {
+        return Some(route.class);
     }
     if path == "/ws/otc" || path.starts_with("/api/otc/") {
         return Some(RouteClass::TemporarySite {
@@ -797,6 +826,62 @@ mod tests {
             panic!("market-prices must be a dated temporary exception until the site proxy");
         };
         assert_eq!(until, "2026-12-11");
+    }
+
+    #[test]
+    fn concrete_paths_match_their_templates() {
+        assert_eq!(
+            classify(
+                "GET",
+                "/api/v1/transfers/6f1a2c30-0000-4000-8000-000000000001"
+            ),
+            Some(RouteClass::LegacyUserOrKey(Scope::OrdersRead))
+        );
+        assert_eq!(
+            classify(
+                "POST",
+                "/api/v1/transfers/6f1a2c30-0000-4000-8000-000000000001/cancel"
+            ),
+            Some(RouteClass::LegacyUserOrKey(Scope::OrdersWrite))
+        );
+        assert_eq!(
+            classify("POST", "/api/auth/oauth/github"),
+            Some(RouteClass::Keyless)
+        );
+        assert_eq!(
+            classify("GET", "/api/v1/transfers"),
+            Some(RouteClass::LegacyUserOrKey(Scope::OrdersRead))
+        );
+        assert_eq!(classify("GET", "/api/v1/transfers/"), None);
+        assert_eq!(classify("GET", "/api/v1/unknown"), None);
+    }
+
+    #[test]
+    fn every_template_matches_a_sample_concrete_path() {
+        for route in ROUTES {
+            let sample: String = route
+                .path
+                .split('/')
+                .map(|segment| {
+                    if segment.starts_with(':')
+                        || (segment.starts_with('{') && segment.ends_with('}'))
+                    {
+                        "sample"
+                    } else {
+                        segment
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            assert_eq!(
+                classify(route.method, &sample),
+                Some(route.class),
+                "{} {} did not match its own template {}",
+                route.method,
+                sample,
+                route.path
+            );
+        }
     }
 
     #[test]

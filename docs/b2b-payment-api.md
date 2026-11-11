@@ -515,8 +515,9 @@ mark paid.
   `b2b_api_keys`, `b2b_api_key_usage`, and `project_id` / `api_key_id`
   attribution on orders and the fee ledger;
 - key material helpers in `b2b::keys` (Argon2id hash, prefix lookup, scopes,
-  daily limit, usage upsert); still open: issue/rotate/revoke HTTP APIs,
-  router-wide enforcement and OpenAPI security;
+  daily limit, usage upsert) and the router-wide `b2b::guard` layer
+  (authentication, scope, daily limit, usage); still open: issue/rotate/revoke
+  HTTP APIs and environment pinning in the handlers;
 - switch authentication from the user Bearer token to `sk_`/`pk_`;
 - document the security scheme in OpenAPI;
 - remind the user about this step when v1 is running.

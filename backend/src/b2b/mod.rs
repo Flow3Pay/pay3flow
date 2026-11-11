@@ -8,6 +8,7 @@
 //! The service deliberately stores money as text: provider quotes, business
 //! amounts and the fee ledger are exact decimal strings.
 
+pub mod guard;
 pub mod key_coverage;
 pub mod keys;
 pub mod model;

@@ -30,7 +30,7 @@ fn api_document() -> Value {
             { "name": "Catalogs", "description": "Public banks, networks, providers and exchange-pair catalogs." },
             { "name": "HEX", "description": "Read-only GNK/USDT market, account and simulation data. Wallets publish trading intents directly." },
             { "name": "Routing", "description": "P2P search, route execution and route reputation." },
-            { "name": "B2B", "description": "Crypto routing for businesses: executable quotes, transfers, hosted checkout pages, webhooks and a fee ledger. V1 authenticates with the user bearer token; merchant API keys arrive in phase 1.1." },
+            { "name": "B2B", "description": "Crypto routing for businesses: executable quotes, transfers, hosted checkout pages, webhooks and a fee ledger. Project API keys (`sk_…`) authenticate these routes; the user bearer token is still accepted during the deprecation window." },
             { "name": "Administration", "description": "Protected operational controls. These endpoints require the configured admin bearer token." },
             { "name": "WebSockets", "description": "Real-time rates, payment events and route updates." },
             { "name": "ActivityPub", "description": "Federation and marketplace discovery endpoints." },
@@ -49,6 +49,12 @@ fn components() -> Value {
                 "scheme": "bearer",
                 "bearerFormat": "JWT",
                 "description": "JWT returned by `/api/auth/register` or `/api/auth/login`."
+            },
+            "merchantKeyAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "sk_<env>_<hex>",
+                "description": "Project API key from the business portal. The key carries its scopes and daily request limit; `pk_` identifiers are not secrets and do not authenticate."
             },
             "adminBearerAuth": {
                 "type": "http",
@@ -1455,6 +1461,10 @@ fn add_operation(paths: &mut Map<String, Value>, operation: Operation) {
     if requires_auth {
         operation["security"] = if path.starts_with("/api/admin/") {
             json!([{ "adminBearerAuth": [] }])
+        } else if path.starts_with("/api/v1/") || path.starts_with("/api/b2b/") {
+            // Either a project key or the legacy user token until the
+            // `/api/b2b/*` and `/api/v1/*` deprecation window ends (§8.1).
+            json!([{ "merchantKeyAuth": [] }, { "bearerAuth": [] }])
         } else {
             json!([{ "bearerAuth": [] }])
         };
@@ -1795,6 +1805,15 @@ mod tests {
     }
 
     #[test]
+    fn business_operations_accept_a_project_key_or_the_legacy_token() {
+        let document = api_document();
+        let operation = &document["paths"]["/api/v1/quotes"]["post"];
+        assert!(operation["security"][0]["merchantKeyAuth"].is_array());
+        assert!(operation["security"][1]["bearerAuth"].is_array());
+        assert!(document["components"]["securitySchemes"]["merchantKeyAuth"].is_object());
+    }
+
+    #[test]
     fn documents_referral_registration_and_profile() {
         let document = api_document();
         assert!(
@@ -1816,7 +1835,8 @@ mod tests {
             quote["requestBody"]["content"]["application/json"]["schema"]["$ref"],
             "#/components/schemas/B2BQuoteRequest"
         );
-        assert!(quote["security"][0]["bearerAuth"].is_array());
+        assert!(quote["security"][0]["merchantKeyAuth"].is_array());
+        assert!(quote["security"][1]["bearerAuth"].is_array());
         assert_eq!(
             quote["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
             "#/components/schemas/B2BQuote"
