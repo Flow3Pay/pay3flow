@@ -160,11 +160,7 @@ impl Service {
         let finalized_height = self.evm_finalized_height(net).await?;
         let finalized_tag = json!(format!("0x{finalized_height:x}"));
         let finalized = self
-            .evm_agree(
-                net,
-                "eth_getBlockByNumber",
-                json!([finalized_tag, false]),
-            )
+            .evm_agree(net, "eth_getBlockByNumber", json!([finalized_tag, false]))
             .await?;
         let precision = self
             .evm_agree(

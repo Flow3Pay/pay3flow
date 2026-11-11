@@ -22,10 +22,10 @@ use crate::core::redis::RedisPool;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
-use crate::p2p::latency::ServiceLatencyTracker;
 use crate::p2p::futures::{
     compose_opportunities, FuturesSearchQuery, FuturesSearchResponse, PerpetualMarketSource,
 };
+use crate::p2p::latency::ServiceLatencyTracker;
 pub(crate) use crate::p2p::models::P2pOfferMarket;
 pub(crate) use crate::p2p::models::{
     Advertiser, FiatRouteQuote, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSide, SourceStatus,
@@ -1591,10 +1591,7 @@ impl P2pSearchService {
     ) -> Result<FuturesSearchResponse> {
         query.asset = query.asset.trim().to_ascii_uppercase();
         if !(2..=12).contains(&query.asset.len())
-            || !query
-                .asset
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric())
+            || !query.asset.bytes().all(|byte| byte.is_ascii_alphanumeric())
             || query.asset == "USDT"
         {
             bail!("asset must be a supported crypto symbol other than USDT");
@@ -1610,9 +1607,10 @@ impl P2pSearchService {
             .futures_market_sources
             .iter()
             .filter(|source| {
-                query.sources.as_deref().is_none_or(|requested| {
-                    requested.split(',').any(|name| name == source.name())
-                })
+                query
+                    .sources
+                    .as_deref()
+                    .is_none_or(|requested| requested.split(',').any(|name| name == source.name()))
             })
             .cloned()
             .map(|source| async move {
@@ -1621,7 +1619,7 @@ impl P2pSearchService {
                     tokio::time::timeout(source.timeout(self.timeout), source.perpetual_tickers())
                         .await
                         .map_err(|_| anyhow::anyhow!("{name} perpetual ticker request timed out"))
-                    .and_then(|result| result);
+                        .and_then(|result| result);
                 (name, result)
             })
             .collect::<FuturesUnordered<_>>();

@@ -1,28 +1,46 @@
-use std::time::Duration;
-use axum::extract::{Query, State, WebSocketUpgrade, ws::{Message, WebSocket}};
+use crate::core::{error::AppError, state::AppState};
+use crate::p2p::discovery::{self, DiscoveryQuery, DiscoveryResponse};
+use axum::extract::{
+    ws::{Message, WebSocket},
+    Query, State, WebSocketUpgrade,
+};
 use axum::response::Response;
 use axum::Json;
 use serde_json::json;
-use crate::core::{error::AppError, state::AppState};
-use crate::p2p::discovery::{self, DiscoveryQuery, DiscoveryResponse};
+use std::time::Duration;
 
-pub async fn search(State(state): State<AppState>, Query(query): Query<DiscoveryQuery>) -> Result<Json<DiscoveryResponse>, AppError> {
-    discovery::run(&state,query,None).await.map(Json).map_err(|e|AppError::BadRequest(e.to_string()))
+pub async fn search(
+    State(state): State<AppState>,
+    Query(query): Query<DiscoveryQuery>,
+) -> Result<Json<DiscoveryResponse>, AppError> {
+    discovery::run(&state, query, None)
+        .await
+        .map(Json)
+        .map_err(|e| AppError::BadRequest(e.to_string()))
 }
 pub async fn socket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.max_message_size(16384).on_upgrade(move |socket| stream(state,socket))
+    ws.max_message_size(16384)
+        .on_upgrade(move |socket| stream(state, socket))
 }
 async fn stream(state: AppState, mut socket: WebSocket) {
-    let payload=match tokio::time::timeout(Duration::from_secs(15),socket.recv()).await {
+    let payload = match tokio::time::timeout(Duration::from_secs(15), socket.recv()).await {
         Ok(Some(Ok(Message::Text(payload)))) => payload,
         _ => return,
     };
-    let query=match serde_json::from_str::<DiscoveryQuery>(&payload) {
-        Ok(query)=>query,
-        Err(error)=>{let _=socket.send(Message::Text(json!({"type":"search_failed","error":error.to_string()}).to_string())).await;return;}
+    let query = match serde_json::from_str::<DiscoveryQuery>(&payload) {
+        Ok(query) => query,
+        Err(error) => {
+            let _ = socket
+                .send(Message::Text(
+                    json!({"type":"search_failed","error":error.to_string()}).to_string(),
+                ))
+                .await;
+            return;
+        }
     };
-    let (tx,mut rx)=tokio::sync::mpsc::channel(4);
-    let search=discovery::run(&state,query,Some(tx)); tokio::pin!(search);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+    let search = discovery::run(&state, query, Some(tx));
+    tokio::pin!(search);
     loop {
         tokio::select! {
             result=&mut search => {
@@ -33,5 +51,5 @@ async fn stream(state: AppState, mut socket: WebSocket) {
             incoming=socket.recv()=>match incoming {Some(Ok(Message::Ping(bytes)))=>{if socket.send(Message::Pong(bytes)).await.is_err(){break;}},Some(Ok(Message::Pong(_)))=>{},_=>break},
         }
     }
-    let _=socket.close().await;
+    let _ = socket.close().await;
 }

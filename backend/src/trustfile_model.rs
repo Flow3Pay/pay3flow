@@ -131,7 +131,12 @@ impl Trustfile {
                     return Err(format!("build.fields must include `{required}`"));
                 }
             }
-            if self.build.approval_field.as_deref().is_none_or(str::is_empty) {
+            if self
+                .build
+                .approval_field
+                .as_deref()
+                .is_none_or(str::is_empty)
+            {
                 return Err("build.approval_field is required for provider transactions".into());
             }
         }

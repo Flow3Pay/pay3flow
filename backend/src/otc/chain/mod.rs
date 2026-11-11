@@ -110,7 +110,10 @@ impl Service {
     /// A concrete finalized block tag shared by every provider. Reads pinned to the
     /// `finalized` tag can disagree while providers advance at different speeds.
     pub(crate) async fn evm_finalized_tag(&self, net: &EvmNet) -> Result<Value> {
-        Ok(json!(format!("0x{:x}", self.evm_finalized_height(net).await?)))
+        Ok(json!(format!(
+            "0x{:x}",
+            self.evm_finalized_height(net).await?
+        )))
     }
     /// Pending nonces depend on which transactions each provider has admitted to its mempool.
     pub(crate) async fn evm_pending_nonce(&self, net: &EvmNet, address: &str) -> Result<u128> {

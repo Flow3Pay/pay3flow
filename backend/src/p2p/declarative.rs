@@ -9,10 +9,10 @@ use reqwest::{Client, Method};
 use serde_json::{Number, Value};
 use sha2::Sha512;
 
+use crate::p2p::futures::{FuturesTicker, PerpetualMarketSource};
 use crate::p2p::service::{
     Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
 };
-use crate::p2p::futures::{FuturesTicker, PerpetualMarketSource};
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::provider_adapter::{
     environment_variable, MarketAdapterConfig, OfferMapping, P2pAdapterConfig, P2pAdapterMarket,

@@ -25,9 +25,7 @@ impl BotNotifier {
     }
 
     pub async fn notify_new_user(&self, anonymous_id: Uuid, region: &str) -> Result<()> {
-        let message = format!(
-            "Новый пользователь\nАнонимный ID: {anonymous_id}\nРегион: {region}"
-        );
+        let message = format!("Новый пользователь\nАнонимный ID: {anonymous_id}\nРегион: {region}");
         let avatar = identicon_svg(&anonymous_id.to_string());
 
         self.bot
