@@ -40,14 +40,14 @@ fn catalog_networks_directions_and_cash_eligibility() {
         offices: vec![catalog],
     });
     assert!(provider.supports_pair(&gel, &Asset::parse("USDT@tron").unwrap()));
-    assert!(!provider.catalog_refresh_due());
+    assert!(provider.cached_catalog().is_some());
     assert!(!provider.supports_pair(&gel, &Asset::parse("USDT@ethereum").unwrap()));
     assert!(!provider.supports_pair(
         &Asset::parse("USD").unwrap(),
         &Asset::parse("USDT@tron").unwrap()
     ));
     provider.catalog.write().unwrap().as_mut().unwrap().loaded = Instant::now() - CATALOG_TTL;
-    assert!(provider.catalog_refresh_due());
+    assert!(provider.cached_catalog().is_none());
 }
 
 #[test]
