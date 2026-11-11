@@ -514,8 +514,9 @@ mark paid.
 - schema shipped in `migrations/b2b_api_keys.sql`: `b2b_projects`,
   `b2b_api_keys`, `b2b_api_key_usage`, and `project_id` / `api_key_id`
   attribution on orders and the fee ledger;
-- still open: issue/rotate/revoke APIs, test/live enforcement, scope checks,
-  daily request limit counters;
+- key material helpers in `b2b::keys` (Argon2id hash, prefix lookup, scopes,
+  daily limit, usage upsert); still open: issue/rotate/revoke HTTP APIs,
+  router-wide enforcement and OpenAPI security;
 - switch authentication from the user Bearer token to `sk_`/`pk_`;
 - document the security scheme in OpenAPI;
 - remind the user about this step when v1 is running.

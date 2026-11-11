@@ -8,6 +8,7 @@
 //! The service deliberately stores money as text: provider quotes, business
 //! amounts and the fee ledger are exact decimal strings.
 
+pub mod keys;
 pub mod model;
 pub mod page;
 pub mod qr;
@@ -56,6 +57,8 @@ const MAX_WEBHOOK_SECRET_BYTES: usize = 32;
 pub enum Error {
     #[error("{0}")]
     Invalid(String),
+    #[error("{0}")]
+    Unauthorized(String),
     #[error("transfer not found")]
     NotFound,
     #[error("{0}")]

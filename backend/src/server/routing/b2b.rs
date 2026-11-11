@@ -22,6 +22,7 @@ impl From<Error> for AppError {
     fn from(error: Error) -> Self {
         match error {
             Error::Invalid(message) => AppError::BadRequest(message),
+            Error::Unauthorized(message) => AppError::Unauthorized(message),
             Error::NotFound => AppError::NotFound("transfer not found".into()),
             Error::Conflict(message) => AppError::Conflict(message),
             Error::Unavailable(message) => AppError::Unavailable(message),

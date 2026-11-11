@@ -52,6 +52,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 blake2 = "0.10"
 salsa20 = "0.10"
+argon2 = { version = "0.5", features = ["password-hash"] }
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }

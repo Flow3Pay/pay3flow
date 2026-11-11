@@ -1237,7 +1237,7 @@ already contains; recording a step here is not a substitute for the code.
 | §10 step | State | Evidence |
 | --- | --- | --- |
 | 1. Phase 1.1 API keys, project-scoped | Schema done | `migrations/b2b_api_keys.sql` creates `b2b_projects`, `b2b_api_keys`, `b2b_api_key_usage` and adds `project_id` / `api_key_id` on orders and the fee ledger; `db::apply_schema` runs it after `b2b.sql`. Issue/rotate/revoke APIs and key middleware are still later steps. |
-| 2. Business API key middleware | Not started | no router-wide key check; business routes still accept the user Bearer token. |
+| 2. Business API key middleware | In progress | `b2b::keys` mints `sk_`/`pk_`, hashes with Argon2id, authenticates by prefix, checks scopes and the UTC daily limit, and upserts `b2b_api_key_usage`. Router-wide enforcement, the allowlist/route-table test, OpenAPI security and the SvelteKit first-party proxy are still open. |
 | 3. `auth_oauth.sql`, real codes and mail adapter | Not started | no `auth_oauth.sql`; `users` has no `email_verified_at`; `service/user/mail.rs` still returns `code == "1234"`; `register::send_auth_code` only logs. |
 | 4. `/api/auth/code` and `/api/auth/authenticate` | Not started | `server/routing/api.rs` registers only `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. |
 | 5. GitHub OAuth2 and Telegram OIDC | Not started | `POST /api/auth/oauth/{provider}` returns `501`; `service/user/oauth.rs` always errors. |
