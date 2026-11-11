@@ -414,7 +414,7 @@ Rules:
 
 - the page never shows `paid` from the browser; it polls the backend and the
   backend waits for delivery, not for the deposit hash;
-- the quote is locked for the whole payment window. Default 15 minutes, hard
+- the quote is locked for the whole payment window. Local maximum 15 minutes; the provider deadline may be shorter (currently about 3 minutes for 1Click), hard
   maximum 60 minutes. Stablecoin pairs may use the full hour; volatile assets
   stay at 10–15 minutes;
 - after expiry the page shows `expired`, offers a re-quote with a new deposit
@@ -676,25 +676,32 @@ Behaviour and deviations to keep in mind:
   manually.
 - The worker polls pending accepted orders every 15 seconds, rotating batches
   by `last_polled_at` so unchanged or unavailable orders cannot starve others.
-  Completed underpaid/overpaid orders leave the poll queue. Pending deposits
-  expire after the quote deadline plus 60 seconds even while the provider
-  still reports `PENDING_DEPOSIT`.
+  An accepted deposit address remains observable until delivery (`paid` or
+  `overpaid`) or refund. Underpaid, cancelled, failed and expired local states
+  remain observable; a price deadline does not prove that funds are not in
+  flight. A stale pending response does not reopen those local states.
 - Provider quotes without a valid future deadline are refused with HTTP 503.
-- Webhooks require HTTPS on port 443, with no URL credentials or fragment.
-  Registration and each delivery resolve and validate public destinations;
+- Webhooks retain HTTP(S) and custom-port compatibility; HTTPS is recommended.
+  URL credentials and fragments are refused. Registration and each delivery
+  resolve and validate public destinations;
   connections pin those addresses, disable proxies and do not follow redirects.
 - The worker delivers webhooks with a 5-minute lease, exponential backoff and a dead
   letter after 8 attempts.
 - Re-quoting is exposed on the hosted page only
-  (`POST /pay/{token}/quote`) for quoted or expired orders. Cancelled and failed
-  orders cannot be reopened by a payer. A concurrent state change refuses the
-  re-quote. The merchant transfer API creates a new quote instead of mutating
-  an accepted one.
+  (`POST /pay/{token}/quote`) only for quoted or expired orders that have not
+  accepted a deposit address. An already accepted checkout cannot replace its
+  address: it remains monitored, and the merchant must create a new checkout
+  for a fresh price. Cancelled and failed orders cannot be reopened by a payer.
+  A concurrent state change refuses the re-quote. Tracking several issued
+  addresses under one order is deferred until a separate attempt model exists.
 - Idempotent checkout replay returns the stored return URL and order status.
 - The polling regression harness uses an explicitly named disposable PostgreSQL
   container: run `python3 backend/tests/b2b-polling-regression.py` after starting
   `postgres:17-alpine` as `pay3flow-georgia-regression` with database
-  `pay3flow_test`. It recreates only that test container's public schema.
+  `pay3flow_test` and label `pay3flow.test.fixture=b2b-polling`. The harness
+  refuses an unmarked container or another database before recreating the test
+  public schema. This integration check runs separately from portable Cargo
+  unit tests; no hosted CI is configured to supply its Docker fixture.
 - `Unavailable` B2B provider failures map to HTTP 503.
 
 Process note (2026-11-11): deferring merchant API keys and business

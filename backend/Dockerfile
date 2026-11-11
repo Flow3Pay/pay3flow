@@ -7,12 +7,9 @@ COPY backend/crates backend/crates
 RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
     && cargo build --release --manifest-path backend/Cargo.toml 2>/dev/null \
     && rm -rf backend/src
-COPY backend/src backend/src
-COPY backend/tests/fixtures backend/tests/fixtures
-COPY backend/migrations backend/migrations
-COPY backend/build.rs backend/build.rs
-COPY backend/providerfile_code.rs backend/providerfile_code.rs
-COPY backend/providers backend/providers
+# Copy application inputs together to avoid repeated snapshots of the large
+# dependency layer on the production host.
+COPY backend backend
 RUN touch backend/src/main.rs && CARGO_BUILD_JOBS=2 cargo build --release --bin pay3flow-backend --manifest-path backend/Cargo.toml \
     && driver_dir="$(find /app/playwright-driver-cache -mindepth 1 -maxdepth 1 -type d -name 'playwright-*' -print -quit)" \
     && test -n "$driver_dir" \

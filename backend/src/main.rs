@@ -333,14 +333,7 @@ async fn main() -> anyhow::Result<()> {
                 Ok(tokens) => tracing::info!(count = tokens.len(), "refreshed NEAR Intents tokens"),
                 Err(error) => tracing::warn!(%error, "NEAR Intents token refresh failed"),
             }
-            route_p2p
-                .refresh_provider_capabilities(&[
-                    "near-intents",
-                    "cow-swap",
-                    "symbiosis",
-                    "solunex",
-                ])
-                .await;
+            route_p2p.refresh_all_provider_capabilities().await;
             match route_engine
                 .refresh(&route_p2p, &route_near, &route_refresh)
                 .await

@@ -73,7 +73,7 @@ Calculator requests carry the public site's Origin and Referer headers, as
 required by that endpoint; anonymous POSTs without them return HTTP 403.
 
 At verification Batumi was available and Tbilisi was marked coming soon.
-Catalogs refresh after five minutes in the background. Warm capability snapshots remain usable during refresh; a failed Solunex catalog refresh backs off for 30 seconds and does not invalidate other providers. Quotes are requested for actual amounts;
+Catalogs refresh after five minutes in the background. All registered provider catalogs refresh periodically, including those that failed during startup. Warm capability snapshots remain usable during refresh; failed or cancelled Solunex catalog refreshes back off for 30 seconds after completion and do not invalidate other providers. Quotes are requested for actual amounts;
 `receiveAmount` is the commission-inclusive net output. The adapter validates
 the returned input and expiry and never scales a quote from a probe amount.
 Crypto composition requotes each intermediate amount. The provider's quote

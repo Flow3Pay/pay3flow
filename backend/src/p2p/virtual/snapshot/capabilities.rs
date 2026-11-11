@@ -89,6 +89,16 @@ impl P2pSearchService {
         });
     }
 
+    /// Refresh every registered provider, including failed startup catalogs.
+    pub async fn refresh_all_provider_capabilities(&self) {
+        let names = self
+            .route_providers
+            .iter()
+            .map(|provider| provider.name())
+            .collect::<Vec<_>>();
+        self.refresh_provider_capabilities(&names).await;
+    }
+
     /// Refresh providers whose runtime catalogs can change after startup.
     pub async fn refresh_provider_capabilities(&self, provider_names: &[&str]) {
         let selected = provider_names.iter().copied().collect::<HashSet<_>>();

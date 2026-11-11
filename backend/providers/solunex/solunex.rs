@@ -48,6 +48,12 @@ struct Catalog {
     offices: Vec<OfficeCatalog>,
 }
 
+// Record completion even when a caller cancels an in-flight catalog refresh.
+struct CatalogAttempt<'a>(&'a mut Option<Instant>);
+impl Drop for CatalogAttempt<'_> {
+    fn drop(&mut self) { *self.0 = Some(Instant::now()); }
+}
+
 #[derive(Clone)]
 pub struct SolunexProvider {
     client: Client,
@@ -97,7 +103,7 @@ impl SolunexProvider {
         if attempt.is_some_and(|at| at.elapsed() < Duration::from_secs(30)) {
             bail!("Solunex catalog refresh is backing off");
         }
-        *attempt = Some(Instant::now());
+        let _completed = CatalogAttempt(&mut attempt);
         let data = Self::response_json(
             self.client
                 .get(format!("{}/api/offices", self.base_url))

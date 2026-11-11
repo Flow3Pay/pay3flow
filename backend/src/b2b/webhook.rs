@@ -297,15 +297,14 @@ fn validate_webhook_url(url: &str) -> Result<()> {
     }
     let parsed = reqwest::Url::parse(url.trim())
         .map_err(|_| Error::Invalid("webhook URL must be absolute".into()))?;
-    if parsed.scheme() != "https"
-        || parsed.port_or_known_default() != Some(443)
+    if !matches!(parsed.scheme(), "http" | "https")
         || !parsed.username().is_empty()
         || parsed.password().is_some()
         || parsed.fragment().is_some()
         || parsed.host_str().is_none()
     {
         return Err(Error::Invalid(
-            "webhooks require an HTTPS URL on port 443 without credentials or fragments".into(),
+            "webhooks require an HTTP(S) URL without credentials or fragments".into(),
         ));
     }
     if let Ok(ip) = parsed.host_str().unwrap().trim_matches(['[', ']']).parse() {
@@ -347,9 +346,10 @@ async fn public_webhook_client(url: &str) -> Result<reqwest::Client> {
     let parsed = reqwest::Url::parse(url.trim())
         .map_err(|_| Error::Invalid("invalid webhook URL".into()))?;
     let host = parsed.host_str().unwrap().trim_matches(['[', ']']);
+    let port = parsed.port_or_known_default().unwrap();
     let addresses = tokio::time::timeout(
         std::time::Duration::from_secs(3),
-        tokio::net::lookup_host((host, 443)),
+        tokio::net::lookup_host((host, port)),
     )
     .await
     .map_err(|_| Error::Invalid("webhook DNS timed out".into()))?
@@ -401,7 +401,6 @@ mod tests {
             "https://10.0.0.1/hook",
             "https://169.254.169.254/hook",
             "https://[::1]/hook",
-            "https://example.test:8443/hook",
             "https://user:pass@example.test/hook",
         ] {
             assert!(validate_webhook_url(url).is_err(), "{url}");
@@ -430,6 +429,8 @@ mod tests {
 
     #[test]
     fn rejects_non_http_webhook_urls() {
+        assert!(validate_webhook_url("https://example.test:8443/hook").is_ok());
+        assert!(validate_webhook_url("http://example.test/hook").is_ok());
         assert!(validate_webhook_url("ftp://example.test/hook").is_err());
         assert!(validate_webhook_url("not a url").is_err());
         assert!(validate_webhook_url("https://example.test/hook").is_ok());

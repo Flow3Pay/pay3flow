@@ -4,10 +4,13 @@ import subprocess, re
 import os
 root=Path(__file__).resolve().parents[2]
 container=os.environ.get('PAY3FLOW_TEST_POSTGRES_CONTAINER','pay3flow-georgia-regression')
+marker=subprocess.run(['docker','inspect','--format','{{ index .Config.Labels "pay3flow.test.fixture" }}',container],text=True,capture_output=True,check=True).stdout.strip()
+if marker != 'b2b-polling': raise RuntimeError('refusing an unmarked database container')
 def sql(text):
     p=subprocess.run(['docker','exec','-i',container,'psql','-U','postgres','-d','pay3flow_test','-v','ON_ERROR_STOP=1','-Atq'],input=text,text=True,capture_output=True)
     if p.returncode: raise RuntimeError(p.stderr)
     return [line.split('|') for line in p.stdout.strip().splitlines() if line]
+if sql('SELECT current_database()') != [['pay3flow_test']]: raise RuntimeError('refusing non-test database')
 source=(root/'backend/src/b2b/mod.rs').read_text().split('async fn accepted_orders(&self)',1)[1]
 query=re.search(r'r#"(.*?)"#',source,re.S).group(1)
 sql('DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE TABLE users (id UUID PRIMARY KEY);'+(root/'backend/migrations/b2b.sql').read_text()+(root/'backend/migrations/b2b_api_keys.sql').read_text())
@@ -18,7 +21,9 @@ errors=[]
 seed('')
 first=sql(query);second=sql(query)
 if len({r[0] for r in first+second}) != 51: errors.append('polling window starves order 51')
-seed(" INSERT INTO b2b_orders(merchant_id,env,kind,input_asset,input_network,output_asset,output_network,recipient,status,updated_at) SELECT '00000000-0000-4000-8000-000000000002','test','checkout','USDT','ethereum','USDT','tron','test',s,now()-interval '1 day' FROM unnest(ARRAY['underpaid','overpaid']) s;")
-if any(r[2] in ('underpaid','overpaid') for r in sql(query)): errors.append('terminal orders remain in poll window')
+seed(" INSERT INTO b2b_orders(merchant_id,env,kind,input_asset,input_network,output_asset,output_network,recipient,status,updated_at) SELECT '00000000-0000-4000-8000-000000000002','test','checkout','USDT','ethereum','USDT','tron','test',s,now()-interval '1 day' FROM unnest(ARRAY['underpaid','overpaid','expired','cancelled','failed','paid','refunded']) s;")
+statuses=[r[2] for r in sql(query)]
+if not {'underpaid','expired','cancelled','failed'} <= set(statuses): errors.append('unsettled issued addresses lose observation')
+if {'paid','overpaid','refunded'} & set(statuses): errors.append('completed orders remain in poll window')
 if errors: raise AssertionError('; '.join(errors))
-print('PASS: actual accepted_orders SQL advances across 51 orders and excludes terminal orders')
+print('PASS: actual accepted_orders SQL advances across 51 orders and continues refund observation and excludes completed orders')

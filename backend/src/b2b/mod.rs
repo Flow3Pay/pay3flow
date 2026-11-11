@@ -1030,16 +1030,17 @@ RETURNING id
         let order = client
             .query_opt(
                 "SELECT status, input_asset, input_network, output_asset, output_network, \
-                        recipient, refund_address, external_id FROM b2b_orders \
+                        recipient, refund_address, external_id, accepted_quote_id FROM b2b_orders \
                  WHERE id = $1 AND merchant_id = $2",
                 &[&order_id, &merchant_id],
             )
             .await?
             .ok_or(Error::NotFound)?;
         let status: String = order.get(0);
-        if !checkout_can_requote(&status) {
+        let issued_address = order.get::<_, Option<Uuid>>(8).is_some();
+        if !checkout_can_requote(&status, issued_address) {
             return Err(Error::Conflict(format!(
-                "checkout is `{status}` and cannot be re-quoted"
+                "checkout is `{status}` or already has an issued deposit address; ask the merchant for a new checkout"
             )));
         }
         let latest = client
@@ -1222,7 +1223,8 @@ GROUP BY status ORDER BY status
                 r#"
 WITH selected AS (
     SELECT id FROM b2b_orders
-    WHERE status IN ('awaiting_deposit','processing')
+    WHERE accepted_quote_id IS NOT NULL
+      AND status NOT IN ('paid','overpaid','refunded')
     ORDER BY last_polled_at ASC NULLS FIRST, created_at ASC, id ASC
     LIMIT 50
     FOR UPDATE SKIP LOCKED
@@ -1378,8 +1380,8 @@ fn decimal_greater(left: &str, right: &str) -> bool {
     }
 }
 
-fn checkout_can_requote(status: &str) -> bool {
-    matches!(status, "quoted" | "expired")
+fn checkout_can_requote(status: &str, issued_address: bool) -> bool {
+    !issued_address && matches!(status, "quoted" | "expired")
 }
 
 fn quote_expiry(local: DateTime<Utc>, provider: Option<DateTime<Utc>>) -> Result<DateTime<Utc>> {
@@ -1398,9 +1400,11 @@ mod tests {
 
     #[test]
     fn release_regression_cancelled_checkout_stays_cancelled() {
-        assert!(!checkout_can_requote("cancelled"));
-        assert!(!checkout_can_requote("failed"));
-        assert!(checkout_can_requote("expired"));
+        assert!(!checkout_can_requote("cancelled", false));
+        assert!(!checkout_can_requote("failed", false));
+        assert!(checkout_can_requote("expired", false));
+        assert!(!checkout_can_requote("expired", true));
+        assert!(!checkout_can_requote("quoted", true));
     }
 
     #[test]

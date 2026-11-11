@@ -2934,9 +2934,7 @@ async fn refreshes_initially_empty_route_provider_capabilities() {
         ("symbiosis".to_string(), HashSet::new()),
     ]));
 
-    service
-        .refresh_provider_capabilities(&["test-intents", "cow-swap", "symbiosis", "missing"])
-        .await;
+    service.refresh_all_provider_capabilities().await;
 
     let cache = service.provider_capabilities_cache.read().unwrap();
     let snapshot = cache.as_ref().expect("provider capability snapshot");
