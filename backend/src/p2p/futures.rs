@@ -119,7 +119,10 @@ fn futures_trade_url(venue: &str, contract: &str) -> Option<String> {
     match venue {
         "binance" => Some(format!("https://www.binance.com/en/futures/{contract}")),
         "bybit" => Some(format!("https://www.bybit.com/trade/usdt/{contract}")),
-        "okx" => Some(format!("https://www.okx.com/trade-swap/{}-usdt-swap", base.to_ascii_lowercase())),
+        "okx" => Some(format!(
+            "https://www.okx.com/trade-swap/{}-usdt-swap",
+            base.to_ascii_lowercase()
+        )),
         "bitget" => Some(format!("https://www.bitget.com/futures/usdt/{contract}")),
         _ => None,
     }
@@ -152,8 +155,8 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].long_venue, "binance");
         assert_eq!(results[0].short_venue, "bybit");
-        assert_eq!(results[0].spread_bps, 200.0);
-        assert_eq!(results[0].estimated_gross_profit_usdt, 20.0);
+        assert!((results[0].spread_bps - 200.0).abs() < 1e-6);
+        assert!((results[0].estimated_gross_profit_usdt - 20.0).abs() < 1e-6);
         assert!(results[0].long_url.is_some());
         assert!(results[0].short_url.is_some());
     }

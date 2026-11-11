@@ -130,6 +130,6 @@ mod tests {
         .await;
         assert_eq!(catalog[0].currencies, ["ETH", "GRAM", "NEWCOIN"]);
         assert_eq!(catalog[1].currencies, ["GRAM"]);
-        assert_eq!(catalog[2].currencies, ["USDC", "USDC.n", "USDT"]);
+        assert_eq!(catalog[2].currencies, ["USDC", "USDC.N", "USDT"]);
     }
 }
