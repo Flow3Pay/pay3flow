@@ -1,3 +1,5 @@
+pub(crate) mod booking;
+
 use super::{
     error::{Error, Result},
     model::Trade,

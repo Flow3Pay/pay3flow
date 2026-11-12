@@ -53,22 +53,19 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        if let Some(row) = tx
-            .query_opt(
-                "SELECT id,body FROM otc_rfq WHERE actor=$1 AND idempotency_key=$2",
-                &[&actor, &key],
-            )
-            .await?
-        {
-            let body: Value = row.get(1);
+        if let Some((id, body)) = repo::booking::rfq_by_key(&tx, actor, key).await? {
             if body["inReplyTo"] != request.listing_id
                 || body["reciprocal"]["resourceQuantity"]["hasNumericalValue"] != request.input
             {
                 return Err(Error::Conflict("RFQ key reused with changed terms".into()));
             }
-            return Ok(json!({"id":row.get::<_,Uuid>(0),"state":"waiting"}));
+            return Ok(json!({"id":id,"state":"waiting"}));
         }
-        if tx.query_opt("SELECT id FROM otc_trades WHERE customer_actor=$1 AND state='booking_pending' LIMIT 1",&[&actor]).await?.is_some() {return Err(Error::Conflict("unknown booking must reconcile before another selection".into()));}
+        if repo::booking::pending_booking(&tx, actor).await? {
+            return Err(Error::Conflict(
+                "unknown booking must reconcile before another selection".into(),
+            ));
+        }
         let id = Uuid::new_v4();
         let iri = format!("{}/rfqs/{id}", actor.trim_end_matches('/'));
         let mut body = listing.clone();
@@ -85,7 +82,17 @@ impl Service {
         } else {
             "sell"
         };
-        tx.execute("INSERT INTO otc_rfq(id,actor,direction,input,listing_id,body,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7)",&[&id,&actor,&direction,&request.input,&request.listing_id,&body,&key]).await?;
+        repo::booking::insert_rfq(
+            &tx,
+            &id,
+            actor,
+            direction,
+            &request.input,
+            &request.listing_id,
+            &body,
+            key,
+        )
+        .await?;
         repo::enqueue(&tx, actor, &body, "rfq").await?;
         repo::event(
             &tx,
@@ -105,11 +112,9 @@ impl Service {
         let customer_usdt;
         {
             let client = self.pool.get().await?;
-            let row = client
-                .query_opt("SELECT actor FROM otc_rfq WHERE id=$1", &[&request.rfq_id])
+            let customer = repo::booking::rfq_actor(&client, &request.rfq_id)
                 .await?
                 .ok_or(Error::NotFound)?;
-            let customer: String = row.get(0);
             customer_ever = self.wallet(&customer, "everscale").await?;
             customer_usdt = self.wallet(&customer, "ethereum").await?;
         }
@@ -122,21 +127,8 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let rfq = tx
-            .query_opt(
-                "SELECT * FROM otc_rfq WHERE id=$1 FOR UPDATE",
-                &[&request.rfq_id],
-            )
-            .await?
-            .ok_or(Error::NotFound)?;
-        if let Some(existing) = tx
-            .query_opt(
-                "SELECT * FROM otc_trades WHERE rfq_id=$1",
-                &[&request.rfq_id],
-            )
-            .await?
-        {
-            let trade = repo::trade(&existing)?;
+        let rfq = repo::booking::lock_rfq(&tx, &request.rfq_id).await?;
+        if let Some(trade) = repo::booking::trade_by_rfq(&tx, &request.rfq_id).await? {
             if trade.terms.output != request.output
                 || trade.terms.network_costs != request.network_costs
                 || trade.terms.ever_receiving_cost_units
@@ -149,14 +141,7 @@ impl Service {
             return Ok(serde_json::to_value(trade)?);
         }
         let rfq_body: Value = rfq.get("body");
-        if tx
-            .query_opt(
-                "SELECT activity_id FROM otc_inbox WHERE actor=$1 AND activity_id=$2",
-                &[&actor, &protocol::text(&rfq_body, "id")?],
-            )
-            .await?
-            .is_none()
-        {
+        if !repo::booking::inbox_has(&tx, actor, &protocol::text(&rfq_body, "id")?).await? {
             return Err(Error::Conflict("RFQ has not arrived through fmatch".into()));
         }
         let direction = if rfq.get::<_, String>("direction") == "buy" {
@@ -226,12 +211,8 @@ impl Service {
         }
         terms.proposal = protocol::proposal(&format!("{actor}/quotes/{id}"), &terms, &self.cfg);
         let serialized = serde_json::to_value(&terms)?;
-        tx.execute("INSERT INTO otc_trades(id,rfq_id,customer_actor,desk_actor,terms,state) VALUES($1,$2,$3,$4,$5,'quoted')",&[&id,&request.rfq_id,&terms.customer_actor,&actor,&serialized]).await?;
-        tx.execute(
-            "UPDATE otc_rfq SET state='quoted' WHERE id=$1",
-            &[&request.rfq_id],
-        )
-        .await?;
+        repo::booking::insert_trade(&tx, &id, &request.rfq_id, &terms, actor, &serialized).await?;
+        repo::booking::mark_rfq_quoted(&tx, &request.rfq_id).await?;
         repo::enqueue(&tx, actor, &terms.proposal, "quote").await?;
         repo::event(&tx, Some(id), Some(request.rfq_id), "quoted", &json!({})).await?;
         tx.commit().await?;
@@ -244,37 +225,18 @@ impl Service {
         // Serialize all selections for a customer, including different trade rows.
         tx.execute("SELECT pg_advisory_xact_lock(hashtext($1))", &[&actor])
             .await?;
-        let row = tx
-            .query_opt(
-                "SELECT * FROM otc_trades WHERE id=$1 AND customer_actor=$2 FOR UPDATE",
-                &[&id, &actor],
-            )
-            .await?
-            .ok_or(Error::NotFound)?;
-        let trade = repo::trade(&row)?;
+        let trade = repo::booking::lock_customer_trade(&tx, &id, actor).await?;
         if trade.offer.is_some() {
             return Ok(serde_json::to_value(trade)?);
         }
         if trade.state != "quoted" || Utc::now() > trade.terms.quote_by {
             return Err(invalid("quote expired or unavailable"));
         }
-        if tx
-            .query_opt(
-                "SELECT id FROM otc_trades WHERE customer_actor=$1 AND state='booking_pending'",
-                &[&actor],
-            )
-            .await?
-            .is_some()
-        {
+        if repo::booking::pending_booking(&tx, actor).await? {
             return Err(Error::Conflict("original booking is unresolved".into()));
         }
-        if tx
-            .query_opt(
-                "SELECT activity_id FROM otc_inbox WHERE actor=$1 AND activity_id=$2",
-                &[&actor, &protocol::text(&trade.terms.proposal, "id")?],
-            )
+        if !repo::booking::inbox_has(&tx, actor, &protocol::text(&trade.terms.proposal, "id")?)
             .await?
-            .is_none()
         {
             return Err(Error::Conflict(
                 "private quote has not arrived through fmatch".into(),
@@ -282,11 +244,7 @@ impl Service {
         }
         let offer = protocol::offer(&format!("{actor}/offers/{id}"), &trade.terms);
         protocol::validate_offer(&offer, &trade.terms, Utc::now())?;
-        tx.execute(
-            "UPDATE otc_trades SET state='booking_pending',offer=$2,updated_at=now() WHERE id=$1",
-            &[&id, &offer],
-        )
-        .await?;
+        repo::booking::mark_booking_pending(&tx, &id, &offer).await?;
         repo::enqueue(&tx, actor, &offer, "booking").await?;
         repo::event(
             &tx,
@@ -306,14 +264,7 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let row = tx
-            .query_opt(
-                "SELECT * FROM otc_trades WHERE id=$1 AND desk_actor=$2 FOR UPDATE",
-                &[&id, &actor],
-            )
-            .await?
-            .ok_or(Error::NotFound)?;
-        let trade = repo::trade(&row)?;
+        let trade = repo::booking::lock_desk_trade(&tx, &id, actor).await?;
         if trade.decision.is_some() {
             return Ok(serde_json::to_value(trade)?);
         }
@@ -321,14 +272,7 @@ impl Service {
             .offer
             .as_ref()
             .ok_or_else(|| invalid("no customer offer"))?;
-        if tx
-            .query_opt(
-                "SELECT activity_id FROM otc_inbox WHERE actor=$1 AND activity_id=$2",
-                &[&actor, &protocol::text(offer, "id")?],
-            )
-            .await?
-            .is_none()
-        {
+        if !repo::booking::inbox_has(&tx, actor, &protocol::text(offer, "id")?).await? {
             return Err(Error::Conflict(
                 "customer offer has not arrived through fmatch".into(),
             ));
@@ -369,11 +313,7 @@ impl Service {
         if accept && Utc::now() > trade.terms.quote_by {
             return Err(invalid("quote expired while reserving inventory"));
         }
-        tx.execute(
-            "UPDATE otc_trades SET decision=$2,updated_at=now() WHERE id=$1",
-            &[&id, &decision],
-        )
-        .await?;
+        repo::booking::set_decision(&tx, &id, &decision).await?;
         repo::enqueue(&tx, actor, &decision, "decision").await?;
         repo::event(
             &tx,
