@@ -139,6 +139,9 @@ impl P2pSearchService {
                                     if !payment_methods_verified {
                                         warnings.push("The selected sender payment method could not be verified by the venue.".into());
                                     }
+                                    if let Some(description) = quote.description.as_deref() {
+                                        warnings.push(format!("Quoted exchanger: {description}."));
+                                    }
                                     Some(P2pRoute {
                                         route_id: String::new(),
                                         rank: 0,

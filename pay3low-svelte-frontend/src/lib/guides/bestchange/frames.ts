@@ -3,6 +3,25 @@ import type { RouteCandidate } from "$lib/exchange";
 
 type Copy = (key: string, params?: Record<string, string | number>) => string;
 
+const BESTCHANGE_PROFILE_HOSTS = new Set([
+  "www.bestchange.com",
+  "www.bestchange.pro",
+  "www.bestchange.net",
+  "bestchange.biz",
+]);
+
+/** A profile URL points at an exchanger, not the aggregate direction page. */
+export function bestchangeProfileUrl(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (!BESTCHANGE_PROFILE_HOSTS.has(parsed.hostname)) return null;
+    return /-exchanger(?:\.html)?$/.test(parsed.pathname) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 /** BestChange's documented click endpoint opens the selected exchanger's site. */
 export function bestchangeWebsiteUrl(step: Pick<TutorialStep, "offer" | "url">): string | null {
   let id = step.offer?.advertiser.id;

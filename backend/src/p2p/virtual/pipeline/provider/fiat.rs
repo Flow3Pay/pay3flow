@@ -117,10 +117,13 @@ impl P2pSearchService {
                                     offer.payment_method_match(method)
                                         == PaymentMethodMatch::Exact
                                 });
-                            let warnings = vec![
+                            let mut warnings = vec![
                                 format!("Live dry quote from {provider}; execution and wallet compatibility are not verified."),
                                 "Fiat exit is a live P2P estimate; confirm payment details before sending.".into(),
                             ];
+                            if let Some(description) = quote.description.as_deref() {
+                                warnings.push(format!("Quoted exchanger: {description}."));
+                            }
                             let route_quote = quote.clone();
                             Some(P2pRoute {
                                 route_id: String::new(),
@@ -556,66 +559,71 @@ fn compose_fiat_provider_quotes(
                 continue;
             }
             let route_quote = quote.clone();
+            let mut warnings = vec![
+                "Recent fiat entry/exit offers plus a live dry provider quote; refresh each step before execution.".into(),
+                "Confirm the source and destination networks, provider deposit address, memo/tag, network fee, and finality before sending.".into(),
+            ];
+            if let Some(description) = quote.description.as_deref() {
+                warnings.push(format!("Quoted exchanger: {description}."));
+            }
             batch.push(P2pRoute {
-                    route_id: String::new(),
-                    rank: 0,
-                    asset: exit.asset.clone(),
-                    entry_network: route_quote.from.location.clone(),
-                    source_network: route_quote.from.location.clone(),
-                    target_network: route_quote.to.location.clone(),
-                    source_fiat: query.source_currency.clone(),
-                    source_amount: fixed(query.source_amount, 2),
-                    acquired_asset_amount: fixed(output_asset, 8),
-                    provider_input_amount: Some(route_quote.input.value.clone()),
-                    target_fiat: query.target_currency.clone(),
-                    target_amount: fixed(target_amount, 2),
-                    effective_rate: fixed(target_amount / query.source_amount, 8),
-                    same_venue: false,
-                    requires_asset_transfer: true,
-                    transfer_fee_included: false,
-                    route_kind: if query.source_currency == query.target_currency {
-                        "crypto_cycle".into()
-                    } else {
-                        "fiat_to_fiat".into()
-                    },
-                    profitability: None,
-                    cycle_legs: Vec::new(),
-                    profitability_decimals: None,
-                    bridge_currency: None,
-                    market_path: None,
-                    route_provider: Some(provider_name.clone()),
-                    route_provider_url: route_quote.source_url.clone(),
-                    provider_quote_id: route_quote.quote_id.clone(),
-                    route_path: std::iter::once(query.source_currency.clone())
-                        .chain(route_quote.path.into_iter().map(|asset| asset.to_string()))
-                        .chain(std::iter::once(query.target_currency.clone()))
-                        .collect(),
-                    route_fees: route_quote
-                        .fees
-                        .into_iter()
-                        .map(|fee| RouteFee {
-                            asset: fee.asset.to_string(),
-                            amount: fee.value,
-                        })
-                        .collect(),
-                    quote_expires_at: route_quote.expires_at,
-                    execution: None,
-                    executions: Vec::new(),
-                    payment_methods_verified: query.source_payment_method.as_deref().is_none_or(|method|
-                        entry.payment_method_match(method) == PaymentMethodMatch::Exact)
-                        && query.target_payment_method.as_deref().is_none_or(|method|
-                            exit.payment_method_match(method) == PaymentMethodMatch::Exact),
-                    entry_offer: Some(entry.clone()),
-                    exit_offer: Some(exit.clone()),
-                    warnings: vec![
-                        "Recent fiat entry/exit offers plus a live dry provider quote; refresh each step before execution.".into(),
-                        "Confirm the source and destination networks, provider deposit address, memo/tag, network fee, and finality before sending.".into(),
-                    ],
-                    services: Vec::new(),
-                    reputation: None,
-                    feedback: None,
-                    service_links: Vec::new(),
-                });
+                route_id: String::new(),
+                rank: 0,
+                asset: exit.asset.clone(),
+                entry_network: route_quote.from.location.clone(),
+                source_network: route_quote.from.location.clone(),
+                target_network: route_quote.to.location.clone(),
+                source_fiat: query.source_currency.clone(),
+                source_amount: fixed(query.source_amount, 2),
+                acquired_asset_amount: fixed(output_asset, 8),
+                provider_input_amount: Some(route_quote.input.value.clone()),
+                target_fiat: query.target_currency.clone(),
+                target_amount: fixed(target_amount, 2),
+                effective_rate: fixed(target_amount / query.source_amount, 8),
+                same_venue: false,
+                requires_asset_transfer: true,
+                transfer_fee_included: false,
+                route_kind: if query.source_currency == query.target_currency {
+                    "crypto_cycle".into()
+                } else {
+                    "fiat_to_fiat".into()
+                },
+                profitability: None,
+                cycle_legs: Vec::new(),
+                profitability_decimals: None,
+                bridge_currency: None,
+                market_path: None,
+                route_provider: Some(provider_name.clone()),
+                route_provider_url: route_quote.source_url.clone(),
+                provider_quote_id: route_quote.quote_id.clone(),
+                route_path: std::iter::once(query.source_currency.clone())
+                    .chain(route_quote.path.into_iter().map(|asset| asset.to_string()))
+                    .chain(std::iter::once(query.target_currency.clone()))
+                    .collect(),
+                route_fees: route_quote
+                    .fees
+                    .into_iter()
+                    .map(|fee| RouteFee {
+                        asset: fee.asset.to_string(),
+                        amount: fee.value,
+                    })
+                    .collect(),
+                quote_expires_at: route_quote.expires_at,
+                execution: None,
+                executions: Vec::new(),
+                payment_methods_verified: query.source_payment_method.as_deref().is_none_or(
+                    |method| entry.payment_method_match(method) == PaymentMethodMatch::Exact,
+                ) && query.target_payment_method.as_deref().is_none_or(
+                    |method| exit.payment_method_match(method) == PaymentMethodMatch::Exact,
+                ),
+                entry_offer: Some(entry.clone()),
+                exit_offer: Some(exit.clone()),
+                warnings,
+                services: Vec::new(),
+                reputation: None,
+                feedback: None,
+                service_links: Vec::new(),
+            });
         }
         routes.extend(batch);
     }

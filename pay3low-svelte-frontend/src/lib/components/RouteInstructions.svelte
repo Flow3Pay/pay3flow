@@ -12,7 +12,7 @@
   import UnifiedSwap from "./UnifiedSwap.svelte";
   import InstructionScene from "./InstructionScene.svelte";
   import { isSpotStep, spotTrade } from "$lib/guides/spot/frames";
-  import { bestchangeExchanger, bestchangeWebsiteUrl } from "$lib/guides/bestchange/frames";
+  import { bestchangeExchanger, bestchangeProfileUrl, bestchangeWebsiteUrl } from "$lib/guides/bestchange/frames";
   import OtcDealCard from "$lib/guides/otc/OtcDealCard.svelte";
   import { canOpenSwap } from "$lib/swap-embed";
 
@@ -244,7 +244,7 @@
             <a class="walletProviderLink" data-testid="cifra-terminal-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open Cifra Tradernet")} <span aria-hidden="true">↗</span></a>
           {/if}
           {#if step?.provider.toLowerCase() === "bestchange" && step.kind !== "transfer" && step.url}
-            <a class="walletProviderLink" data-testid="bestchange-exchanger-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue} profile", { venue: bestchangeExchanger(route, step, copy) })} <span aria-hidden="true">↗</span></a>
+            <a class="walletProviderLink" data-testid="bestchange-exchanger-link" href={step.url} target="_blank" rel="noreferrer noopener">{bestchangeProfileUrl(step.url) ? copy("Open {venue} profile", { venue: bestchangeExchanger(route, step, copy) }) : copy("Open {venue}", { venue: step.venue })} <span aria-hidden="true">↗</span></a>
             {#if exchangerWebsiteUrl}<a class="walletProviderLink" data-testid="bestchange-exchanger-website" href={exchangerWebsiteUrl} target="_blank" rel="noreferrer noopener">{copy("Go to {exchanger} website", { exchanger: bestchangeExchanger(route, step, copy) })} <span aria-hidden="true">↗</span></a>{/if}
           {/if}
           {#if step?.offer && step.provider.toLowerCase() !== "bestchange" && !step.direct && (step.kind === "buy" || step.kind === "sell") && step.url}

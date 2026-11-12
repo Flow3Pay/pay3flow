@@ -565,9 +565,16 @@ fn catalog(currencies: CurrencyResponse, changers: ChangerResponse, language: &s
         .changers
         .into_iter()
         .map(|changer| {
-            let profile_url = changer
-                .pages
-                .get(language)
+            // Some exchangers publish their profile page only in a subset of
+            // languages. Fall back to English and then to any page so the
+            // guide never substitutes the aggregate direction page for a
+            // missing profile.
+            let profile_url = std::iter::once(language)
+                .chain(std::iter::once("en"))
+                .filter_map(|language| changer.pages.get(language))
+                .chain(changer.pages.values())
+                .map(|url| url.trim())
+                .find(|url| !url.is_empty())
                 .map(|url| format!("{url}#pay3flow-id={}", changer.id));
             (
                 changer.id,
@@ -749,6 +756,51 @@ mod tests {
             limit: Some(20),
             sources: Some("bestchange".into()),
         }
+    }
+
+    #[test]
+    fn falls_back_to_an_available_profile_page_language() {
+        let changers = ChangerResponse {
+            changers: vec![
+                ApiChanger {
+                    id: 608,
+                    name: "GeeExchange".into(),
+                    pages: HashMap::from([(
+                        "en".into(),
+                        "https://www.bestchange.com/geeexchange-exchanger.html".into(),
+                    )]),
+                },
+                ApiChanger {
+                    id: 1289,
+                    name: "GeekChange".into(),
+                    pages: HashMap::from([
+                        (
+                            "ru".into(),
+                            "https://www.bestchange.pro/geekchange-exchanger.html".into(),
+                        ),
+                        (
+                            "en".into(),
+                            "https://www.bestchange.com/geekchange-exchanger.html".into(),
+                        ),
+                    ]),
+                },
+            ],
+        };
+        let catalog = catalog(
+            CurrencyResponse {
+                currencies: Vec::new(),
+            },
+            changers,
+            "ru",
+        );
+        assert_eq!(
+            catalog.changers[&608].profile_url.as_deref(),
+            Some("https://www.bestchange.com/geeexchange-exchanger.html#pay3flow-id=608")
+        );
+        assert_eq!(
+            catalog.changers[&1289].profile_url.as_deref(),
+            Some("https://www.bestchange.pro/geekchange-exchanger.html#pay3flow-id=1289")
+        );
     }
 
     #[test]
