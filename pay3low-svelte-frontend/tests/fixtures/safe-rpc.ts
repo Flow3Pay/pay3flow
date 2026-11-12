@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { encodeAbiParameters, encodeFunctionResult, type Address, type Hex } from "viem";
 import { factoryAbi, safeAbi, SAFE_SINGLETON } from "../../src/lib/otc/production-safe";
 
-// Official runtime bytecode captured read-only from Sepolia; hashes are checked in the unit suite.
+// Official Safe 1.4.1 runtime bytecode; hashes are checked in the unit suite.
 export const safeFixture = JSON.parse(readFileSync(new URL("./safe-1.4.1.json", import.meta.url), "utf8")) as {
   contracts: Record<string, Hex>; creationCode: Hex;
 };
@@ -13,12 +13,12 @@ export const storageKey = (chainId: number) => `pay3flow.otc.production-safe.v1.
 
 export async function mockSafeRpc(page: Page) {
   const state = { invalidContract: "", deployed: false, threshold: 2n, actualOwners: owners, chainId: null as number | null, calls: [] as string[] };
-  await page.route(/^https:\/\/ethereum(?:-sepolia)?-rpc\.publicnode\.com\//, async route => {
+  await page.route(/^https:\/\/ethereum-rpc\.publicnode\.com\//, async route => {
     const request = route.request();
     const respond = ({ id, method, params }: { id: number; method: string; params: any[] }) => {
       state.calls.push(method);
       let result: unknown;
-      if (method === "eth_chainId") result = `0x${(state.chainId ?? (request.url().includes("sepolia") ? 11155111 : 1)).toString(16)}`;
+      if (method === "eth_chainId") result = `0x${(state.chainId ?? 1).toString(16)}`;
       else if (method === "eth_getCode") {
         const address = params[0].toLowerCase();
         result = address === state.invalidContract.toLowerCase() ? "0x6000" : safeFixture.contracts[address] ?? (state.deployed ? "0x6000" : "0x");

@@ -4,7 +4,6 @@ import type { AppKitNetwork } from "@reown/appkit/networks";
 import type { EIP1193Provider } from "viem";
 import { sei } from "viem/chains";
 import { decimalToAtomic, atomicToDecimal, sameWalletAddress } from "./wallet-amount";
-import { SAFE_NETWORKS } from "./otc/production-safe";
 import { TRON_CHAIN_ID, connectTronProvider, ensureTronMainnet, tronProvider, tronAddress, broadcastTron, type TronProvider } from "./tron-wallet";
 import { connectEverscale, restoreEverscale, observeEverscale, isEverscaleAddress, type EverscaleConnection } from "./everscale-wallet";
 import {
@@ -12,6 +11,8 @@ import {
   connectExtraWallet,
   disconnectExtraWallet,
   executeExtraDeposit,
+  executeSolanaTransfer,
+  executeTonTransfer,
   hasExtraExecutionFunds,
   isExtraNetwork,
   observeExtraWallet,
@@ -92,7 +93,6 @@ export interface PreparedWalletAction {
 
 const CHAIN_NAMES: Record<string, number> = {
   ethereum: 1,
-  sepolia: 11155111,
   gnosis: 100,
   "arbitrum-one": 42161,
   base: 8453,
@@ -250,7 +250,7 @@ async function appKit() {
       import("@reown/appkit-adapter-wagmi"),
       import("@reown/appkit/networks"),
     ]);
-    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei];
+    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei];
     const adapter = new WagmiAdapter({ projectId, networks: supported });
     const modal = createAppKit({
       adapters: [adapter],
@@ -300,7 +300,7 @@ async function injectedApp() {
           import("wagmi/connectors"),
           import("@reown/appkit/networks"),
         ]);
-        const supported = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei] as const;
+        const supported = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei] as const;
         const connector = injected({ target: injectedWalletTarget });
         const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
         const config = createConfig({
@@ -719,6 +719,55 @@ async function assertReadyToSign(execution: RouteExecution, wallet: ConnectedWal
   if (!await hasExecutionFunds(execution, wallet)) throw new Error("Insufficient source token balance");
 }
 
+export async function executeTronTransfer(
+  wallet: TronConnection,
+  contractAddress: string,
+  recipient: string,
+  amount: bigint,
+  feeLimit = 100_000_000,
+): Promise<string> {
+  if (!Number.isSafeInteger(feeLimit) || feeLimit <= 0) throw new Error("Invalid TRON fee limit");
+  const web = await ensureTronMainnet(wallet.provider);
+  const contract = await web.contract(erc20Abi, tronAddress(web, contractAddress));
+  const result = await contract.transfer(tronAddress(web, recipient), amount.toString()).send({ feeLimit });
+  const reference = Array.isArray(result) ? result[0] : result;
+  if (!/^[a-f\d]{64}$/i.test(reference)) throw new Error("TRON wallet did not return a transaction hash");
+  return reference;
+}
+
+export interface OtcTransferCall {
+  family: string;
+  to?: string;
+  amount?: string;
+  contract?: string;
+  mint?: string;
+  jetton?: string;
+  decimals?: number;
+  fee_limit?: number;
+}
+
+export async function executeOtcTransfer(call: OtcTransferCall, wallet: ConnectedWallet): Promise<string> {
+  if (!call.amount || !/^\d+$/.test(call.amount) || !call.to) throw new Error("The transfer instructions are incomplete");
+  const amount = BigInt(call.amount);
+  if (amount <= 0n) throw new Error("The transfer amount must be positive");
+  if (call.family === "tron") {
+    if (wallet.family !== "tron") throw new Error("Select a TRON wallet for this transfer.");
+    if (!call.contract) throw new Error("The TRC-20 contract is missing");
+    return executeTronTransfer(wallet, call.contract, call.to, amount, call.fee_limit);
+  }
+  if (call.family === "solana") {
+    if (wallet.family !== "solana") throw new Error("Select a Solana wallet for this transfer.");
+    if (!call.mint) throw new Error("The SPL token mint is missing");
+    return executeSolanaTransfer(wallet, call.mint, call.to, amount, call.decimals ?? 6);
+  }
+  if (call.family === "ton") {
+    if (wallet.family !== "ton") throw new Error("Select a TON wallet for this transfer.");
+    if (!call.jetton) throw new Error("The jetton master is missing");
+    return executeTonTransfer(wallet, call.jetton, call.to, amount, call.decimals ?? 6);
+  }
+  throw new Error("Unsupported wallet transfer.");
+}
+
 async function executeTronDeposit(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: TronConnection) {
   const web = await ensureTronMainnet(wallet.provider);
   const amount = requiredAtomic(action).toString();
@@ -730,9 +779,7 @@ async function executeTronDeposit(action: Extract<RouteExecutionAction, { kind: 
     if (BigInt(amount) > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("TRX amount exceeds the wallet's exact transfer limit");
     reference = await broadcastTron(web, await web.transactionBuilder.sendTrx(recipient, amount, wallet.address));
   } else {
-    const contract = await web.contract(erc20Abi, tronAddress(web, action.token_contract!));
-    const result = await contract.transfer(recipient, amount).send({ feeLimit: 100_000_000 });
-    reference = Array.isArray(result) ? result[0] : result;
+    reference = await executeTronTransfer(wallet, action.token_contract!, recipient, BigInt(amount));
   }
   if (!/^[a-f\d]{64}$/i.test(reference)) throw new Error("TRON wallet did not return a transaction hash");
   return { reference, kind: "transaction_hash" as const };

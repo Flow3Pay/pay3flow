@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+  p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
   p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
   type P2pDeal,
 } from "../src/lib/otc/p2p.ts";
@@ -31,7 +31,25 @@ test("payment networks are restricted to routes for the exact destination token"
       true,
     );
   }
-  assert.equal(p2pDirectAssetMatch(sources[2], "USDT@tron", "tron-usdt", "tron"), false);
+  for (const network of ["sei", "tron", "ton", "solana"]) {
+    const asset = `USDT@${network}`;
+    assert.equal(
+      p2pDirectAssetMatch(
+        { ...sources[0], asset, asset_id: `${network}-usdt` },
+        asset,
+        `${network}-usdt`,
+        network,
+      ),
+      true,
+    );
+    assert.equal(p2pDirectAssetMatch(sources[0], asset, `${network}-usdt`, network), false);
+  }
+  for (const network of ["tron", "ton", "solana"]) {
+    assert.equal(p2pDirectDirectionAllowed("buy", network), true);
+    assert.equal(p2pDirectDirectionAllowed("sell", network), false);
+  }
+  assert.equal(p2pDirectDirectionAllowed("sell", "base"), true);
+  assert.equal(p2pDirectDirectionAllowed("buy", "near"), false);
 });
 
 function deal(overrides: Partial<P2pDeal> = {}): P2pDeal {

@@ -1,18 +1,17 @@
 import { concat, encodeFunctionData, encodePacked, getAddress, getCreate2Address, isAddress, keccak256, pad, parseAbi, zeroAddress, type Address, type Hex } from "viem";
-import { mainnet, sepolia } from "viem/chains";
+import { mainnet } from "viem/chains";
 
-export type SafeChainId = 1 | 11155111;
+export type SafeChainId = 1;
 export const SAFE_NETWORKS = {
   1: { chain: mainnet, name: "Ethereum Mainnet", walletNetwork: "ethereum", rpcUrl: "https://ethereum-rpc.publicnode.com", explorerUrl: "https://etherscan.io", safePrefix: "eth", faucetUrl: null },
-  11155111: { chain: sepolia, name: "Sepolia (testnet)", walletNetwork: "sepolia", rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com", explorerUrl: "https://sepolia.etherscan.io", safePrefix: "sep", faucetUrl: "https://cloud.google.com/application/web3/faucet/ethereum/sepolia" },
 } as const;
 
 export function safeNetwork(chainId: SafeChainId) {
-  if (chainId !== 1 && chainId !== 11155111) throw new Error("Unsupported Safe network.");
+  if (chainId !== 1) throw new Error("Unsupported Safe network.");
   return SAFE_NETWORKS[chainId];
 }
 
-// Canonical Mainnet and Sepolia deployments from safe-global/safe-deployments, v1.4.1.
+// Canonical Mainnet deployments from safe-global/safe-deployments, v1.4.1.
 export const SAFE_FACTORY = "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67";
 export const SAFE_SINGLETON = "0x41675C099F32341bf84BFc5382aF534df5C7461a";
 export const SAFE_FALLBACK = "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99";
@@ -73,7 +72,6 @@ type SafeStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 export function loadSafePlan(storage: SafeStorage, chainId: SafeChainId): SafePlan | null {
   const key = safePlanStorageKey(chainId), raw = storage.getItem(key);
   if (raw !== null) return parseSafePlan(raw, chainId);
-  if (chainId !== 1) return null;
   const legacy = storage.getItem(LEGACY_STORAGE_KEY);
   if (legacy === null) return null;
   const migrated = parseSafePlan(legacy, 1, true);

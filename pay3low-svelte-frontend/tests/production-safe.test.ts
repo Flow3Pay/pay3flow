@@ -2,11 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { decodeFunctionData, keccak256, zeroAddress } from "viem";
-import { SAFE_DEPLOYMENTS, SAFE_SINGLETON, SAFE_FALLBACK, safeOwners, safeInitializer, safeDeployment, safeAppUrl, safeAbi, factoryAbi, safeNetwork, safePlanStorageKey, loadSafePlan, storeSafePlan, type SafePlan, type SafeChainId } from "../src/lib/otc/production-safe.ts";
+import { SAFE_DEPLOYMENTS, SAFE_SINGLETON, SAFE_FALLBACK, safeOwners, safeInitializer, safeDeployment, safeAppUrl, safeAbi, factoryAbi, safeNetwork, safePlanStorageKey, loadSafePlan, type SafePlan, type SafeChainId } from "../src/lib/otc/production-safe.ts";
 const owners = ["0x1111111111111111111111111111111111111111", "0x2222222222222222222222222222222222222222", "0x3333333333333333333333333333333333333333"];
 test("browser fixtures preserve the official Safe 1.4.1 runtime hashes", () => {
   const fixture = JSON.parse(readFileSync(new URL("./fixtures/safe-1.4.1.json", import.meta.url), "utf8"));
-  assert.equal(fixture.chainId, 11155111);
   for (const [address, hash] of SAFE_DEPLOYMENTS) assert.equal(keccak256(fixture.contracts[address.toLowerCase()]), hash);
 });
 test("OTC Safe requires three independent nonzero owners", () => {
@@ -29,29 +28,20 @@ test("factory call binds reviewed owners, singleton and unique creation salt", (
 });
 test("Safe links require an explicit supported network and reject arbitrary destinations", () => {
   assert.equal(safeAppUrl(owners[0], 1), `https://app.safe.global/home?safe=eth:${owners[0]}`);
-  assert.equal(safeAppUrl(owners[0], 11155111), `https://app.safe.global/home?safe=sep:${owners[0]}`);
-  for (const chainId of [1, 11155111] as const) {
-    assert.throws(() => safeAppUrl("javascript:alert(1)", chainId));
-    assert.throws(() => safeAppUrl(zeroAddress, chainId));
-  }
+  assert.throws(() => safeAppUrl("javascript:alert(1)", 1));
+  assert.throws(() => safeAppUrl(zeroAddress, 1));
   assert.throws(() => safeAppUrl(owners[0], 100 as SafeChainId));
   assert.throws(() => safeAppUrl(owners[0], "__proto__" as unknown as SafeChainId));
   assert.throws(() => safeAppUrl(owners[0], undefined as unknown as SafeChainId));
 });
 test("Safe network settings bind RPC, explorer, wallet network and chain", () => {
-  for (const [chainId, rpc, explorer, prefix, wallet] of [
-    [1, "https://ethereum-rpc.publicnode.com", "https://etherscan.io", "eth", "ethereum"],
-    [11155111, "https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.etherscan.io", "sep", "sepolia"],
-  ] as const) {
-    const config = safeNetwork(chainId);
-    assert.equal(config.chain.id, chainId);
-    assert.equal(config.rpcUrl, rpc);
-    assert.equal(config.explorerUrl, explorer);
-    assert.equal(config.safePrefix, prefix);
-    assert.equal(config.walletNetwork, wallet);
-  }
-  assert.equal(safeNetwork(1).faucetUrl, null);
-  assert.equal(new URL(safeNetwork(11155111).faucetUrl!).protocol, "https:");
+  const config = safeNetwork(1);
+  assert.equal(config.chain.id, 1);
+  assert.equal(config.rpcUrl, "https://ethereum-rpc.publicnode.com");
+  assert.equal(config.explorerUrl, "https://etherscan.io");
+  assert.equal(config.safePrefix, "eth");
+  assert.equal(config.walletNetwork, "ethereum");
+  assert.equal(config.faucetUrl, null);
 });
 
 function storage() {
@@ -65,20 +55,10 @@ function plan(chainId: SafeChainId, state: SafePlan["state"] = "submitted"): Saf
 for (const state of ["review", "unknown", "submitted", "ready", "failed"] as const) test(`legacy ${state} plan migrates to Mainnet without losing transaction or state`, () => {
   const db = storage(), { chainId, ...legacy } = plan(1, state);
   db.setItem(legacyKey, JSON.stringify(legacy));
-  assert.equal(loadSafePlan(db, 11155111), null);
   assert.notEqual(db.getItem(legacyKey), null);
   assert.deepEqual(loadSafePlan(db, 1), { chainId, ...legacy });
   assert.equal(db.getItem(legacyKey), null);
   assert.deepEqual(loadSafePlan(db, 1), { chainId, ...legacy });
-});
-test("separate network records retain pending operations even at identical Safe addresses", () => {
-  const db = storage(), mainnet = plan(1, "unknown"), sepolia = plan(11155111);
-  storeSafePlan(db, mainnet); storeSafePlan(db, sepolia);
-  assert.deepEqual(loadSafePlan(db, 1), mainnet);
-  assert.deepEqual(loadSafePlan(db, 11155111), sepolia);
-  db.removeItem(safePlanStorageKey(11155111));
-  assert.equal(loadSafePlan(db, 11155111), null);
-  assert.deepEqual(loadSafePlan(db, 1), mainnet);
 });
 test("migration preserves the original record if persistence fails", () => {
   const db = storage(), { chainId, ...legacy } = plan(1);
@@ -88,7 +68,7 @@ test("migration preserves the original record if persistence fails", () => {
 });
 test("invalid or mismatched network records are rejected without discarding pending evidence", () => {
   for (const invalid of [
-    { ...plan(1), chainId: 11155111 }, { ...plan(1), chainId: undefined }, { ...plan(1), chainId: null },
+    { ...plan(1), chainId: 100 }, { ...plan(1), chainId: undefined }, { ...plan(1), chainId: null },
     { ...plan(1), salt: "-1" }, { ...plan(1), salt: (2n ** 256n).toString() },
     { ...plan(1), reference: "0x1234" }, { ...plan(1), reference: null },
     { ...plan(1), owners: [owners[0], owners[0], owners[1]] }, { ...plan(1), state: "other" },

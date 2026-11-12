@@ -6,7 +6,7 @@
   import type { RouteExecution } from "$lib/exchange";
   import { identiconDataUri } from "$lib/otc/identicon";
   import {
-    p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+    p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
     p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
     type P2pDeal, type P2pLeg,
   } from "$lib/otc/p2p";
@@ -78,7 +78,9 @@
     || destinationAssets.find(item => item.asset === outputAsset)?.asset_id
     || "";
   $: compatibleSourceAssets = p2pCompatibleSources(sourceAssets, outputAssetId);
-  $: directPaymentAvailable = p2pDirectAssetMatch(selectedSource, outputAsset, outputAssetId, outputNetwork);
+  $: directPaymentAvailable = !!deal
+    && p2pDirectDirectionAllowed(deal.terms.direction, outputNetwork)
+    && p2pDirectAssetMatch(selectedSource, outputAsset, outputAssetId, outputNetwork);
   $: selectedSource = sourceAssets.find(item => item.asset === selectedSourceAsset) || null;
   $: intentQuote = deal?.attempts?.find(attempt => attempt.kind === "payment" && !!attempt.instructions.source_asset && attempt.state !== "failed") || null;
   $: directPaymentAttempt = deal?.attempts?.find(attempt => attempt.kind === "payment" && !attempt.instructions.source_asset && attempt.state !== "failed") || null;

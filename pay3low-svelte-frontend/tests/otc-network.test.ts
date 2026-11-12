@@ -10,7 +10,6 @@ test("the OTC wallet follows the Ethereum network published by the backend", () 
 });
 
 test("testnets and unconfigured Ethereum chains stop OTC instead of signing elsewhere", () => {
-  assert.throws(() => evmNetworkFor(11155111), /OTC settlement network 11155111 is not supported/);
   assert.throws(() => evmNetworkFor(5), /OTC settlement network 5 is not supported/);
   assert.throws(() => evmNetworkFor(0), /OTC settlement network 0 is not supported/);
 });
@@ -23,9 +22,9 @@ test("only the Ethereum label is remapped, Everscale stays its own network", () 
 
 test("the peer settlement network is explicit and unsupported networks fail closed", () => {
   assert.throws(
-    () => p2pEvmNetworkFor({ ethereum_chain_id: 1, p2p_ethereum_chain_id: 11155111 }),
-    /OTC settlement network 11155111 is not supported/,
+    () => p2pEvmNetworkFor({ ethereum_chain_id: 1, p2p_ethereum_chain_id: 5 }),
+    /OTC settlement network 5 is not supported/,
   );
-  assert.throws(() => p2pEvmNetworkFor({ ethereum_chain_id: 11155111 }), /OTC settlement network 11155111 is not supported/);
+  assert.throws(() => p2pEvmNetworkFor({ ethereum_chain_id: 5 }), /OTC settlement network 5 is not supported/);
   assert.deepEqual(p2pEvmNetworkFor({}), { name: "ethereum", label: "Ethereum mainnet", chainId: 1 });
 });

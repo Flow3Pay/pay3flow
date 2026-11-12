@@ -356,24 +356,31 @@ function memoCell(text: string, beginCell: (typeof import("@ton/core"))["beginCe
   return beginCell().storeUint(0, 32).storeStringTail(text).endCell();
 }
 
-async function executeSolana(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: Extract<ExtraWallet, { family: "solana" }>, amount: bigint) {
-  if (action.deposit_memo && action.deposit_memo.length > 566) throw new Error("Solana deposit memo is too long");
+export async function executeSolanaTransfer(
+  wallet: Extract<ExtraWallet, { family: "solana" }>,
+  token: string,
+  recipient: string,
+  amount: bigint,
+  decimals: number,
+  memo?: string,
+) {
+  if (memo && memo.length > 566) throw new Error("Solana deposit memo is too long");
   const [{ PublicKey, Transaction, TransactionInstruction }, spl, connection] = await Promise.all([
     import("@solana/web3.js"), import("@solana/spl-token"), getSolanaConnection(),
   ]);
   const owner = new PublicKey(wallet.address);
-  const mint = new PublicKey(requiredField(action.token_contract, "the token contract"));
-  const destination = new PublicKey(requiredField(action.deposit_address, "the deposit address"));
+  const mint = new PublicKey(token);
+  const destination = new PublicKey(recipient);
   const sourceAta = await spl.getAssociatedTokenAddress(mint, owner);
   const destinationAta = await spl.getAssociatedTokenAddress(mint, destination, true);
   const transaction = new Transaction();
   transaction.add(spl.createAssociatedTokenAccountIdempotentInstruction(owner, destinationAta, destination, mint));
-  transaction.add(spl.createTransferCheckedInstruction(sourceAta, mint, destinationAta, owner, amount, requiredDecimals(action.decimals)));
-  if (action.deposit_memo) {
+  transaction.add(spl.createTransferCheckedInstruction(sourceAta, mint, destinationAta, owner, amount, requiredDecimals(decimals)));
+  if (memo) {
     transaction.add(new TransactionInstruction({
       keys: [],
       programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
-      data: Buffer.from(action.deposit_memo, "utf8"),
+      data: Buffer.from(memo, "utf8"),
     }));
   }
   const latest = await connection.getLatestBlockhash("confirmed");
@@ -383,6 +390,17 @@ async function executeSolana(action: Extract<RouteExecutionAction, { kind: "near
   const reference = await connection.sendRawTransaction(signed.serialize(), { preflightCommitment: "confirmed" });
   await connection.confirmTransaction({ signature: reference, ...latest }, "confirmed");
   return reference;
+}
+
+async function executeSolana(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: Extract<ExtraWallet, { family: "solana" }>, amount: bigint) {
+  return executeSolanaTransfer(
+    wallet,
+    requiredField(action.token_contract, "the token contract"),
+    requiredField(action.deposit_address, "the deposit address"),
+    amount,
+    requiredDecimals(action.decimals),
+    action.deposit_memo,
+  );
 }
 
 async function executeSui(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: Extract<ExtraWallet, { family: "sui" }>, amount: bigint) {
@@ -441,8 +459,15 @@ async function executeAptos(action: Extract<RouteExecutionAction, { kind: "near_
   return result.hash;
 }
 
-async function executeTon(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: Extract<ExtraWallet, { family: "ton" }>, amount: bigint) {
-  const jetton = await tonJettonBalance(wallet.address, requiredField(action.token_contract, "the jetton master"));
+export async function executeTonTransfer(
+  wallet: Extract<ExtraWallet, { family: "ton" }>,
+  token: string,
+  recipient: string,
+  amount: bigint,
+  _decimals: number,
+  memo?: string,
+) {
+  const jetton = await tonJettonBalance(wallet.address, token);
   if (!jetton.walletAddress) throw new Error("TON jetton wallet is not available for this token");
   const { Address, Cell, beginCell } = await import("@ton/core");
   const user = Address.parse(wallet.address);
@@ -450,12 +475,12 @@ async function executeTon(action: Extract<RouteExecutionAction, { kind: "near_de
     .storeUint(0x0f8a7ea5, 32)
     .storeUint(0, 64)
     .storeCoins(amount)
-    .storeAddress(Address.parse(action.deposit_address))
+    .storeAddress(Address.parse(recipient))
     .storeAddress(user)
     .storeBit(0)
-    .storeCoins(action.deposit_memo ? 1n : 0n)
-    .storeBit(action.deposit_memo ? 1 : 0);
-  if (action.deposit_memo) body.storeRef(memoCell(action.deposit_memo, beginCell));
+    .storeCoins(memo ? 1n : 0n)
+    .storeBit(memo ? 1 : 0);
+  if (memo) body.storeRef(memoCell(memo, beginCell));
   const payload = body.endCell().toBoc().toString("base64");
   const response = await wallet.ui.sendTransaction({
     validUntil: Math.floor(Date.now() / 1000) + 300,
@@ -466,6 +491,17 @@ async function executeTon(action: Extract<RouteExecutionAction, { kind: "near_de
   const cell = Cell.fromBoc(Buffer.from(response.boc, "base64"))[0];
   if (!cell) throw new Error("TON wallet returned an invalid transaction payload");
   return cell.hash().toString("hex");
+}
+
+async function executeTon(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: Extract<ExtraWallet, { family: "ton" }>, amount: bigint) {
+  return executeTonTransfer(
+    wallet,
+    requiredField(action.token_contract, "the jetton master"),
+    requiredField(action.deposit_address, "the deposit address"),
+    amount,
+    requiredDecimals(action.decimals),
+    action.deposit_memo,
+  );
 }
 
 export async function executeExtraDeposit(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: ExtraWallet, amount: bigint): Promise<string> {

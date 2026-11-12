@@ -1,10 +1,25 @@
 import type { Attempt } from "./service";
 
 export type P2pLeg = "payment" | "payout";
-const directEvmNetworks = new Set([
+const directNetworks = new Set([
   "ethereum", "optimism", "bnb-smart-chain", "gnosis",
-  "polygon-pos", "avalanche-c", "arbitrum-one", "base",
+  "polygon-pos", "avalanche-c", "arbitrum-one", "base", "sei",
+  "tron", "ton", "solana",
 ]);
+const evmDirectNetworks = new Set([
+  "ethereum", "optimism", "bnb-smart-chain", "gnosis",
+  "polygon-pos", "avalanche-c", "arbitrum-one", "base", "sei",
+]);
+
+/**
+ * A sell offer books the taker's Ethereum wallet as `usdt_payer`; that address
+ * is only a valid sender on EVM networks. On a non-EVM receiving network the
+ * taker must use the routed payment flow instead of a direct transfer.
+ */
+export function p2pDirectDirectionAllowed(direction: "buy" | "sell", network: string): boolean {
+  return directNetworks.has(network)
+    && (direction === "buy" || evmDirectNetworks.has(network));
+}
 
 export function p2pCompatibleSources<T extends { destination_asset_ids: string[] }>(
   sources: T[],
@@ -24,7 +39,7 @@ export function p2pDirectAssetMatch(
   return !!source
     && source.asset === destinationAsset
     && source.asset_id === destinationAssetId
-    && directEvmNetworks.has(destinationNetwork)
+    && directNetworks.has(destinationNetwork)
     && source.asset.split("@")[1] === destinationNetwork;
 }
 

@@ -22,7 +22,7 @@ export interface Attempt { id: string; kind: string; state: string; instructions
 interface Instructions {
   escrow?: boolean; expires_at?: string; trade_id?: string; submit_path?: string; stablecoin?: "USDT" | "USDC";
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
-  call?: { family: string; chain_id?: number; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
+  call?: { family: string; chain_id?: number; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean; contract?: string; mint?: string; jetton?: string; decimals?: number; fee_limit?: number };
   source_asset?: string; source_asset_id?: string; source_network?: string; source_decimals?: number;
   fee_source_asset?: string; fee_source_asset_id?: string; fee_source_address?: string;
   source_amount?: string; source_address?: string; token_contract?: string; destination_asset?: string;
@@ -161,18 +161,28 @@ export async function sendAttempt(token: string, attempt: Attempt): Promise<void
   const leg = attempt.instructions.leg;
   // The signed handoff carries its own network: the desk and peer settlement can sit on different chains.
   const call = attempt.instructions.call;
-  if (!call?.chain_id) throw new Error("The payment instructions are incomplete");
-  const net = evmNetworkFor(call.chain_id);
-  const wallet = await connectWallet(walletNetwork(leg.chain, net));
-  if (wallet.address.toLowerCase() !== leg.sender) throw new Error("Connected wallet differs from the booked sender. Reconcile this saved attempt before sending.");
+  if (!call?.family) throw new Error("The payment instructions are incomplete");
+  const net = call.chain_id ? evmNetworkFor(call.chain_id) : null;
+  const wallet = await connectWallet(walletNetwork(leg.chain, net || undefined));
+  let sameSender = sameWalletAddress(wallet.family, wallet.address, leg.sender);
+  if (!sameSender && call.family === "ton") {
+    try {
+      const { Address } = await import("@ton/core");
+      sameSender = Address.parse(wallet.address).toRawString() === Address.parse(leg.sender).toRawString();
+    } catch { /* fall through to the mismatch error */ }
+  }
+  if (!sameSender) throw new Error("Connected wallet differs from the booked sender. Reconcile this saved attempt before sending.");
   let reference: string;
-  if (wallet.family === "evm") {
+  if (call.family === "evm") {
+    if (wallet.family !== "evm") throw new Error("Select an EVM wallet for this transfer.");
+    if (!net) throw new Error("The EVM payment network is missing.");
     if (wallet.chainId !== net.chainId) throw new Error(`Switch to ${net.label}.`);
     const { sendTransaction } = await import("@wagmi/core");
     const nonce = BigInt(call.nonce!);
     if (nonce > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Wallet nonce cannot be represented safely.");
     reference = await sendTransaction(wallet.config as Parameters<typeof sendTransaction>[0], { chainId: net.chainId, account: wallet.address, to: call.to as `0x${string}`, data: call.data as `0x${string}`, value: 0n, nonce: Number(nonce) });
-  } else if (wallet.family === "everscale") {
+  } else if (call.family === "everscale") {
+    if (wallet.family !== "everscale") throw new Error("Select an EVER Wallet for this transfer.");
     const state = await wallet.provider.request({ method: "getProviderState" });
     if (state.selectedConnection !== "mainnet") throw new Error("Switch EVER Wallet to Everscale mainnet.");
     if (attempt.instructions.escrow) {
@@ -182,7 +192,10 @@ export async function sendAttempt(token: string, attempt: Attempt): Promise<void
     }
     const result = await wallet.provider.request({ method: "sendMessage", params: { sender: leg.sender, recipient: leg.recipient, amount: leg.transfer_amount, bounce: true } });
     reference = result.transaction.id.hash;
-  } else throw new Error("Unsupported wallet.");
+  } else {
+    const { executeOtcTransfer } = await import("$lib/wallet-execution");
+    reference = await executeOtcTransfer(call, wallet);
+  }
   // Keep the original result available if the reference POST response is lost.
   sessionStorage.setItem(`pay3flow.otc.reference.${attempt.id}`, reference);
   await request(attempt.instructions.submit_path || `/attempts/${attempt.id}/reference`, token, { reference });

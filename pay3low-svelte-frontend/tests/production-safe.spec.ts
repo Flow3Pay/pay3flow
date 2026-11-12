@@ -31,7 +31,7 @@ async function blocked(page: Page) {
 test("OTC Safe is Mainnet-only and opens existing wallets on Ethereum", async ({ page }) => {
   await open(page);
   await expect(panel(page).getByText("Ethereum Mainnet", { exact: false })).toBeVisible();
-  await expect(panel(page).getByText(/Sepolia|testnet/i)).toHaveCount(0);
+  await expect(panel(page).getByText(/testnet/i)).toHaveCount(0);
   await expect(panel(page).getByLabel("Safe network")).toHaveCount(0);
   await expect(panel(page).getByText(/no automatic expiry or refund/)).toBeVisible();
   await expect(panel(page).getByRole("button", { name: "Review 2-of-3 Safe" })).toBeEnabled();
@@ -66,7 +66,7 @@ for (const [address] of SAFE_DEPLOYMENTS) test(`Mainnet refuses mismatched contr
 
 test("OTC Safe rejects an RPC reporting a different network before review", async ({ page }) => {
   const rpc = await mockSafeRpc(page);
-  rpc.chainId = 11155111;
+  rpc.chainId = 5;
   await open(page);
   for (const [index, role] of ["Buyer", "Seller", "Arbitrator"].entries()) await panel(page).getByLabel(`${role} Ethereum address`).fill(owners[index]);
   await panel(page).getByRole("button", { name: "Review 2-of-3 Safe" }).click();
