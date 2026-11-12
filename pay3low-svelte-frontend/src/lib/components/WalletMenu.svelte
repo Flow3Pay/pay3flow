@@ -25,7 +25,7 @@
     { family: "evm", network: "linea", label: "Linea", icon: "/icons/assets/eth.webp", keywords: "EVM" },
     { family: "evm", network: "plasma", label: "Plasma", icon: "/icons/assets/eth.webp", keywords: "EVM" },
     { family: "evm", network: "ink", label: "Ink", icon: "/icons/assets/eth.webp", keywords: "Kraken EVM" },
-    { family: "evm", network: "sei", label: "Sei", icon: "/icons/assets/eth.webp", keywords: "SEI EVM" },
+    { family: "evm", network: "sei", label: "Sei", icon: assetIcon("sei"), keywords: "SEI EVM" },
     { family: "near", network: "near", label: "NEAR", icon: assetIcon("near"), keywords: "NEAR Protocol нир" },
     { family: "tron", network: "tron", label: "TRON", icon: "/icons/assets/trx.webp", keywords: "TRX трон" },
     { family: "solana", network: "solana", label: "Solana", icon: "/icons/assets/sol.png", keywords: "SOL Solana солана" },
