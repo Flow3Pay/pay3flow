@@ -403,29 +403,40 @@ impl P2pSource for DeclarativeP2pSource {
                 .config
                 .page_size
                 .map_or(1, |size| wanted.min(query.fetch_limit()).div_ceil(size));
-            for page in 1..=pages {
-                let page_values = TemplateValues { page, ..values };
-                let endpoint = render_request_string(endpoint_template, &page_values);
-                let response = send_json(
-                    &self.client,
-                    &self.config.method,
-                    &endpoint,
-                    &self.config.headers,
-                    self.config.auth.as_ref(),
-                    &operation.query,
-                    request_json,
-                    &page_values,
-                    &self.slug,
-                )
-                .await?;
-                validate_response(
-                    &response,
-                    operation.success_pointer.as_deref(),
-                    operation.success_value.as_deref(),
-                    operation.success_missing_allowed,
-                    operation.error_pointer.as_deref(),
-                    &self.slug,
-                )?;
+            // Pages are independent reads, so a few fetch at once; `buffered`
+            // keeps them in page order.
+            let fetched = stream::iter(1..=pages)
+                .map(|page| {
+                    let page_values = TemplateValues { page, ..values };
+                    async move {
+                        let endpoint = render_request_string(endpoint_template, &page_values);
+                        let response = send_json(
+                            &self.client,
+                            &self.config.method,
+                            &endpoint,
+                            &self.config.headers,
+                            self.config.auth.as_ref(),
+                            &operation.query,
+                            request_json,
+                            &page_values,
+                            &self.slug,
+                        )
+                        .await?;
+                        validate_response(
+                            &response,
+                            operation.success_pointer.as_deref(),
+                            operation.success_value.as_deref(),
+                            operation.success_missing_allowed,
+                            operation.error_pointer.as_deref(),
+                            &self.slug,
+                        )?;
+                        Ok::<_, anyhow::Error>((page_values.limit, response))
+                    }
+                })
+                .buffered(PAGE_CONCURRENCY);
+            tokio::pin!(fetched);
+            while let Some(result) = fetched.next().await {
+                let (limit, response) = result?;
                 let items = response_items(&response, operation.items_pointer.as_deref())?;
                 let count = items.len();
                 offers.extend(
@@ -435,7 +446,7 @@ impl P2pSource for DeclarativeP2pSource {
                         .map(|item| self.into_offer(item, query, mapping))
                         .collect::<Result<Vec<_>>>()?,
                 );
-                if offers.len() - template_start >= wanted || count < page_values.limit {
+                if offers.len() - template_start >= wanted || count < limit {
                     break;
                 }
             }
@@ -443,6 +454,10 @@ impl P2pSource for DeclarativeP2pSource {
         Ok(offers)
     }
 }
+
+/// Pages of one provider fetched at a time; enough to hide latency without
+/// tripping per-provider rate limits.
+const PAGE_CONCURRENCY: usize = 4;
 
 pub(crate) struct DeclarativeMarketSource {
     client: Client,
@@ -1120,6 +1135,132 @@ mod tests {
                 .replace("{{page}}", &values.page.to_string());
             assert_eq!(render_request_string(case, &values), expected, "{case}");
         }
+    }
+
+    /// Builds a P2P-only source with an offer list endpoint at `endpoint`.
+    fn probe_p2p_source(endpoint: String, page_size: usize) -> DeclarativeP2pSource {
+        use crate::provider_adapter::{OfferMapping, P2pAdapterConfig, P2pOperation};
+        let mapping: OfferMapping = serde_json::from_value(json!({
+            "ad_id_pointer": "/id",
+            "fiat_pointer": "/fiat",
+            "asset_pointer": "/asset",
+            "price_pointer": "/price",
+            "available_asset_pointer": "/available",
+            "min_fiat_pointer": "/min",
+            "max_fiat_pointer": "/max"
+        }))
+        .unwrap();
+        let operation: P2pOperation = serde_json::from_value(json!({
+            "endpoint": endpoint,
+            "query": {"page": "{{page}}"},
+            "items_pointer": "/data",
+        }))
+        .unwrap();
+        let config = P2pAdapterConfig {
+            all: true,
+            kind: "probe".into(),
+            market: Default::default(),
+            endpoint: endpoint.clone(),
+            method: "GET".into(),
+            headers: BTreeMap::new(),
+            asset_codes: BTreeMap::new(),
+            supported_assets: vec!["USDT".into()],
+            supported_fiats: vec!["USD".into()],
+            excluded_fiats: Vec::new(),
+            payment_method_aliases: BTreeMap::new(),
+            timeout_ms: 5_000,
+            max_results: None,
+            page_size: Some(page_size),
+            fiat_probe_amount: None,
+            asset_probe_amount: None,
+            default_min_fiat: None,
+            default_max_fiat: None,
+            default_available_asset: None,
+            auth: None,
+            buy: Some(operation),
+            sell: None,
+            offer: Some(mapping),
+            rate_table: None,
+        };
+        DeclarativeP2pSource {
+            client: Client::new(),
+            slug: "probe".into(),
+            source_url: "https://probe.example/".into(),
+            display_name: "Probe".into(),
+            config,
+        }
+    }
+
+    #[tokio::test]
+    async fn pages_fetch_concurrently_and_keep_order() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let state = (active.clone(), peak.clone());
+        let app = axum::Router::new().route(
+            "/offers",
+            axum::routing::get(
+                move |axum::extract::Query(query): axum::extract::Query<
+                    BTreeMap<String, String>,
+                >| {
+                    let (active, peak) = state.clone();
+                    async move {
+                        let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                        peak.fetch_max(now, Ordering::SeqCst);
+                        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        let page = query.get("page").cloned().unwrap_or_default();
+                        axum::Json(json!({"data": [{
+                            "id": format!("ad-{page}"),
+                            "fiat": "USD",
+                            "asset": "USDT",
+                            "price": "1.01",
+                            "available": "1000",
+                            "min": "10",
+                            "max": "1000"
+                        }]}))
+                    }
+                },
+            ),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let source = probe_p2p_source(format!("http://{address}/offers"), 1);
+        let query = crate::p2p::P2pSearchQuery {
+            fiat: "USD".into(),
+            asset: "USDT".into(),
+            side: crate::p2p::P2pSide::BuyCrypto,
+            amount: Some(100.0),
+            asset_amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(4),
+            sources: None,
+        };
+        let query = query.normalize().unwrap();
+        let offers = source.search(&query).await.unwrap();
+        let ids = offers
+            .iter()
+            .map(|offer| offer.ad_id.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ids,
+            (1..=offers.len())
+                .map(|page| format!("ad-{page}"))
+                .collect::<Vec<_>>(),
+            "pages must stay in order without gaps"
+        );
+        assert!(
+            peak.load(Ordering::SeqCst) > 1,
+            "pages were fetched serially"
+        );
+        server.abort();
     }
 
     fn whitebird_market_source() -> DeclarativeMarketSource {

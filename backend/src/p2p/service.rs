@@ -45,7 +45,7 @@ const PROVIDER_SNAPSHOT_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
 const MAX_PROVIDER_SNAPSHOTS: usize = 1_024;
 
 impl P2pSearchQuery {
-    fn normalize(mut self) -> Result<Self> {
+    pub(crate) fn normalize(mut self) -> Result<Self> {
         self.fiat = normalized_code(&self.fiat, "fiat")?;
         self.asset = normalized_code(&self.asset, "asset")?;
         if self

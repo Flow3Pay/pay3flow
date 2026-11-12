@@ -324,30 +324,29 @@ impl Service {
         // delivered without our margin, which is what the ledger records as
         // `best_output`. Without a configured margin the executable quote is
         // itself the best route.
-        let reference = if app_fees.is_empty() {
-            None
-        } else {
-            Some(
-                self.near
-                    .dry_executable_quote(NearQuoteRequest {
-                        from: target.from.clone(),
-                        to: target.to.clone(),
-                        origin_asset_id: None,
-                        destination_asset_id: None,
-                        amount: target.amount.clone(),
-                        recipient: target.recipient.clone(),
-                        refund_to: target.refund_address.clone(),
-                        slippage_bps: 100,
-                        app_fees: Vec::new(),
-                        dry: true,
-                    })
+        let executable = self.near.executable_quote(NearQuoteRequest {
+            from: target.from.clone(),
+            to: target.to.clone(),
+            origin_asset_id: None,
+            destination_asset_id: None,
+            amount: target.amount.clone(),
+            recipient: target.recipient.clone(),
+            refund_to: target.refund_address.clone(),
+            slippage_bps: 100,
+            app_fees: app_fees.clone(),
+            dry: false,
+        });
+        // The fee-free reference quote is independent of the executable one, so
+        // both go out in parallel.
+        let (reference, quote) = if app_fees.is_empty() {
+            (
+                None,
+                executable
                     .await
-                    .context("NEAR Intents reference quote failed")?,
+                    .context("NEAR Intents executable quote failed")?,
             )
-        };
-        let quote = self
-            .near
-            .executable_quote(NearQuoteRequest {
+        } else {
+            let reference = self.near.dry_executable_quote(NearQuoteRequest {
                 from: target.from.clone(),
                 to: target.to.clone(),
                 origin_asset_id: None,
@@ -356,11 +355,15 @@ impl Service {
                 recipient: target.recipient.clone(),
                 refund_to: target.refund_address.clone(),
                 slippage_bps: 100,
-                app_fees: app_fees.clone(),
-                dry: false,
-            })
-            .await
-            .context("NEAR Intents executable quote failed")?;
+                app_fees: Vec::new(),
+                dry: true,
+            });
+            let (reference, quote) = futures::join!(reference, executable);
+            (
+                Some(reference.context("NEAR Intents reference quote failed")?),
+                quote.context("NEAR Intents executable quote failed")?,
+            )
+        };
         let deposit_address = quote
             .deposit_address
             .clone()
