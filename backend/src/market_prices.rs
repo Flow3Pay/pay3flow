@@ -123,7 +123,7 @@ pub struct MarketPriceService {
     tickers_url: String,
     chart_root: String,
     exchange_root: String,
-    cache: Arc<RwLock<Option<PriceSnapshot>>>,
+    cache: Arc<RwLock<Option<Arc<PriceSnapshot>>>>,
     history: Arc<RwLock<HashMap<String, HistorySnapshot>>>,
     candles: Arc<RwLock<HashMap<String, CandleSnapshot>>>,
 }
@@ -300,7 +300,7 @@ impl MarketPriceService {
                         }
                     }
                 }
-                *cache = Some(snapshot);
+                *cache = Some(Arc::new(snapshot));
             }
             Err(error) => {
                 tracing::warn!(%error, "market price refresh failed");
@@ -308,10 +308,10 @@ impl MarketPriceService {
         }
     }
 
-    async fn prices(&self) -> Option<(PriceSnapshot, bool)> {
+    async fn prices(&self) -> Option<(Arc<PriceSnapshot>, bool)> {
         self.cache.read().await.as_ref().and_then(|snapshot| {
             let age = snapshot.fetched_at.elapsed();
-            (age < MAX_STALE_AGE).then(|| (snapshot.clone(), age >= REFRESH_INTERVAL))
+            (age < MAX_STALE_AGE).then(|| (Arc::clone(snapshot), age >= REFRESH_INTERVAL))
         })
     }
 
@@ -327,8 +327,8 @@ impl MarketPriceService {
         }
         snapshot
             .prices
-            .into_iter()
-            .filter_map(|(asset, price)| {
+            .iter()
+            .filter_map(|(&asset, price)| {
                 if chrono::Utc::now()
                     .timestamp()
                     .saturating_sub(price.timestamp)
@@ -339,7 +339,7 @@ impl MarketPriceService {
                     return None;
                 }
                 Some((
-                    asset.to_string(),
+                    asset.to_owned(),
                     price.usd,
                     chrono::DateTime::from_timestamp(price.timestamp, 0)?,
                 ))
@@ -357,8 +357,8 @@ impl MarketPriceService {
                 .map(|(snapshot, _)| {
                     snapshot
                         .prices
-                        .into_iter()
-                        .map(|(asset, price)| (asset, price.usd))
+                        .iter()
+                        .map(|(&asset, price)| (asset, price.usd))
                         .collect()
                 })
                 .unwrap_or_default(),

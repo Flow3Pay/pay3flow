@@ -31,7 +31,7 @@ pub(crate) fn address(chain: &str, value: &str) -> Result<String> {
     Ok(value.to_ascii_lowercase())
 }
 pub(crate) fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    crate::core::hex::to_hex(bytes)
 }
 pub(crate) fn unhex(value: &str) -> Result<Vec<u8>> {
     let value = value.strip_prefix("0x").unwrap_or(value);

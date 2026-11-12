@@ -1335,12 +1335,7 @@ fn random_token() -> String {
 }
 
 fn to_hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        use std::fmt::Write as _;
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
+    crate::core::hex::to_hex(bytes)
 }
 
 /// Exact `value * bps / 10000` on a decimal string, using an 18-decimal fixed

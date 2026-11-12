@@ -116,7 +116,6 @@ struct Runtime {
 }
 impl Runtime {
     fn new() -> Self {
-        use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("backend.py");
         std::fs::write(
@@ -124,7 +123,11 @@ impl Runtime {
             include_str!("../../../tests/fixtures/ever-multisig-backend.py"),
         )
         .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
         let state = script.with_extension("json");
         let manifest = agreement();
         let owners = [

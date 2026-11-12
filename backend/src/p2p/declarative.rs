@@ -682,12 +682,7 @@ async fn send_json(
             .map_err(|_| anyhow!("invalid HMAC key for {source}"))?;
         mac.update(timestamp.as_bytes());
         mac.update(&body);
-        let signature = mac
-            .finalize()
-            .into_bytes()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
+        let signature = crate::core::hex::to_hex(&mac.finalize().into_bytes());
         request = request
             .header(&auth.public_key_header, public_key)
             .header(&auth.timestamp_header, timestamp)
@@ -743,21 +738,47 @@ fn render_request_json(value: &mut Value, values: &TemplateValues<'_>) -> Result
 }
 
 fn render_request_string(template: &str, values: &TemplateValues<'_>) -> String {
-    template
-        .replace("{{fiat}}", values.fiat)
-        .replace("{{asset}}", values.asset)
-        .replace(
-            "{{amount_number}}",
-            &values.amount.map(number_to_string).unwrap_or_default(),
-        )
-        .replace(
-            "{{amount}}",
-            &values.amount.map(number_to_string).unwrap_or_default(),
-        )
-        .replace("{{limit_number}}", &values.limit.to_string())
-        .replace("{{limit}}", &values.limit.to_string())
-        .replace("{{page_number}}", &values.page.to_string())
-        .replace("{{page}}", &values.page.to_string())
+    if !template.contains("{{") {
+        return template.to_owned();
+    }
+    let amount = values.amount.map(number_to_string);
+    let limit = values.limit.to_string();
+    let page = values.page.to_string();
+    let replacement = |placeholder: &str| -> Option<&str> {
+        Some(match placeholder {
+            "{{fiat}}" => values.fiat,
+            "{{asset}}" => values.asset,
+            "{{amount}}" | "{{amount_number}}" => amount.as_deref().unwrap_or(""),
+            "{{limit}}" | "{{limit_number}}" => &limit,
+            "{{page}}" | "{{page_number}}" => &page,
+            _ => return None,
+        })
+    };
+
+    let mut out = String::with_capacity(template.len() + 16);
+    let mut cursor = 0;
+    while let Some(start) = template[cursor..].find("{{").map(|offset| cursor + offset) {
+        let Some(end) = template[start..]
+            .find("}}")
+            .map(|offset| start + offset + 2)
+        else {
+            break;
+        };
+        match replacement(&template[start..end]) {
+            Some(value) => {
+                out.push_str(&template[cursor..start]);
+                out.push_str(value);
+                cursor = end;
+            }
+            // An unknown placeholder is literal text; keep scanning after it.
+            None => {
+                out.push_str(&template[cursor..end]);
+                cursor = end;
+            }
+        }
+    }
+    out.push_str(&template[cursor..]);
+    out
 }
 
 fn validate_response(
@@ -1069,6 +1090,37 @@ mod tests {
     use crate::p2p::service::PaymentMethodMatch;
     use crate::provider_adapter::ProviderAdapters;
     use serde_json::json;
+
+    #[test]
+    fn render_request_string_matches_sequential_replace() {
+        let values = TemplateValues {
+            fiat: "RUB",
+            asset: "USDT",
+            amount: Some(12.5),
+            limit: 25,
+            page: 3,
+        };
+        let cases = [
+            "{{fiat}}/{{asset}}/{{amount}}/{{amount_number}}/{{limit}}/{{page}}",
+            "plain text without placeholders",
+            "prefix {{asset}} suffix {{page_number}}",
+            "unknown {{missing}} stays literal {{fiat}}",
+            "unterminated {{fiat",
+            "{{fiat}}{{asset}}{{fiat}}",
+        ];
+        for case in cases {
+            let expected = case
+                .replace("{{fiat}}", values.fiat)
+                .replace("{{asset}}", values.asset)
+                .replace("{{amount_number}}", &number_to_string(12.5))
+                .replace("{{amount}}", &number_to_string(12.5))
+                .replace("{{limit_number}}", &values.limit.to_string())
+                .replace("{{limit}}", &values.limit.to_string())
+                .replace("{{page_number}}", &values.page.to_string())
+                .replace("{{page}}", &values.page.to_string());
+            assert_eq!(render_request_string(case, &values), expected, "{case}");
+        }
+    }
 
     fn whitebird_market_source() -> DeclarativeMarketSource {
         let document: toml::Value =

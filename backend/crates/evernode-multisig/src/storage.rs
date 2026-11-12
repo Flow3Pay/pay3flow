@@ -1,9 +1,11 @@
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
-    os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
     path::{Component, Path, PathBuf},
 };
+
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 
 use anyhow::{Context, Result, ensure};
 use fs2::FileExt;
@@ -41,27 +43,44 @@ pub fn private_metadata(path: &Path, directory: bool) -> Result<()> {
     no_symlinks(path)?;
     let m =
         fs::symlink_metadata(path).with_context(|| format!("Cannot inspect {}", path.display()))?;
+    // Windows has no POSIX owner/mode/hard-link model; the platform ACLs apply
+    // instead. Development runs there; the strict checks guard production, which
+    // is Unix.
+    #[cfg(unix)]
+    {
+        ensure!(
+            m.uid() == rustix::process::geteuid().as_raw(),
+            "Storage must belong to the current user: {}",
+            path.display()
+        );
+        ensure!(
+            m.mode() & 0o077 == 0,
+            "Storage must not be accessible to group or other users: {}",
+            path.display()
+        );
+        ensure!(
+            if directory {
+                m.is_dir()
+            } else {
+                m.is_file() && m.mode() & 0o111 == 0 && m.nlink() == 1
+            },
+            "Expected a private {}: {}",
+            if directory {
+                "directory"
+            } else {
+                "regular file without hard links"
+            },
+            path.display()
+        );
+    }
+    #[cfg(not(unix))]
     ensure!(
-        m.uid() == rustix::process::geteuid().as_raw(),
-        "Storage must belong to the current user: {}",
-        path.display()
-    );
-    ensure!(
-        m.mode() & 0o077 == 0,
-        "Storage must not be accessible to group or other users: {}",
-        path.display()
-    );
-    ensure!(
-        if directory {
-            m.is_dir()
-        } else {
-            m.is_file() && m.mode() & 0o111 == 0 && m.nlink() == 1
-        },
+        if directory { m.is_dir() } else { m.is_file() },
         "Expected a private {}: {}",
         if directory {
             "directory"
         } else {
-            "regular file without hard links"
+            "regular file"
         },
         path.display()
     );
@@ -76,9 +95,11 @@ pub fn create_directory(path: &Path) -> Result<()> {
         missing.push(ancestor.to_path_buf());
         ancestor = ancestor.parent().unwrap_or(Path::new("."));
     }
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    builder.mode(0o700);
+    builder
         .create(path)
         .with_context(|| format!("Cannot create {}", path.display()))?;
     private_metadata(path, true)?;
@@ -100,10 +121,11 @@ fn sync_parent(path: &Path) -> Result<()> {
 
 pub fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     no_symlinks(path)?;
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options
         .open(path)
         .with_context(|| format!("Refusing to overwrite or cannot create {}", path.display()))?;
     file.write_all(bytes)?;
@@ -121,10 +143,11 @@ pub fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
 
 pub fn read_private(path: &Path) -> Result<Zeroizing<Vec<u8>>> {
     private_metadata(path, false)?;
-    let file = OpenOptions::new()
-        .read(true)
-        .custom_flags(i32::try_from(rustix::fs::OFlags::NOFOLLOW.bits())?)
-        .open(path)?;
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    options.custom_flags(i32::try_from(rustix::fs::OFlags::NOFOLLOW.bits())?);
+    let file = options.open(path)?;
     ensure!(
         file.metadata()?.len() <= MAX_FILE_SIZE,
         "Wallet file is too large: {}",
@@ -161,14 +184,13 @@ impl Store {
         let root = root.canonicalize()?;
         let path = root.join(".lock");
         no_symlinks(&path)?;
-        let lock = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        options
             .mode(0o600)
-            .custom_flags(i32::try_from(rustix::fs::OFlags::NOFOLLOW.bits())?)
-            .open(&path)?;
+            .custom_flags(i32::try_from(rustix::fs::OFlags::NOFOLLOW.bits())?);
+        let lock = options.open(&path)?;
         private_metadata(&path, false)?;
         lock.try_lock_exclusive()
             .context("Another wallet operation is running in this store")?;
@@ -182,15 +204,16 @@ impl Store {
 
     pub fn begin(&self, name: &str) -> Result<PathBuf> {
         let path = self.directory(name)?;
-        fs::DirBuilder::new()
-            .mode(0o700)
-            .create(&path)
-            .with_context(|| {
-                format!(
-                    "Wallet directory already exists or cannot be created: {}",
-                    path.display()
-                )
-            })?;
+        #[cfg_attr(not(unix), allow(unused_mut))]
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        builder.mode(0o700);
+        builder.create(&path).with_context(|| {
+            format!(
+                "Wallet directory already exists or cannot be created: {}",
+                path.display()
+            )
+        })?;
         sync_parent(&path)?;
         Ok(path)
     }

@@ -255,10 +255,7 @@ impl Service {
             offer.source, offer.ad_id, offer.side, offer.fiat, offer.asset, offer.network
         );
         let digest = Sha256::digest(identity.as_bytes());
-        let offer_id = digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
+        let offer_id = crate::core::hex::to_hex(&digest);
         let proposal_id = format!(
             "{}/marketplace/p2p-offers/{}",
             self.origin.trim_end_matches('/'),

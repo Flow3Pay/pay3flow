@@ -1785,13 +1785,9 @@ fn fmatch_cache_key(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) -> R
         "query": query,
     }))?;
     let digest = Sha256::digest(payload);
-    Ok(format!(
-        "p2p-fmatch:{}",
-        digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>()
-    ))
+    let mut key = String::from("p2p-fmatch:");
+    key.push_str(&crate::core::hex::to_hex(&digest));
+    Ok(key)
 }
 
 fn fmatch_p2p_content(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) -> String {

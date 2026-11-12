@@ -9,15 +9,16 @@ pub(in crate::p2p) fn response_snapshot(
     provider_statuses: &HashMap<String, SourceStatus>,
 ) -> P2pRouteSearchResponse {
     let routes_found = routes.len();
-    let mut visible_routes = routes.values().cloned().collect::<Vec<_>>();
-    for route in &mut visible_routes {
+    let mut ranked = routes.values().cloned().collect::<Vec<P2pRoute>>();
+    for route in &mut ranked {
         route.profitability = profitability_for_route(route, query);
     }
-    sort_routes(&mut visible_routes);
-    truncate_routes_preserving_providers(&mut visible_routes, query.limit);
-    for (index, route) in visible_routes.iter_mut().enumerate() {
+    sort_routes(&mut ranked);
+    truncate_routes_preserving_providers(&mut ranked, query.limit);
+    for (index, route) in ranked.iter_mut().enumerate() {
         route.rank = index + 1;
     }
+    let visible_routes = ranked;
     let (source, stale) = route_discovery_source(asset_statuses);
     let mut provider_statuses = provider_statuses.values().cloned().collect::<Vec<_>>();
     provider_statuses.sort_by(|left, right| left.source.cmp(&right.source));
@@ -122,6 +123,53 @@ pub(in crate::p2p) fn truncate_routes_preserving_providers(
     });
 }
 
+fn keep_routes_preserving_providers<'a>(
+    routes: impl Iterator<Item = &'a P2pRoute>,
+    limit: usize,
+) -> HashSet<usize> {
+    let routes = routes.collect::<Vec<_>>();
+    if routes.len() <= limit {
+        return (0..routes.len()).collect();
+    }
+
+    let provider_count = routes
+        .iter()
+        .flat_map(|route| route_provider_names(route))
+        .collect::<HashSet<_>>()
+        .len();
+    if provider_count == 0 {
+        return (0..limit).collect();
+    }
+    let per_provider = (limit / provider_count).clamp(1, 8);
+    let mut provider_counts = HashMap::new();
+    let mut reserved = HashSet::new();
+    for (index, route) in routes.iter().enumerate() {
+        if reserved.len() >= limit {
+            break;
+        }
+        let providers = route_provider_names(route);
+        if providers
+            .iter()
+            .any(|provider| provider_counts.get(provider).copied().unwrap_or(0) < per_provider)
+        {
+            for provider in providers {
+                *provider_counts.entry(provider).or_insert(0) += 1;
+            }
+            reserved.insert(index);
+        }
+    }
+    let mut remaining = limit.saturating_sub(reserved.len());
+    for index in 0..routes.len() {
+        if remaining == 0 {
+            break;
+        }
+        if reserved.insert(index) {
+            remaining -= 1;
+        }
+    }
+    reserved
+}
+
 pub(in crate::p2p) fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
     let mut providers = Vec::new();
     if let Some(provider) = route.route_provider.as_deref() {
@@ -147,23 +195,25 @@ pub(in crate::p2p) fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
 }
 
 pub(in crate::p2p) fn sort_routes(routes: &mut [P2pRoute]) {
-    routes.sort_by(|left, right| {
-        profitability_rank(left)
-            .cmp(&profitability_rank(right))
-            .then_with(|| profitability_amount(right).cmp(&profitability_amount(left)))
-            .then_with(|| {
-                route_target(right)
-                    .partial_cmp(&route_target(left))
-                    .unwrap_or(Ordering::Equal)
-            })
-            .then_with(|| {
-                right
-                    .payment_methods_verified
-                    .cmp(&left.payment_methods_verified)
-            })
-            .then_with(|| right.same_venue.cmp(&left.same_venue))
-            .then_with(|| left.route_id.cmp(&right.route_id))
-    });
+    routes.sort_by(compare_routes);
+}
+
+fn compare_routes(left: &P2pRoute, right: &P2pRoute) -> Ordering {
+    profitability_rank(left)
+        .cmp(&profitability_rank(right))
+        .then_with(|| profitability_amount(right).cmp(&profitability_amount(left)))
+        .then_with(|| {
+            route_target(right)
+                .partial_cmp(&route_target(left))
+                .unwrap_or(Ordering::Equal)
+        })
+        .then_with(|| {
+            right
+                .payment_methods_verified
+                .cmp(&left.payment_methods_verified)
+        })
+        .then_with(|| right.same_venue.cmp(&left.same_venue))
+        .then_with(|| left.route_id.cmp(&right.route_id))
 }
 
 fn profitability_rank(route: &P2pRoute) -> u8 {
