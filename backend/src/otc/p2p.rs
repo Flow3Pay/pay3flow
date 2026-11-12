@@ -5,7 +5,7 @@ use super::{
     amount,
     error::{invalid, Error, Result},
     model::{Direction, Evidence, Leg},
-    wallet, Service,
+    repo, wallet, Service,
 };
 use crate::route_engine::{Amount, Asset, NearQuoteRequest};
 use chrono::{DateTime, Duration, Utc};
@@ -188,18 +188,8 @@ impl Service {
         let taker_ever = self.wallet(actor, "everscale").await?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        tx.query_one(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-            &[&format!("otc-p2p-offer:{offer_id}")],
-        )
-        .await?;
-        if let Some(row) = tx
-            .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE taker_actor=$1 AND idempotency_key=$2",
-                &[&actor, &key],
-            )
-            .await?
-        {
+        repo::p2p::lock_offer(&tx, &format!("otc-p2p-offer:{offer_id}")).await?;
+        if let Some(row) = repo::p2p::trade_by_actor_key(&tx, actor, key).await? {
             if row.get::<_, Uuid>("offer_id") != offer_id {
                 return Err(Error::Conflict(
                     "acceptance key reused for another offer".into(),
@@ -209,11 +199,7 @@ impl Service {
             tx.commit().await?;
             return Ok(result);
         }
-        let offer = tx
-            .query_opt(
-                "SELECT * FROM otc_public_offers WHERE id=$1 FOR UPDATE",
-                &[&offer_id],
-            )
+        let offer = repo::p2p::lock_public_offer(&tx, &offer_id)
             .await?
             .ok_or(Error::NotFound)?;
         let owner: String = offer.get("actor");
@@ -379,32 +365,17 @@ impl Service {
             "fee_policy": fee_policy,
         });
         let id = Uuid::new_v4();
-        tx.execute(
-            "UPDATE otc_public_offers SET state='taken' WHERE id=$1",
-            &[&offer_id],
-        )
-        .await?;
-        tx.execute(
-            "INSERT INTO otc_p2p_trades(id,offer_id,owner_actor,taker_actor,body,state,idempotency_key,pay_by) VALUES($1,$2,$3,$4,$5,'payment_pending',$6,$7)",
-            &[&id, &offer_id, &owner, &actor, &body, &key, &pay_by],
-        )
-        .await?;
+        repo::p2p::mark_offer_taken(&tx, &offer_id).await?;
+        repo::p2p::insert_trade(&tx, &id, &offer_id, &owner, actor, &body, key, &pay_by).await?;
         tracing::info!(trade=%id, offer=%offer_id, taker=actor, "otc.p2p.accepted");
-        let row = tx
-            .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
-            .await?;
+        let row = repo::p2p::trade_by_id(&tx, &id).await?;
         let result = deal(&row, actor);
         tx.commit().await?;
         Ok(result)
     }
     pub(crate) async fn p2p_trades(&self, actor: &str) -> Result<Value> {
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                "SELECT * FROM otc_p2p_trades WHERE owner_actor=$1 OR taker_actor=$1 ORDER BY created_at DESC LIMIT 50",
-                &[&actor],
-            )
-            .await?;
+        let rows = repo::p2p::trades_by_actor(&client, actor).await?;
         let ids = rows
             .iter()
             .map(|row| row.get::<_, Uuid>("id"))
@@ -426,11 +397,7 @@ impl Service {
     }
     pub(crate) async fn p2p_deal(&self, actor: &str, id: Uuid) -> Result<Value> {
         let client = self.pool.get().await?;
-        let row = client
-            .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2)",
-                &[&id, &actor],
-            )
+        let row = repo::p2p::trade_by_actor(&client, &id, actor)
             .await?
             .ok_or(Error::NotFound)?;
         let attempts = self.p2p_attempts(&[id]).await?;
@@ -444,22 +411,17 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let row = tx
-            .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2) FOR UPDATE",
-                &[&id, &actor],
-            )
+        let row = repo::p2p::lock_trade_by_actor(&tx, &id, actor)
             .await?
             .ok_or(Error::NotFound)?;
         let state: String = row.get("state");
         if state == "payment_pending" || state == "delivery_pending" {
             let owner: String = row.get("owner_actor");
-            let sql = if owner == actor {
-                "UPDATE otc_p2p_trades SET owner_confirmed_at=COALESCE(owner_confirmed_at,now()),updated_at=now() WHERE id=$1 RETURNING *"
+            let row = if owner == actor {
+                repo::p2p::confirm_by_owner(&tx, &id).await?
             } else {
-                "UPDATE otc_p2p_trades SET taker_confirmed_at=COALESCE(taker_confirmed_at,now()),updated_at=now() WHERE id=$1 RETURNING *"
+                repo::p2p::confirm_by_taker(&tx, &id).await?
             };
-            let row = tx.query_one(sql, &[&id]).await?;
             let deal = deal(&row, actor);
             tx.commit().await?;
             tracing::info!(trade=%id, actor, "otc.p2p.confirmed");
@@ -475,26 +437,9 @@ impl Service {
             return Ok(Vec::new());
         }
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                // Failed transfers are listed too: a leg that the chain rejected is something the
-                // trader has to see and retry, not a silent reset back to "send".
-                "SELECT id,trade_id,kind,state,instructions,reference FROM otc_p2p_attempts WHERE trade_id = ANY($1) ORDER BY created_at",
-                &[&ids],
-            )
-            .await?;
-        Ok(rows
-            .iter()
-            .map(|row| {
-                (
-                    row.get::<_, Uuid>("trade_id"),
-                    json!({"id": row.get::<_, Uuid>("id"), "kind": row.get::<_, String>("kind"),
-                        "state": row.get::<_, String>("state"),
-                        "instructions": row.get::<_, Value>("instructions"),
-                        "reference": row.get::<_, Option<String>>("reference")}),
-                )
-            })
-            .collect())
+        // Failed transfers are listed too: a leg that the chain rejected is something the
+        // trader has to see and retry, not a silent reset back to "send".
+        repo::p2p::attempts_by_trades(&client, ids).await
     }
     fn deal_leg(&self, body: &Value, kind: &str) -> Result<Leg> {
         let text = |key: &str| body[key].as_str().unwrap_or_default().to_string();
@@ -577,34 +522,22 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        if let Some(existing) = tx
-            .query_opt(
-                "SELECT id,instructions,state FROM otc_p2p_attempts WHERE trade_id=$1 AND kind=$2 AND idempotency_key=$3",
-                &[&id, &kind, &key],
-            )
-            .await?
+        if let Some((existing_id, existing_state, existing_instructions)) =
+            repo::p2p::attempt_by_key(&tx, &id, kind, key).await?
         {
-            let row = tx
-                .query_opt(
-                    "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2)",
-                    &[&id, &actor],
-                )
+            let row = repo::p2p::trade_by_actor(&tx, &id, actor)
                 .await?
                 .ok_or(Error::NotFound)?;
             let mut result = deal(&row, actor);
             result["attempt"] = json!({
-                "id": existing.get::<_, Uuid>(0),
-                "state": existing.get::<_, String>(2),
-                "instructions": existing.get::<_, Value>(1),
+                "id": existing_id,
+                "state": existing_state,
+                "instructions": existing_instructions,
             });
             tx.commit().await?;
             return Ok(result);
         }
-        let row = tx
-            .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2) FOR UPDATE",
-                &[&id, &actor],
-            )
+        let row = repo::p2p::lock_trade_by_actor(&tx, &id, actor)
             .await?
             .ok_or(Error::NotFound)?;
         let state: String = row.get("state");
@@ -666,13 +599,7 @@ impl Service {
                 return Err(Error::Unauthorized);
             }
         }
-        let fee_collected = tx
-            .query_opt(
-                "SELECT id FROM otc_p2p_fees WHERE trade_id=$1 AND state='collected'",
-                &[&id],
-            )
-            .await?
-            .is_some();
+        let fee_collected = repo::p2p::fee_collected(&tx, &id).await?;
         let allowed = match state.as_str() {
             "payment_pending" => {
                 kind == "payment"
@@ -706,26 +633,17 @@ impl Service {
             return Err(Error::Conflict(message.into()));
         }
         let leg = if kind == "fee" {
-            let fee = tx.query_opt(
-                "SELECT fee_units::text,payer_actor,asset,precision FROM otc_p2p_fees WHERE trade_id=$1 AND state='accrued' FOR UPDATE",
-                &[&id],
-            ).await?.ok_or_else(|| Error::Conflict("there is no outstanding service fee for this deal".into()))?;
-            if fee.get::<_, String>(1) != actor {
+            let (fee_units, fee_payer, fee_asset, fee_precision) =
+                repo::p2p::lock_accrued_fee_units_first(&tx, &id).await?;
+            if fee_payer != actor {
                 return Err(Error::Unauthorized);
             }
-            if fee.get::<_, String>(2) != "USDT" || fee.get::<_, i16>(3) != 6 {
+            if fee_asset != "USDT" || fee_precision != 6 {
                 return Err(invalid(
                     "service fee must be denominated in six-decimal USDT",
                 ));
             }
-            let payment = tx
-                .query_opt(
-                    "SELECT instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state='verified' ORDER BY updated_at DESC LIMIT 1",
-                    &[&id],
-                )
-                .await?
-                .ok_or_else(|| Error::Conflict("verified stablecoin payment is required before fee collection".into()))?;
-            let payment_instructions: Value = payment.get(0);
+            let payment_instructions = repo::p2p::verified_payment_instructions(&tx, &id).await?;
             let payment_source = payment_instructions["source_asset"]
                 .as_str()
                 .or_else(|| payment_instructions["fee_source_asset"].as_str())
@@ -758,18 +676,11 @@ impl Service {
             let fee_sender = payment_instructions["leg"]["sender"]
                 .as_str()
                 .unwrap_or(verified.as_str());
-            fee_leg(fee_network, &fee.get::<_, String>(0), fee_sender, recipient)?
+            fee_leg(fee_network, &fee_units, fee_sender, recipient)?
         } else {
             self.deal_leg(&body, kind)?
         };
-        if tx
-            .query_opt(
-                "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind=$2 AND state!='failed'",
-                &[&id, &kind],
-            )
-            .await?
-            .is_some()
-        {
+        if repo::p2p::unresolved_attempt(&tx, &id, kind).await? {
             return Err(Error::Conflict(
                 "this deal leg already has an unresolved attempt".into(),
             ));
@@ -929,15 +840,19 @@ impl Service {
             "submit_path": format!("/p2p/attempts/{attempt}/reference"),
             "prepared_at": Utc::now(),
         });
-        tx.execute(
-            "INSERT INTO otc_p2p_attempts(id,trade_id,kind,payer_actor,chain,state,instructions,idempotency_key) VALUES($1,$2,$3,$4,$5,'prepared',$6,$7)",
-            &[&attempt, &id, &kind, &actor, &leg.chain, &instructions, &key],
+        repo::p2p::insert_attempt(
+            &tx,
+            &attempt,
+            &id,
+            kind,
+            actor,
+            &leg.chain,
+            &instructions,
+            key,
         )
         .await?;
         tracing::info!(trade=%id, attempt=%attempt, kind, actor, "otc.p2p.handoff");
-        let row = tx
-            .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
-            .await?;
+        let row = repo::p2p::trade_by_id(&tx, &id).await?;
         let mut result = deal(&row, actor);
         result["attempt"] =
             json!({"id": attempt, "state": "prepared", "instructions": instructions});
@@ -971,14 +886,7 @@ impl Service {
         crate::route_execution::validate_otc_wallet_address(network, source_address)
             .map_err(|_| invalid("invalid source wallet address"))?;
         let mut client = self.pool.get().await?;
-        let body: Value = client
-            .query_opt(
-                "SELECT body FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2)",
-                &[&id, &actor],
-            )
-            .await?
-            .ok_or(Error::NotFound)?
-            .get(0);
+        let body = repo::p2p::trade_body_by_actor(&client, &id, actor).await?;
         let stablecoin = super::public_offers::Stablecoin::from_terms(&body)?;
         let output_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
         let to = Asset::new(stablecoin.symbol(), Some(output_network))?;
@@ -990,11 +898,7 @@ impl Service {
             }
         }
         let tx = client.transaction().await?;
-        let row = tx
-            .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2) FOR UPDATE",
-                &[&id, &actor],
-            )
+        let row = repo::p2p::lock_trade_by_actor(&tx, &id, actor)
             .await?
             .ok_or(Error::NotFound)?;
         let state: String = row.get("state");
@@ -1010,18 +914,14 @@ impl Service {
         if actor != expected_payer {
             return Err(Error::Unauthorized);
         }
-        if let Some(existing) = tx
-            .query_opt(
-                "SELECT id,state,instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND idempotency_key=$2",
-                &[&id, &key],
-            )
-            .await?
+        if let Some((existing_id, existing_state, existing_instructions)) =
+            repo::p2p::payment_attempt_by_key(&tx, &id, key).await?
         {
             let mut result = deal(&row, actor);
             result["attempt"] = json!({
-                "id": existing.get::<_, Uuid>(0),
-                "state": existing.get::<_, String>(1),
-                "instructions": existing.get::<_, Value>(2),
+                "id": existing_id,
+                "state": existing_state,
+                "instructions": existing_instructions,
             });
             tx.commit().await?;
             return Ok(result);
@@ -1029,14 +929,7 @@ impl Service {
         if state != "payment_pending" || Utc::now() > pay_by {
             return Err(Error::Conflict("stablecoin payment is unavailable".into()));
         }
-        if tx
-            .query_opt(
-                "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state!='failed'",
-                &[&id],
-            )
-            .await?
-            .is_some()
-        {
+        if repo::p2p::unresolved_payment_attempt(&tx, &id).await? {
             return Err(Error::Conflict(
                 "this deal leg already has an unresolved attempt".into(),
             ));
@@ -1299,14 +1192,9 @@ impl Service {
             "submit_path": format!("/p2p/attempts/{attempt}/reference"),
         });
 
-        tx.execute(
-            "INSERT INTO otc_p2p_attempts(id,trade_id,kind,payer_actor,chain,state,instructions,idempotency_key) VALUES($1,$2,'payment',$3,'near-intents','prepared',$4,$5)",
-            &[&attempt, &id, &actor, &instructions, &key],
-        )
-        .await?;
-        let trade = tx
-            .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
+        repo::p2p::insert_near_payment_attempt(&tx, &attempt, &id, actor, &instructions, key)
             .await?;
+        let trade = repo::p2p::trade_by_id(&tx, &id).await?;
         let mut result = deal(&trade, actor);
         result["attempt"] =
             json!({"id": attempt, "state": "prepared", "instructions": instructions});
@@ -1327,11 +1215,7 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let row = tx
-            .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2) FOR UPDATE",
-                &[&id, &actor],
-            )
+        let row = repo::p2p::lock_trade_by_actor(&tx, &id, actor)
             .await?
             .ok_or(Error::NotFound)?;
         let state: String = row.get("state");
@@ -1344,43 +1228,31 @@ impl Service {
         if body["fee_payer_actor"] != json!(actor) {
             return Err(Error::Unauthorized);
         }
-        if let Some(existing) = tx
-            .query_opt(
-                "SELECT id,state,instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='fee' AND idempotency_key=$2",
-                &[&id, &key],
-            )
-            .await?
+        if let Some((existing_id, existing_state, existing_instructions)) =
+            repo::p2p::fee_attempt_by_key(&tx, &id, key).await?
         {
             let mut result = deal(&row, actor);
             result["attempt"] = json!({
-                "id": existing.get::<_, Uuid>(0),
-                "state": existing.get::<_, String>(1),
-                "instructions": existing.get::<_, Value>(2),
+                "id": existing_id,
+                "state": existing_state,
+                "instructions": existing_instructions,
             });
             tx.commit().await?;
             return Ok(result);
         }
-        let fee = tx
-            .query_opt(
-                "SELECT fee_units::text,payer_actor,asset,precision FROM otc_p2p_fees WHERE trade_id=$1 AND state='accrued' FOR UPDATE",
-                &[&id],
-            )
-            .await?
-            .ok_or_else(|| Error::Conflict("there is no outstanding service fee for this deal".into()))?;
-        if fee.get::<_, String>(1) != actor
-            || fee.get::<_, String>(2) != "USDT"
-            || fee.get::<_, i16>(3) != 6
-        {
+        let (fee_payer, fee_units, fee_asset, fee_precision) =
+            match repo::p2p::lock_accrued_fee_payer_first(&tx, &id).await? {
+                Some(fee) => fee,
+                None => {
+                    return Err(Error::Conflict(
+                        "there is no outstanding service fee for this deal".into(),
+                    ))
+                }
+            };
+        if fee_payer != actor || fee_asset != "USDT" || fee_precision != 6 {
             return Err(Error::Unauthorized);
         }
-        let payment = tx
-            .query_opt(
-                "SELECT instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state='verified' ORDER BY updated_at DESC LIMIT 1",
-                &[&id],
-            )
-            .await?
-            .ok_or_else(|| Error::Conflict("verified stablecoin payment is required before fee collection".into()))?;
-        let payment_instructions: Value = payment.get(0);
+        let payment_instructions = repo::p2p::verified_payment_instructions(&tx, &id).await?;
         let source_asset = payment_instructions["source_asset"]
             .as_str()
             .or_else(|| payment_instructions["fee_source_asset"].as_str())
@@ -1444,7 +1316,7 @@ impl Service {
         {
             return Err(Error::RouteUnavailable);
         }
-        let fee_units = amount::integer(&fee.get::<_, String>(0))?;
+        let fee_units = amount::integer(&fee_units)?;
         let fee_amount = amount::decimal(fee_units, 6);
         let quote = provider
             .executable_quote(NearQuoteRequest {
@@ -1497,14 +1369,7 @@ impl Service {
             sender: source_address.to_string(),
             recipient: deposit_address.to_string(),
         };
-        if tx
-            .query_opt(
-                "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='fee' AND state!='failed'",
-                &[&id],
-            )
-            .await?
-            .is_some()
-        {
+        if repo::p2p::unresolved_fee_attempt(&tx, &id).await? {
             return Err(Error::Conflict(
                 "this service-fee leg already has an unresolved attempt".into(),
             ));
@@ -1540,11 +1405,7 @@ impl Service {
             "trade_id": id,
             "submit_path": format!("/p2p/attempts/{attempt}/reference"),
         });
-        tx.execute(
-            "INSERT INTO otc_p2p_attempts(id,trade_id,kind,payer_actor,chain,state,instructions,idempotency_key) VALUES($1,$2,'fee',$3,'near-intents','prepared',$4,$5)",
-            &[&attempt, &id, &actor, &instructions, &key],
-        )
-        .await?;
+        repo::p2p::insert_near_fee_attempt(&tx, &attempt, &id, actor, &instructions, key).await?;
         let mut result = deal(&row, actor);
         result["attempt"] =
             json!({"id": attempt, "state": "prepared", "instructions": instructions});
@@ -1558,22 +1419,13 @@ impl Service {
         reference: &str,
     ) -> Result<Value> {
         let client = self.pool.get().await?;
-        let row = client
-            .query_opt(
-                "SELECT a.trade_id,a.kind,a.reference,a.chain,t.owner_actor,t.taker_actor,a.instructions FROM otc_p2p_attempts a JOIN otc_p2p_trades t ON t.id=a.trade_id WHERE a.id=$1",
-                &[&attempt],
-            )
-            .await?
-            .ok_or(Error::NotFound)?;
-        let owner: String = row.get(4);
-        let taker: String = row.get(5);
+        let (trade_id, kind, existing, chain, owner, taker, instructions) =
+            repo::p2p::attempt_submit_context(&client, &attempt)
+                .await?
+                .ok_or(Error::NotFound)?;
         if actor != owner && actor != taker {
             return Err(Error::NotFound);
         }
-        let kind: String = row.get(1);
-        let chain: String = row.get(3);
-        let existing: Option<String> = row.get(2);
-        let instructions: Value = row.get(6);
         if existing.as_ref().is_some_and(|r| r != reference) {
             return Err(Error::Conflict("original reference is immutable".into()));
         }
@@ -1596,12 +1448,7 @@ impl Service {
                 return Err(invalid("invalid chain reference"));
             }
         }
-        client
-            .execute(
-                "UPDATE otc_p2p_attempts SET reference=$2,state=CASE WHEN state='prepared' THEN 'submitted' ELSE state END,updated_at=now() WHERE id=$1",
-                &[&attempt, &reference],
-            )
-            .await?;
+        repo::p2p::submit_attempt(&client, &attempt, reference).await?;
         if chain == "near-intents" {
             if let Some(provider) = &self.near_intents {
                 if let Err(error) = provider
@@ -1617,7 +1464,7 @@ impl Service {
                 }
             }
         }
-        tracing::info!(trade=%row.get::<_, Uuid>(0), kind, "otc.p2p.reference");
+        tracing::info!(trade=%trade_id, kind, "otc.p2p.reference");
         Ok(json!({"tracked": true}))
     }
     pub(crate) async fn p2p_cancel(&self, actor: &str, id: Uuid) -> Result<Value> {
@@ -1626,13 +1473,7 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let row = tx
-            .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 FOR UPDATE",
-                &[&id],
-            )
-            .await?
-            .ok_or(Error::NotFound)?;
+        let row = repo::p2p::lock_trade(&tx, &id).await?;
         let owner: String = row.get("owner_actor");
         let taker: String = row.get("taker_actor");
         let state: String = row.get("state");
@@ -1640,32 +1481,14 @@ impl Service {
         if actor != owner && actor != taker {
             return Err(Error::NotFound);
         }
-        if state != "payment_pending"
-            || tx
-                .query_opt(
-                    "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state NOT IN ('failed','verified')",
-                    &[&id],
-                )
-                .await?
-                .is_some()
-        {
+        if state != "payment_pending" || repo::p2p::open_payment_attempt(&tx, &id).await? {
             return Err(Error::Conflict(
                 "deal can only be cancelled before the stablecoin leg is sent".into(),
             ));
         }
-        tx.execute(
-            "UPDATE otc_p2p_trades SET state='cancelled',updated_at=now() WHERE id=$1",
-            &[&id],
-        )
-        .await?;
-        tx.execute(
-            "UPDATE otc_public_offers SET state='open' WHERE id=$1 AND state='taken' AND expires_at>now()",
-            &[&offer_id],
-        )
-        .await?;
-        let row = tx
-            .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
-            .await?;
+        repo::p2p::cancel_trade(&tx, &id).await?;
+        repo::p2p::reopen_offer(&tx, &offer_id).await?;
+        let row = repo::p2p::trade_by_id(&tx, &id).await?;
         let result = deal(&row, actor);
         tracing::info!(trade=%id, actor, "otc.p2p.cancelled");
         tx.commit().await?;
@@ -1673,19 +1496,8 @@ impl Service {
     }
     pub(crate) async fn p2p_tick(&self) -> Result<()> {
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                "SELECT a.id,a.trade_id,a.kind,a.chain,a.instructions,a.reference FROM otc_p2p_attempts a JOIN otc_p2p_trades t ON t.id=a.trade_id WHERE a.state IN ('prepared','submitted','confirming') AND (t.state IN ('payment_pending','delivery_pending') OR (t.state='completed' AND a.kind='fee')) ORDER BY a.created_at LIMIT 50",
-                &[],
-            )
-            .await?;
-        for row in rows {
-            let attempt: Uuid = row.get(0);
-            let id: Uuid = row.get(1);
-            let kind: String = row.get(2);
-            let chain: String = row.get(3);
-            let instructions: Value = row.get(4);
-            let mut reference: Option<String> = row.get(5);
+        let rows = repo::p2p::attempts_to_poll(&client).await?;
+        for (attempt, id, kind, chain, instructions, mut reference) in rows {
             let leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
             if chain == "near-intents" {
                 let Some(provider) = &self.near_intents else {
@@ -1746,23 +1558,23 @@ impl Service {
                         self.credit_p2p(attempt, id, &kind, &evidence).await?;
                     }
                     NearStatusOutcome::Refunded => {
-                        client
-                            .execute(
-                                "UPDATE otc_p2p_attempts SET state='failed',evidence=$2,updated_at=now() WHERE id=$1 AND state IN ('prepared','submitted','confirming')",
-                                &[&attempt, &json!({"provider":"near-intents","status":status.raw,"outcome":"refunded"})],
-                            )
-                            .await?;
+                        repo::p2p::fail_polled_attempt(
+                            &client,
+                            &attempt,
+                            &json!({"provider":"near-intents","status":status.raw,"outcome":"refunded"}),
+                        )
+                        .await?;
                     }
                     NearStatusOutcome::Pending => {
                         if status.status.eq_ignore_ascii_case("SUCCESS") {
                             tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success has no valid exact output amount");
                         }
-                        client
-                            .execute(
-                                "UPDATE otc_p2p_attempts SET state='confirming',evidence=$2,updated_at=now() WHERE id=$1 AND state IN ('submitted','confirming')",
-                                &[&attempt, &json!({"provider":"near-intents","status":status.raw})],
-                            )
-                            .await?;
+                        repo::p2p::confirm_polled_attempt(
+                            &client,
+                            &attempt,
+                            &json!({"provider":"near-intents","status":status.raw}),
+                        )
+                        .await?;
                     }
                 }
                 continue;
@@ -1793,12 +1605,7 @@ impl Service {
                     None
                 };
                 if let Some(found) = located {
-                    client
-                        .execute(
-                            "UPDATE otc_p2p_attempts SET reference=$2,state='submitted' WHERE id=$1 AND reference IS NULL",
-                            &[&attempt, &found],
-                        )
-                        .await?;
+                    repo::p2p::set_attempt_reference(&client, &attempt, &found).await?;
                     reference = Some(found);
                 }
             }
@@ -1851,68 +1658,30 @@ impl Service {
                     self.credit_p2p(attempt, id, &kind, &evidence).await?;
                 }
                 Ok(Some(evidence)) if evidence.finalized => {
-                    client
-                        .execute(
-                            "UPDATE otc_p2p_attempts SET state='failed',updated_at=now() WHERE id=$1",
-                            &[&attempt],
-                        )
-                        .await?;
+                    repo::p2p::fail_attempt(&client, &attempt).await?;
                     tracing::warn!(trade=%id, attempt=%attempt, "otc.p2p.transfer_failed");
                 }
                 Ok(Some(_)) => {
-                    client
-                        .execute(
-                            "UPDATE otc_p2p_attempts SET state='confirming',updated_at=now() WHERE id=$1 AND state='submitted'",
-                            &[&attempt],
-                        )
-                        .await?;
+                    repo::p2p::keep_confirming(&client, &attempt).await?;
                 }
                 Ok(None) => {}
                 Err(error) => {
                     // A reader disagreement or a transient RPC fault says nothing about the
                     // transfer itself; keeping the attempt open is what prevents a resend.
                     tracing::warn!(trade=%id, attempt=%attempt, error=%error, "otc.p2p.evidence_unreadable");
-                    client
-                        .execute(
-                            "UPDATE otc_p2p_attempts SET state='confirming',updated_at=now() WHERE id=$1 AND state='submitted'",
-                            &[&attempt],
-                        )
-                        .await?;
+                    repo::p2p::keep_confirming(&client, &attempt).await?;
                 }
             }
         }
         // Unpaid deals expire; the offer may return to the book.
-        let stale = client
-            .query(
-                "SELECT id,offer_id FROM otc_p2p_trades WHERE state='payment_pending' AND pay_by<now() AND NOT EXISTS(SELECT 1 FROM otc_p2p_attempts WHERE trade_id=otc_p2p_trades.id AND kind='payment' AND state='verified')",
-                &[],
-            )
-            .await?;
-        for row in stale {
-            let id: Uuid = row.get(0);
-            let offer_id: Uuid = row.get(1);
-            client
-                .execute(
-                    "UPDATE otc_p2p_trades SET state='expired',updated_at=now() WHERE id=$1 AND state='payment_pending'",
-                    &[&id],
-                )
-                .await?;
-            client
-                .execute(
-                    "UPDATE otc_public_offers SET state='open' WHERE id=$1 AND state='taken' AND expires_at>now()",
-                    &[&offer_id],
-                )
-                .await?;
+        let stale = repo::p2p::stale_trades(&client).await?;
+        for (id, offer_id) in stale {
+            repo::p2p::expire_trade(&client, &id).await?;
+            repo::p2p::reopen_offer(&client, &offer_id).await?;
             tracing::info!(trade=%id, "otc.p2p.payment_expired");
         }
-        let overdue = client
-            .query(
-                "SELECT id FROM otc_p2p_trades WHERE state='delivery_pending' AND payout_by IS NOT NULL AND payout_by<now()",
-                &[],
-            )
-            .await?;
-        for row in overdue {
-            tracing::warn!(trade=%row.get::<_, Uuid>(0), "otc.p2p.delivery_overdue");
+        for id in repo::p2p::overdue_trades(&client).await? {
+            tracing::warn!(trade=%id, "otc.p2p.delivery_overdue");
         }
         Ok(())
     }
@@ -1925,12 +1694,7 @@ impl Service {
     ) -> Result<()> {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let row = tx
-            .query_one(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 FOR UPDATE",
-                &[&id],
-            )
-            .await?;
+        let row = repo::p2p::lock_trade(&tx, &id).await?;
         let state: String = row.get("state");
         let offer_id: Uuid = row.get("offer_id");
         let body: Value = row.get("body");
@@ -1939,22 +1703,15 @@ impl Service {
                 tx.commit().await?;
                 return Ok(());
             }
-            let fee = tx.query_opt(
-                "SELECT payer_actor,fee_units::text,asset,precision FROM otc_p2p_fees WHERE trade_id=$1 AND state='accrued' FOR UPDATE",
-                &[&id],
-            ).await?;
+            let fee = repo::p2p::lock_accrued_fee_payer_first(&tx, &id).await?;
             let Some(fee) = fee else {
                 tx.commit().await?;
                 return Ok(());
             };
-            let source = tx.query_opt(
-                "SELECT payer_actor,instructions,chain FROM otc_p2p_attempts WHERE id=$1 AND trade_id=$2 AND kind='fee' FOR UPDATE",
-                &[&attempt, &id],
-            ).await?.ok_or_else(|| invalid("fee attempt was not found"))?;
-            let instructions: Value = source.get(1);
+            let (source_payer, instructions, attempt_chain) =
+                repo::p2p::lock_fee_attempt(&tx, &attempt, &id).await?;
             let expected_leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
-            let attempt_chain: String = source.get(2);
-            let fee_units: String = fee.get(1);
+            let fee_units: String = fee.1;
             let expected_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
             let expected_recipient = self.cfg.fee_recipients.get(expected_network);
             let exact_output = attempt_chain == "near-intents"
@@ -1967,9 +1724,9 @@ impl Service {
                 && expected_leg.amount == fee_units
                 && expected_leg.chain == expected_network
                 && expected_leg.recipient == expected_recipient.cloned().unwrap_or_default();
-            if source.get::<_, String>(0) != fee.get::<_, String>(0)
-                || fee.get::<_, String>(2) != "USDT"
-                || fee.get::<_, i16>(3) != 6
+            if source_payer != fee.0
+                || fee.2 != "USDT"
+                || fee.3 != 6
                 || evidence.leg != expected_leg
                 || !(exact_output || direct_transfer)
                 || !evidence.canonical
@@ -1980,14 +1737,8 @@ impl Service {
                     "fee transfer evidence does not match the outstanding fee",
                 ));
             }
-            tx.execute(
-                "UPDATE otc_p2p_attempts SET state='verified',evidence=$2,updated_at=now() WHERE id=$1 AND kind='fee' AND state IN ('submitted','confirming','prepared')",
-                &[&attempt, &serde_json::to_value(evidence)?],
-            ).await?;
-            tx.execute(
-                "UPDATE otc_p2p_fees SET state='collected',collected_at=now() WHERE trade_id=$1 AND state='accrued'",
-                &[&id],
-            ).await?;
+            repo::p2p::verify_fee_attempt(&tx, &attempt, &serde_json::to_value(evidence)?).await?;
+            repo::p2p::collect_fee(&tx, &id).await?;
             tracing::info!(trade=%id, attempt=%attempt, "otc.p2p.fee_collected");
             tx.commit().await?;
             return Ok(());
@@ -2001,11 +1752,7 @@ impl Service {
             tx.commit().await?;
             return Ok(());
         }
-        tx.execute(
-            "UPDATE otc_p2p_attempts SET state='verified',evidence=$2,updated_at=now() WHERE id=$1",
-            &[&attempt, &serde_json::to_value(evidence)?],
-        )
-        .await?;
+        repo::p2p::verify_attempt(&tx, &attempt, &serde_json::to_value(evidence)?).await?;
         let (next, payout_by) = if kind == "payment" {
             (
                 "delivery_pending",
@@ -2017,11 +1764,7 @@ impl Service {
                 row.get::<_, Option<DateTime<Utc>>>("payout_by"),
             )
         };
-        tx.execute(
-            "UPDATE otc_p2p_trades SET state=$2,payout_by=$3,updated_at=now() WHERE id=$1",
-            &[&id, &next, &payout_by],
-        )
-        .await?;
+        repo::p2p::advance_trade(&tx, &id, next, &payout_by).await?;
         if kind == "payment" {
             // Accrue the fee once payment is verified, before the seller can
             // release EVER. This lets the fee be collected before payout.
@@ -2060,18 +1803,23 @@ impl Service {
                     .ok_or_else(|| invalid("deal fee terms are malformed"))?
                     .to_string())
             };
-            tx.execute(
-                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,basis_asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,$5,6,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9::text::numeric,$10,'accrued',$11) ON CONFLICT (trade_id) DO NOTHING",
-                    &[&Uuid::new_v4(), &id, &offer_id, &fee_asset, &basis_asset, &text("basis_units")?, &text("fee_units")?, &text("net_units")?, &text("rate")?, &text("version")?, &payer_actor],
+            repo::p2p::insert_fee(
+                &tx,
+                &id,
+                &offer_id,
+                fee_asset,
+                basis_asset,
+                &text("basis_units")?,
+                &text("fee_units")?,
+                &text("net_units")?,
+                &text("rate")?,
+                &text("version")?,
+                payer_actor,
             )
             .await?;
         }
         if next == "completed" {
-            tx.execute(
-                "UPDATE otc_public_offers SET state='settled' WHERE id=$1 AND state='taken'",
-                &[&offer_id],
-            )
-            .await?;
+            repo::p2p::settle_offer(&tx, &offer_id).await?;
         }
         tracing::info!(trade=%id, kind, state=next, "otc.p2p.leg_verified");
         tx.commit().await?;

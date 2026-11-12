@@ -182,14 +182,8 @@ impl Service {
 
     pub(crate) async fn escrow_tick(&self) -> Result<()> {
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                "SELECT trade_id FROM otc_escrows ORDER BY observed_at ASC NULLS FIRST LIMIT 100",
-                &[],
-            )
-            .await?;
-        for row in rows {
-            let id: Uuid = row.get(0);
+        let rows = repo::escrow_observer::observed_escrows(&client).await?;
+        for id in rows {
             if let Err(error) = self.observe_escrow(id).await {
                 tracing::warn!(error=%error,"otc.escrow.observation_failed");
                 self.incident(
@@ -207,9 +201,10 @@ impl Service {
 
     async fn observe_escrow(&self, id: Uuid) -> Result<()> {
         let client = self.pool.get().await?;
-        let row=client.query_one("SELECT deployment,policy,safe,vault,scan_from,scanned_through FROM otc_escrows WHERE trade_id=$1", &[&id]).await?;
-        let d: Deployment = serde_json::from_value(row.get(0))?;
-        let p: EscrowPolicy = serde_json::from_value(row.get(1))?;
+        let (deployment, policy, _, _, start, _) =
+            repo::escrow_observer::observation(&client, &id).await?;
+        let d: Deployment = serde_json::from_value(deployment)?;
+        let p: EscrowPolicy = serde_json::from_value(policy)?;
         self.verify_escrow_factory(&p).await?;
         self.revalidate_escrow(id).await?;
         let final_head = self
@@ -219,15 +214,8 @@ impl Service {
                 json!(["finalized", false]),
             )
             .await?;
-        let start: String = row.get(4);
-        let cursor: Option<String> = client
-            .query_one(
-                "SELECT scanned_through FROM otc_escrows WHERE trade_id=$1",
-                &[&id],
-            )
-            .await?
-            .get(0);
-        let from = match cursor {
+        let scanned_through: Option<String> = repo::escrow_observer::cursor(&client, &id).await?;
+        let from = match scanned_through {
             Some(cursor) => format!("0x{:x}", chain::number(&json!(cursor))? + 1),
             None => start,
         };
@@ -273,7 +261,7 @@ impl Service {
             }
             let vault = format!("{:#x}", event.vault);
             let safe = format!("{:#x}", event.safe);
-            let prior_vault: Option<String> = row.get(3);
+            let (_, prior_vault) = repo::escrow_observer::deployed_addresses(&client, &id).await?;
             if prior_vault.is_some_and(|previous| previous != vault) {
                 return Err(invalid(
                     "canonical deployment changed escrow address; operator review required",
@@ -331,16 +319,15 @@ impl Service {
             self.record_escrow_event(id, "deployment", event_log, &proof, at)
                 .await?;
             let expires = at + chrono::Duration::seconds(LIFETIME_SECONDS);
-            client.execute("UPDATE otc_escrows SET safe=$2,vault=$3,deployed_at=$4,expires_at=$5,deployment_block=$6,state=CASE WHEN state='awaiting_consent' THEN 'created' ELSE state END WHERE trade_id=$1 AND (vault IS NULL OR vault=$3)", &[&id,&safe,&vault,&at,&expires,&receipt["blockHash"].as_str().ok_or_else(||invalid("missing deployment block"))?]).await?;
-        }
-        let row = client
-            .query_one(
-                "SELECT safe,vault,deployed_at FROM otc_escrows WHERE trade_id=$1",
-                &[&id],
+            let block_hash = receipt["blockHash"]
+                .as_str()
+                .ok_or_else(|| invalid("missing deployment block"))?;
+            repo::escrow_observer::record_deployment(
+                &client, &id, &safe, &vault, at, expires, block_hash,
             )
             .await?;
-        let safe: Option<String> = row.get(0);
-        let vault: Option<String> = row.get(1);
+        }
+        let (safe, vault) = repo::escrow_observer::deployed_addresses(&client, &id).await?;
         if let (Some(safe), Some(vault)) = (safe, vault) {
             let logs = if chain::number(&json!(from))? > chain::number(&final_head["number"])? {
                 json!([])
@@ -364,31 +351,12 @@ impl Service {
                     .await?;
             }
         } else if chain::number(&final_head["timestamp"])? > d.valid_until as u128 {
-            client
-                .execute(
-                    "UPDATE otc_escrows SET state='expired' WHERE trade_id=$1 AND safe IS NULL",
-                    &[&id],
-                )
-                .await?;
-            client.execute("UPDATE otc_trades SET state='expired',updated_at=now() WHERE id=$1 AND state='accepted'", &[&id]).await?;
-            client
-                .execute(
-                    "UPDATE otc_reservations SET status='released' WHERE trade_id=$1",
-                    &[&id],
-                )
-                .await?;
+            repo::escrow_observer::expire_unsigned(&client, &id).await?;
+            repo::escrow_observer::expire_trade(&client, &id).await?;
+            repo::escrow_observer::release_reservation(&client, &id).await?;
         }
         self.observe_escrow_calls(id, &final_head).await?;
-        client
-            .execute(
-                "UPDATE otc_escrows SET observed_at=CASE WHEN $3 THEN now() ELSE NULL END,scanned_through=$2 WHERE trade_id=$1",
-                &[
-                    &id,
-                    &scan_end_hex,
-                    &caught_up,
-                ],
-            )
-            .await?;
+        repo::escrow_observer::record_progress(&client, &id, &scan_end_hex, caught_up).await?;
         self.finish_escrow(id).await
     }
 
@@ -414,8 +382,8 @@ impl Service {
             self.record_escrow_event(id, "funding", log, proof, at)
                 .await?;
             let client = self.pool.get().await?;
-            client.execute("UPDATE otc_escrows SET state=CASE WHEN state IN ('created','review') THEN 'funded' ELSE state END WHERE trade_id=$1", &[&id]).await?;
-            client.execute("UPDATE otc_reservations r SET status='debit' FROM otc_trades t WHERE r.trade_id=$1 AND t.id=r.trade_id AND t.terms->>'direction'='sell'", &[&id]).await?;
+            repo::escrow_observer::mark_funded(&client, &id).await?;
+            repo::escrow_observer::debit_sell_reservation(&client, &id).await?;
         }
         for log in event_logs::<Vault::Released>(receipt, vault) {
             let event = decode::<Vault::Released>(log)?;
@@ -431,14 +399,7 @@ impl Service {
             exact_transfer(receipt, vault, &d.seller, &d.usdt_amount)?;
             self.record_escrow_event(id, "release", log, proof, at)
                 .await?;
-            self.pool
-                .get()
-                .await?
-                .execute(
-                    "UPDATE otc_escrows SET state='released' WHERE trade_id=$1",
-                    &[&id],
-                )
-                .await?;
+            repo::escrow_observer::mark_released(&self.pool.get().await?, &id).await?;
         }
         for log in event_logs::<Vault::Refunded>(receipt, vault) {
             let event = decode::<Vault::Refunded>(log)?;
@@ -454,14 +415,7 @@ impl Service {
             exact_transfer(receipt, vault, &d.buyer, &d.usdt_amount)?;
             self.record_escrow_event(id, "refund", log, proof, at)
                 .await?;
-            self.pool
-                .get()
-                .await?
-                .execute(
-                    "UPDATE otc_escrows SET state='refunded' WHERE trade_id=$1",
-                    &[&id],
-                )
-                .await?;
+            repo::escrow_observer::mark_refunded(&self.pool.get().await?, &id).await?;
         }
         for log in event_logs::<Vault::Expired>(receipt, vault) {
             let event = decode::<Vault::Expired>(log)?;
@@ -470,14 +424,7 @@ impl Service {
             }
             self.record_escrow_event(id, "expiry", log, proof, at)
                 .await?;
-            self.pool
-                .get()
-                .await?
-                .execute(
-                    "UPDATE otc_escrows SET state='expired' WHERE trade_id=$1",
-                    &[&id],
-                )
-                .await?;
+            repo::escrow_observer::mark_expired(&self.pool.get().await?, &id).await?;
         }
         Ok(())
     }
@@ -499,23 +446,16 @@ impl Service {
         );
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        tx.query_one("SELECT id FROM otc_trades WHERE id=$1 FOR UPDATE", &[&id])
-            .await?;
-        if let Some(previous) = tx
-            .query_opt(
-                "SELECT identity FROM otc_escrow_evidence WHERE trade_id=$1 AND kind=$2",
-                &[&id, &kind],
-            )
-            .await?
-        {
-            if previous.get::<_, String>(0) != identity {
+        repo::escrow_observer::lock_trade(&tx, &id).await?;
+        if let Some(previous) = repo::escrow_observer::evidence_identity(&tx, &id, kind).await? {
+            if previous != identity {
                 return Err(Error::Conflict(
                     "escrow event already has another credited identity".into(),
                 ));
             }
-            tx.execute("UPDATE otc_escrow_evidence SET valid=TRUE,evidence=$3,last_checked_at=now() WHERE trade_id=$1 AND kind=$2", &[&id,&kind,&proof]).await?;
+            repo::escrow_observer::refresh_evidence(&tx, &id, kind, proof).await?;
         } else {
-            tx.execute("INSERT INTO otc_escrow_evidence(trade_id,kind,identity,evidence,included_at) VALUES($1,$2,$3,$4,$5)", &[&id,&kind,&identity,&proof,&at]).await?;
+            repo::escrow_observer::insert_evidence(&tx, &id, kind, &identity, proof, at).await?;
             repo::event(
                 &tx,
                 Some(id),
@@ -531,15 +471,8 @@ impl Service {
 
     async fn revalidate_escrow(&self, id: Uuid) -> Result<()> {
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                "SELECT kind,evidence FROM otc_escrow_evidence WHERE trade_id=$1 AND valid",
-                &[&id],
-            )
-            .await?;
-        for row in rows {
-            let kind: String = row.get(0);
-            let previous: Value = row.get(1);
+        let rows = repo::escrow_observer::valid_evidence(&client, &id).await?;
+        for (kind, previous) in rows {
             let reference = previous["receipt"]["transactionHash"]
                 .as_str()
                 .ok_or_else(|| invalid("missing saved escrow receipt"))?;
@@ -550,23 +483,10 @@ impl Service {
             }) {
                 let mut c = self.pool.get().await?;
                 let tx = c.transaction().await?;
-                tx.query_one("SELECT id FROM otc_trades WHERE id=$1 FOR UPDATE", &[&id])
-                    .await?;
-                tx.execute(
-                    "UPDATE otc_escrow_evidence SET valid=FALSE WHERE trade_id=$1 AND kind=$2",
-                    &[&id, &kind],
-                )
-                .await?;
-                tx.execute(
-                    "UPDATE otc_escrows SET state='review',scanned_through=NULL WHERE trade_id=$1",
-                    &[&id],
-                )
-                .await?;
-                tx.execute(
-                    "UPDATE otc_trades SET state='review',updated_at=now() WHERE id=$1",
-                    &[&id],
-                )
-                .await?;
+                repo::escrow_observer::lock_trade(&tx, &id).await?;
+                repo::escrow_observer::invalidate_evidence(&tx, &id, &kind).await?;
+                repo::escrow_observer::review_escrow(&tx, &id).await?;
+                repo::escrow_observer::review_trade(&tx, &id).await?;
                 repo::event(
                     &tx,
                     Some(id),
@@ -591,17 +511,15 @@ impl Service {
 
     async fn observe_escrow_calls(&self, id: Uuid, head: &Value) -> Result<()> {
         let client = self.pool.get().await?;
-        let calls=client.query("SELECT id,instructions,reference,scan_cursor FROM otc_escrow_calls WHERE trade_id=$1 AND state IN ('unknown','submitted')", &[&id]).await?;
-        for call in calls {
-            let call_id: Uuid = call.get(0);
-            let instructions: Value = call.get(1);
-            let mut reference: Option<String> = call.get(2);
+        let calls = repo::escrow_observer::open_calls(&client, &id).await?;
+        for (call_id, instructions, mut reference, cursor) in calls {
+            let start = chain::number(
+                &cursor
+                    .clone()
+                    .map_or_else(|| instructions["checkpoint"].clone(), |s| json!(s)),
+            )?;
             if reference.is_none() {
                 // Search from the saved handoff checkpoint. Never infer failure from elapsed time.
-                let cursor: Option<String> = call.get(3);
-                let start = chain::number(
-                    &cursor.map_or_else(|| instructions["checkpoint"].clone(), |s| json!(s)),
-                )?;
                 let end = chain::number(&head["number"])?;
                 for height in start..=end.min(start + 31) {
                     let block = self
@@ -623,18 +541,14 @@ impl Service {
                 }
             }
             let Some(reference) = reference else {
-                let cursor: Option<String> = call.get(3);
-                let start = chain::number(
-                    &cursor.map_or_else(|| instructions["checkpoint"].clone(), |s| json!(s)),
-                )?;
                 let end = chain::number(&head["number"])?;
                 if end >= start {
-                    client
-                        .execute(
-                            "UPDATE otc_escrow_calls SET scan_cursor=$2 WHERE id=$1",
-                            &[&call_id, &format!("0x{:x}", end.min(start + 31) + 1)],
-                        )
-                        .await?;
+                    repo::escrow_observer::advance_call_cursor(
+                        &client,
+                        &call_id,
+                        &format!("0x{:x}", end.min(start + 31) + 1),
+                    )
+                    .await?;
                 }
                 continue;
             };
@@ -651,11 +565,7 @@ impl Service {
             } else {
                 "failed"
             };
-            client
-                .execute(
-                    "UPDATE otc_escrow_calls SET reference=$2,state=$3,evidence=$4 WHERE id=$1",
-                    &[&call_id, &reference, &state, &proof],
-                )
+            repo::escrow_observer::resolve_call(&client, &call_id, &reference, state, &proof)
                 .await?;
         }
         Ok(())
@@ -664,47 +574,24 @@ impl Service {
     pub(super) async fn finish_escrow(&self, id: Uuid) -> Result<()> {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let row = tx
-            .query_one("SELECT * FROM otc_trades WHERE id=$1 FOR UPDATE", &[&id])
-            .await?;
+        let row = repo::escrow_observer::lock_escrow_trade(&tx, &id).await?;
         let trade = repo::trade(&row)?;
-        let escrow = tx
-            .query_one(
-                "SELECT state,expires_at FROM otc_escrows WHERE trade_id=$1 FOR UPDATE",
-                &[&id],
-            )
-            .await?;
-        let state: String = escrow.get(0);
-        let expires: Option<DateTime<Utc>> = escrow.get(1);
+        let (state, expires) = repo::escrow_observer::lock_escrow_state(&tx, &id).await?;
         let ever_kind = if trade.terms.direction == Direction::Buy {
             "payout"
         } else {
             "payment"
         };
-        let delivered = tx
-            .query_opt(
-                "SELECT included_at FROM otc_evidence WHERE trade_id=$1 AND kind=$2 AND valid",
-                &[&id, &ever_kind],
-            )
-            .await?;
-        let funding=tx.query_opt("SELECT included_at FROM otc_escrow_evidence WHERE trade_id=$1 AND kind='funding' AND valid", &[&id]).await?;
-        let released=tx.query_opt("SELECT identity FROM otc_escrow_evidence WHERE trade_id=$1 AND kind='release' AND valid", &[&id]).await?.is_some();
-        let refunded=tx.query_opt("SELECT identity FROM otc_escrow_evidence WHERE trade_id=$1 AND kind='refund' AND valid", &[&id]).await?.is_some();
-        let unresolved=tx.query_opt("SELECT id FROM otc_attempts WHERE trade_id=$1 AND state IN ('prepared','unknown','submitted','confirming','review')", &[&id]).await?.is_some();
-        let timely = match (&delivered, &funding, expires) {
-            (Some(ever), Some(funding), Some(expiry)) => {
-                ever.get::<_, DateTime<Utc>>(0) < expiry
-                    && ever.get::<_, DateTime<Utc>>(0) >= funding.get::<_, DateTime<Utc>>(0)
-            }
+        let delivered = repo::escrow_observer::valid_evidence_at(&tx, &id, ever_kind).await?;
+        let funding = repo::escrow_observer::funding_at(&tx, &id).await?;
+        let released = repo::escrow_observer::released(&tx, &id).await?;
+        let refunded = repo::escrow_observer::refunded(&tx, &id).await?;
+        let unresolved = repo::escrow_observer::has_unresolved_attempt(&tx, &id).await?;
+        let timely = match (delivered, funding, expires) {
+            (Some(ever), Some(funding), Some(expiry)) => ever < expiry && ever >= funding,
             _ => false,
         };
-        let invalidated = tx
-            .query_opt(
-                "SELECT kind FROM otc_escrow_evidence WHERE trade_id=$1 AND NOT valid LIMIT 1",
-                &[&id],
-            )
-            .await?
-            .is_some();
+        let invalidated = repo::escrow_observer::has_invalidated_evidence(&tx, &id).await?;
         let next = if invalidated || released && refunded {
             "review"
         } else if released && timely && !unresolved {
@@ -716,7 +603,14 @@ impl Service {
             {
                 return Err(invalid("escrow completion fee mismatch"));
             }
-            tx.execute("INSERT INTO otc_ledger(id,trade_id,kind,currency,amount,policy) VALUES($1,$2,'fee_accrued','USDT',$3::text::numeric,$4) ON CONFLICT DO NOTHING", &[&Uuid::new_v4(),&id,&fee.fee_units,&serde_json::to_value(fee)?]).await?;
+            repo::escrow_observer::insert_fee(
+                &tx,
+                &Uuid::new_v4(),
+                &id,
+                &fee.fee_units,
+                &serde_json::to_value(fee)?,
+            )
+            .await?;
             let confirmation = json!({"@context":protocol::context(),"id":format!("{}/confirmations/{id}",trade.terms.desk_actor),"type":"Create","actor":trade.terms.desk_actor,"to":[trade.terms.customer_actor],"object":{"id":format!("{}/confirmations/{id}/receipt",trade.terms.desk_actor),"type":"Document","context":trade.decision.as_ref().map(|d|&d["result"]["id"]),"name":"OTC trade completed","content":"USDT escrow release and native EVER delivery have been verified."}});
             repo::enqueue(&tx, &trade.terms.desk_actor, &confirmation, "confirmation").await?;
             "completed"
@@ -739,11 +633,7 @@ impl Service {
             trade.state.as_str()
         };
         if next != trade.state {
-            tx.execute(
-                "UPDATE otc_trades SET state=$2,updated_at=now() WHERE id=$1",
-                &[&id, &next],
-            )
-            .await?;
+            repo::escrow_observer::set_trade_state(&tx, &id, next).await?;
             repo::event(
                 &tx,
                 Some(id),
@@ -754,7 +644,7 @@ impl Service {
             .await?;
         }
         if matches!(next, "expired" | "refunded") {
-            tx.execute("UPDATE otc_reservations SET status='released' WHERE trade_id=$1 AND status='active'", &[&id]).await?;
+            repo::escrow_observer::release_active_reservation(&tx, &id).await?;
         }
         tx.commit().await?;
         if next == "review" {

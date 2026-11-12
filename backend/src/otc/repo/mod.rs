@@ -1,5 +1,8 @@
 pub(crate) mod accounting;
 pub(crate) mod booking;
+pub(crate) mod escrow;
+pub(crate) mod escrow_observer;
+pub(crate) mod p2p;
 pub(crate) mod review;
 
 use super::{
