@@ -1,4 +1,6 @@
+pub(crate) mod accounting;
 pub(crate) mod booking;
+pub(crate) mod review;
 
 use super::{
     error::{Error, Result},

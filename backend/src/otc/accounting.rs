@@ -1,7 +1,7 @@
 use super::{
     amount,
     error::{invalid, Error, Result},
-    Service,
+    repo, Service,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -37,33 +37,36 @@ impl Service {
         };
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let trade = tx
-            .query_opt(
-                "SELECT state FROM otc_trades WHERE id=$1 AND desk_actor=$2 FOR UPDATE",
-                &[&request.trade_id, &actor],
-            )
-            .await?
-            .ok_or(Error::NotFound)?;
+        let trade_state = repo::accounting::lock_desk_trade(&tx, &request.trade_id, actor).await?;
         let policy =
             json!({"reference":request.reference,"idempotency_key":request.idempotency_key});
-        if let Some(row)=tx.query_opt("SELECT id,kind,amount::text,policy FROM otc_ledger WHERE trade_id=$1 AND policy->>'idempotency_key'=$2",&[&request.trade_id,&request.idempotency_key]).await? {
-            if row.get::<_,String>(1)!=request.kind || row.get::<_,String>(2)!=units.to_string() || row.get::<_,Value>(3)!=policy {return Err(Error::Conflict("accounting key reused with different entry".into()));}
-            return Ok(json!({"id":row.get::<_,Uuid>(0)}));
+        if let Some((id, kind, stored_units, stored_policy)) =
+            repo::accounting::entry_by_key(&tx, &request.trade_id, &request.idempotency_key).await?
+        {
+            if kind != request.kind || stored_units != units.to_string() || stored_policy != policy
+            {
+                return Err(Error::Conflict(
+                    "accounting key reused with different entry".into(),
+                ));
+            }
+            return Ok(json!({"id":id}));
         }
         if ["fee_collected", "fee_compensation", "fee_refunded"].contains(&request.kind.as_str()) {
-            let row=tx.query_one("SELECT COALESCE(sum(amount) FILTER(WHERE kind='fee_accrued'),0)::text, COALESCE(sum(amount) FILTER(WHERE kind='fee_collected'),0)::text,COALESCE(sum(amount) FILTER(WHERE kind='fee_compensation'),0)::text,COALESCE(sum(amount) FILTER(WHERE kind='fee_refunded'),0)::text FROM otc_ledger WHERE trade_id=$1",&[&request.trade_id]).await?;
-            let accrued = amount::integer(&row.get::<_, String>(0))?;
-            let collected = amount::integer(&row.get::<_, String>(1))?;
-            let compensated = amount::integer(&row.get::<_, String>(2))?;
-            let refunded = amount::integer(&row.get::<_, String>(3))?;
+            let (accrued, collected, compensated, refunded) =
+                repo::accounting::fee_totals(&tx, &request.trade_id).await?;
+            let accrued = amount::integer(&accrued)?;
+            let collected = amount::integer(&collected)?;
+            let compensated = amount::integer(&compensated)?;
+            let refunded = amount::integer(&refunded)?;
             let outstanding = match request.kind.as_str() {
                 "fee_collected" => {
-                    if trade.get::<_, String>(0) != "completed" {
+                    if trade_state != "completed" {
                         return Err(invalid(
                             "only verified completed trades may be invoiced or collected",
                         ));
                     }
-                    let valid:i64=tx.query_one("SELECT count(*) FROM otc_evidence WHERE trade_id=$1 AND valid AND kind IN ('payment','payout')",&[&request.trade_id]).await?.get(0);
+                    let valid =
+                        repo::accounting::valid_payment_receipts(&tx, &request.trade_id).await?;
                     if valid != 2 {
                         return Err(invalid("both valid receipts required for fee collection"));
                     }
@@ -81,7 +84,17 @@ impl Service {
             }
         }
         let id = Uuid::new_v4();
-        tx.execute("INSERT INTO otc_ledger(id,trade_id,kind,currency,amount,policy,authorized_by) VALUES($1,$2,$3,$4,$5::text::numeric,$6,$7)",&[&id,&request.trade_id,&request.kind,&currency,&units.to_string(),&policy,&actor]).await?;
+        repo::accounting::insert_entry(
+            &tx,
+            &id,
+            &request.trade_id,
+            &request.kind,
+            currency,
+            &units.to_string(),
+            &policy,
+            actor,
+        )
+        .await?;
         super::repo::event(
             &tx,
             Some(request.trade_id),

@@ -5,24 +5,20 @@ use super::{
     repo, Service,
 };
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::json;
 use uuid::Uuid;
 
 impl Service {
     pub(crate) async fn refund_leg(&self, id: Uuid, mut leg: Leg) -> Result<Leg> {
         let client = self.pool.get().await?;
-        if client
-            .query_opt(
-                "SELECT identity FROM otc_evidence WHERE trade_id=$1 AND kind='payment' AND valid",
-                &[&id],
-            )
-            .await?
-            .is_some()
-        {
+        if repo::review::has_valid_payment(&client, &id).await? {
             return Ok(leg);
         }
-        let row=client.query_opt("SELECT evidence FROM otc_evidence WHERE trade_id=$1 AND kind='review_payment' AND valid",&[&id]).await?.ok_or_else(||invalid("verified customer receipt required for refund"))?;
-        let actual: Evidence = serde_json::from_value(row.get(0))?;
+        let actual: Evidence = serde_json::from_value(
+            repo::review::valid_review_evidence(&client, &id)
+                .await?
+                .ok_or_else(|| invalid("verified customer receipt required for refund"))?,
+        )?;
         let allowance =
             amount::integer(&leg.transfer_amount)?.saturating_sub(amount::integer(&leg.amount)?);
         leg.amount = actual.leg.amount;
@@ -66,15 +62,10 @@ impl Service {
                 "review receipt does not belong to this customer and desk",
             ));
         }
-        if let Some(existing) = tx
-            .query_opt(
-                "SELECT trade_id,kind,evidence FROM otc_evidence WHERE chain=$1 AND identity=$2",
-                &[&evidence.chain, &evidence.identity],
-            )
-            .await?
+        if let Some((existing_id, existing_kind, existing_evidence)) =
+            repo::review::evidence_by_identity(&tx, &evidence.chain, &evidence.identity).await?
         {
-            if existing.get::<_, Uuid>(0) != id || existing.get::<_, String>(1) != "review_payment"
-            {
+            if existing_id != id || existing_kind != "review_payment" {
                 return Err(Error::Conflict(
                     "review evidence already belongs to another leg".into(),
                 ));
@@ -84,23 +75,28 @@ impl Service {
                 Some(id),
                 None,
                 "review_evidence_reconciled",
-                &json!({"previous":existing.get::<_,Value>(2),"current":evidence}),
+                &json!({"previous":existing_evidence,"current":evidence}),
             )
             .await?;
-            tx.execute("UPDATE otc_evidence SET valid=TRUE,evidence=$3,included_at=$4 WHERE trade_id=$1 AND kind=$2",&[&id,&"review_payment",&serde_json::to_value(evidence)?,&evidence.included_at]).await?;
+            repo::review::replace_review_evidence(
+                &tx,
+                &id,
+                &serde_json::to_value(evidence)?,
+                evidence.included_at,
+            )
+            .await?;
         } else {
-            tx.execute("INSERT INTO otc_evidence(chain,identity,trade_id,kind,evidence,included_at) VALUES($1,$2,$3,'review_payment',$4,$5)",&[&evidence.chain,&evidence.identity,&id,&serde_json::to_value(evidence)?,&evidence.included_at]).await?;
+            repo::review::insert_review_evidence(
+                &tx,
+                &evidence.chain,
+                &evidence.identity,
+                &id,
+                &serde_json::to_value(evidence)?,
+                evidence.included_at,
+            )
+            .await?;
         }
-        tx.execute(
-            "UPDATE otc_trades SET state='review',updated_at=now() WHERE id=$1",
-            &[&id],
-        )
-        .await?;
-        tx.execute(
-            "UPDATE otc_attempts SET state='review',updated_at=now() WHERE id=$1",
-            &[&attempt],
-        )
-        .await?;
+        repo::review::mark_review_state(&tx, &id, &attempt).await?;
         repo::event(
             &tx,
             Some(id),
