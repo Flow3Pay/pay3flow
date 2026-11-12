@@ -1,7 +1,6 @@
-use super::{error::Result, model::Evidence, Service};
+use super::{error::Result, model::Evidence, repo, Service};
 use chrono::Utc;
 use serde_json::json;
-use uuid::Uuid;
 impl Service {
     pub(crate) async fn tick(&self) -> Result<()> {
         if self.p2p_available() {
@@ -10,22 +9,14 @@ impl Service {
             }
         }
         if !self.cfg.enabled {
-            let pending:i64=self.pool.get().await?.query_one("SELECT count(*) FROM otc_trades WHERE state NOT IN ('completed','refunded','rejected','expired')",&[]).await?.get(0);
+            let pending = repo::workers::open_trades(&self.pool.get().await?).await?;
             if pending == 0 {
                 return Ok(());
             }
         }
         let client = self.pool.get().await?;
-        client
-            .execute(
-                "UPDATE otc_controls SET demo=$1 WHERE singleton AND demo IS NULL",
-                &[&self.cfg.demo],
-            )
-            .await?;
-        let mode: bool = client
-            .query_one("SELECT demo FROM otc_controls WHERE singleton", &[])
-            .await?
-            .get(0);
+        repo::workers::initialize_mode(&client, self.cfg.demo).await?;
+        let mode = repo::workers::mode(&client).await?;
         if mode != self.cfg.demo {
             return Err(super::error::Error::Disabled);
         }
@@ -74,14 +65,15 @@ impl Service {
                     } else {
                         super::amount::units(&self.cfg.ever_gas_reserve, 9)?.to_string()
                     };
-                    tx.execute("INSERT INTO otc_inventory(chain,balance,gas_reserve,observed_at,snapshot) VALUES($1,$2::text::numeric,$3::text::numeric,now(),$4) ON CONFLICT(chain) DO UPDATE SET balance=$2::text::numeric,gas_reserve=$3::text::numeric,observed_at=now(),snapshot=$4",&[&chain,&balance,&gas,&checkpoint]).await?;
-                    tx.execute("UPDATE otc_reservations r SET status='released' WHERE chain=$1 AND status='debit' AND EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=r.trade_id AND e.kind IN ('payout','refund') AND e.valid AND e.included_at<=$2)",&[&chain,&at]).await?;
-                    tx.execute("UPDATE otc_reservations r SET status='released' WHERE chain='ethereum' AND $1='ethereum' AND status='debit' AND EXISTS(SELECT 1 FROM otc_escrow_evidence e WHERE e.trade_id=r.trade_id AND e.kind='funding' AND e.valid AND e.included_at<=$2)", &[&chain,&at]).await?;
-                    tx.execute("UPDATE otc_observers SET checkpoint=$2,last_scan=now(),failures=0,lag=$3,paused=FALSE,last_error=NULL WHERE chain=$1",&[&chain,&checkpoint,&(lag as i64)]).await?;
+                    repo::workers::record_inventory(&tx, chain, &balance, &gas, &checkpoint)
+                        .await?;
+                    repo::workers::release_settled_debits(&tx, chain, &at).await?;
+                    repo::workers::release_escrow_debits(&tx, chain, &at).await?;
+                    repo::workers::record_scan(&tx, chain, &checkpoint, lag as i64).await?;
                 }
                 Err(error) => {
                     tracing::warn!(chain,error=%error,"otc.observer.scan_failed");
-                    tx.execute("UPDATE otc_observers SET failures=failures+1,paused=TRUE,last_error='scan failed' WHERE chain=$1",&[&chain]).await?;
+                    repo::workers::record_scan_failure(&tx, chain).await?;
                 }
             }
             tx.commit().await?;
@@ -90,11 +82,9 @@ impl Service {
     }
     async fn revalidate(&self) -> Result<()> {
         let client = self.pool.get().await?;
-        let rows=client.query("SELECT trade_id,kind,evidence FROM otc_evidence WHERE valid ORDER BY last_checked_at ASC NULLS FIRST LIMIT 100",&[]).await?;
-        for row in rows {
-            let id: Uuid = row.get(0);
-            let kind: String = row.get(1);
-            let evidence: Evidence = serde_json::from_value(row.get(2))?;
+        let rows = repo::workers::revalidate(&client).await?;
+        for (id, kind, raw) in rows {
+            let evidence: Evidence = serde_json::from_value(raw)?;
             let invalid = if evidence.chain == "ethereum" {
                 let reference = evidence.raw["receipt"]["transactionHash"]
                     .as_str()
@@ -139,26 +129,22 @@ impl Service {
                     Err(_) => false,
                 }
             };
-            client
-                .execute(
-                    "UPDATE otc_evidence SET last_checked_at=now() WHERE trade_id=$1 AND kind=$2",
-                    &[&id, &kind],
-                )
-                .await?;
+            repo::workers::mark_evidence_checked(&client, &id, &kind).await?;
             if invalid {
                 let mut client = self.pool.get().await?;
                 let tx = client.transaction().await?;
-                tx.execute(
-                    "UPDATE otc_evidence SET valid=FALSE WHERE trade_id=$1 AND kind=$2",
-                    &[&id, &kind],
+                repo::workers::invalidate_evidence(&tx, &id, &kind).await?;
+                repo::workers::review_trade(&tx, &id).await?;
+                repo::workers::mark_attempts_unknown(
+                    &tx,
+                    &id,
+                    if kind == "review_payment" {
+                        "payment"
+                    } else {
+                        &kind
+                    },
                 )
                 .await?;
-                tx.execute(
-                    "UPDATE otc_trades SET state='review',updated_at=now() WHERE id=$1",
-                    &[&id],
-                )
-                .await?;
-                tx.execute("UPDATE otc_attempts SET state='unknown' WHERE trade_id=$1 AND kind=$2 AND state IN ('verified','review')",&[&id,&if kind=="review_payment" {"payment"}else{&kind}]).await?;
                 super::repo::event(
                     &tx,
                     Some(id),
@@ -182,9 +168,7 @@ impl Service {
     }
     pub(crate) async fn alert_tick(&self) -> Result<()> {
         let client = self.pool.get().await?;
-        let rows=client.query("SELECT id FROM otc_trades WHERE state NOT IN ('completed','refunded','rejected','expired') AND terms->'escrow' IS NULL AND (terms->>'payout_by')::timestamptz<now() AND EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=otc_trades.id AND e.kind IN ('payment','review_payment'))",&[]).await?;
-        for row in rows {
-            let id: Uuid = row.get(0);
+        for id in repo::workers::overdue_payouts(&client).await? {
             self.incident(
                 &format!("overdue:{id}"),
                 "P1",
@@ -194,20 +178,67 @@ impl Service {
             )
             .await?;
         }
-        for row in client.query("SELECT trade_id,id FROM otc_attempts WHERE kind IN ('payout','refund') AND state='unknown'",&[]).await?{let id:Uuid=row.get(0);let attempt:Uuid=row.get(1);self.incident(&format!("unknown-outgoing:{attempt}"),"P1",Some(id),"payout",json!({"attempt":attempt})).await?;}
-        for row in client.query("SELECT chain FROM otc_observers WHERE paused OR failures>=3 OR last_scan IS NULL OR last_scan<now()-interval '60 seconds'",&[]).await?{
-            let chain:String=row.get(0);let count:i64=client.query_one("SELECT count(*) FROM otc_trades t WHERE state NOT IN ('completed','refunded','rejected','expired') AND (EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=t.id AND e.kind IN ('payment','review_payment')) OR EXISTS(SELECT 1 FROM otc_escrow_evidence e WHERE e.trade_id=t.id AND e.kind='funding' AND valid))",&[]).await?.get(0);
-            self.incident(&format!("observer:{chain}"),if count>0{"P1"}else{"P2"},None,"observer",json!({"chain":chain})).await?;
+        for (id, attempt) in repo::workers::unknown_outgoing(&client).await? {
+            self.incident(
+                &format!("unknown-outgoing:{attempt}"),
+                "P1",
+                Some(id),
+                "payout",
+                json!({"attempt":attempt}),
+            )
+            .await?;
         }
-        for row in client.query("SELECT activity_id FROM otc_outbox WHERE delivered_at IS NULL AND created_at<now()-interval '60 seconds'",&[]).await?{let id:String=row.get(0);self.incident(&format!("delivery:{id}"),"P2",None,"federation",json!({"activity":id})).await?;}
-        for row in client.query("SELECT id FROM otc_trades WHERE state='booking_pending' AND updated_at<now()-interval '60 seconds'",&[]).await?{let id:Uuid=row.get(0);self.incident(&format!("booking:{id}"),"P2",Some(id),"federation",json!({})).await?;}
-        for row in client.query("SELECT r.trade_id FROM otc_reservations r JOIN otc_inventory i ON i.chain=r.chain WHERE r.status!='released' AND i.balance-i.gas_reserve<(SELECT COALESCE(sum(amount),0) FROM otc_reservations WHERE chain=i.chain AND status!='released')",&[]).await? {
-            let id:Uuid=row.get(0);let funded=client.query_opt("SELECT identity FROM otc_evidence WHERE trade_id=$1 AND kind IN ('payment','review_payment') AND valid UNION ALL SELECT identity FROM otc_escrow_evidence WHERE trade_id=$1 AND kind='funding' AND valid LIMIT 1",&[&id]).await?.is_some();
-            self.incident(&format!("inventory:{id}"),if funded {"P1"}else{"P2"},Some(id),"payout",json!({"shortfall":true})).await?;
+        for chain in repo::workers::unhealthy_observers(&client).await? {
+            let count = repo::workers::funded_open_trades(&client).await?;
+            self.incident(
+                &format!("observer:{chain}"),
+                if count > 0 { "P1" } else { "P2" },
+                None,
+                "observer",
+                json!({"chain":chain}),
+            )
+            .await?;
         }
-        for row in client.query("SELECT trade_id,incident_key FROM otc_incidents WHERE closed_at IS NULL AND trade_id IS NOT NULL AND next_update_at<now()",&[]).await? {
-            let id:Uuid=row.get(0);let key:String=row.get(1);
-            self.incident(&format!("customer-update:{id}"),"P1",Some(id),"payout",json!({"overdue_update_for":key})).await?;
+        for id in repo::workers::undelivered_outbox(&client).await? {
+            self.incident(
+                &format!("delivery:{id}"),
+                "P2",
+                None,
+                "federation",
+                json!({"activity":id}),
+            )
+            .await?;
+        }
+        for id in repo::workers::stale_bookings(&client).await? {
+            self.incident(
+                &format!("booking:{id}"),
+                "P2",
+                Some(id),
+                "federation",
+                json!({}),
+            )
+            .await?;
+        }
+        for id in repo::workers::inventory_shortfalls(&client).await? {
+            let funded = repo::workers::case_funded(&client, &id).await?;
+            self.incident(
+                &format!("inventory:{id}"),
+                if funded { "P1" } else { "P2" },
+                Some(id),
+                "payout",
+                json!({"shortfall":true}),
+            )
+            .await?;
+        }
+        for (id, key) in repo::workers::stale_updates(&client).await? {
+            self.incident(
+                &format!("customer-update:{id}"),
+                "P1",
+                Some(id),
+                "payout",
+                json!({"overdue_update_for":key}),
+            )
+            .await?;
         }
         let desk = &self.cfg.desk_actor;
         let dashboard = self.dashboard(desk).await?;
@@ -226,8 +257,11 @@ impl Service {
             )
             .await?;
         }
-        for row in client.query("SELECT t.id FROM otc_trades t LEFT JOIN otc_ledger l ON l.trade_id=t.id AND l.kind='fee_accrued' WHERE (t.state='completed' AND (l.id IS NULL OR l.amount!=(t.terms->'fee_policy'->>'fee_units')::numeric)) OR (t.state IN ('refunded','rejected','expired') AND l.id IS NOT NULL)",&[]).await?{let id:Uuid=row.get(0);self.incident(&format!("fee:{id}"),"P2",Some(id),"fees",json!({})).await?;}
-        client.execute("UPDATE otc_trades SET state='expired',updated_at=now() WHERE state='quoted' AND (terms->>'quote_by')::timestamptz<now()",&[]).await?;
+        for id in repo::workers::fee_mismatches(&client).await? {
+            self.incident(&format!("fee:{id}"), "P2", Some(id), "fees", json!({}))
+                .await?;
+        }
+        repo::workers::expire_quotes(&client).await?;
         Ok(())
     }
 }

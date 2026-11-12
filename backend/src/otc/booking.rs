@@ -223,8 +223,7 @@ impl Service {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         // Serialize all selections for a customer, including different trade rows.
-        tx.execute("SELECT pg_advisory_xact_lock(hashtext($1))", &[&actor])
-            .await?;
+        tx.execute(repo::booking::ACTOR_LOCK, &[&actor]).await?;
         let trade = repo::booking::lock_customer_trade(&tx, &id, actor).await?;
         if trade.offer.is_some() {
             return Ok(serde_json::to_value(trade)?);
@@ -288,10 +287,10 @@ impl Service {
         )?;
         let decision = if accept {
             let chain = trade.terms.direction.output_chain();
-            let row=tx.query_opt("SELECT balance::text,gas_reserve::text FROM otc_inventory WHERE chain=$1 AND observed_at>now()-interval '60 seconds' FOR UPDATE",&[&chain]).await?.ok_or(Error::Disabled)?;
-            let balance = amount::integer(&row.get::<_, String>(0))?;
-            let gas = amount::integer(&row.get::<_, String>(1))?;
-            let reserved:String=tx.query_one("SELECT COALESCE(sum(amount),0)::text FROM otc_reservations WHERE chain=$1 AND status!='released'",&[&chain]).await?.get(0);
+            let (balance, gas) = repo::transfers::lock_inventory(&tx, &chain).await?;
+            let balance = amount::integer(&balance)?;
+            let gas = amount::integer(&gas)?;
+            let reserved = repo::booking::reserved_inventory(&tx, &chain).await?;
             let output = amount::integer(&trade.terms.leg("payout")?.transfer_amount)?;
             if balance
                 .saturating_sub(gas)
@@ -302,7 +301,7 @@ impl Service {
                     "insufficient reconciled desk inventory".into(),
                 ));
             }
-            tx.execute("INSERT INTO otc_reservations(trade_id,chain,amount,status) VALUES($1,$2,$3::text::numeric,'active')",&[&id,&chain,&output.to_string()]).await?;
+            repo::booking::insert_reservation(&tx, &id, &chain, &output.to_string()).await?;
             let value =
                 protocol::acceptance(&format!("{actor}/decisions/{id}"), offer, &trade.terms);
             protocol::validate_acceptance(&value, offer, &trade.terms)?;

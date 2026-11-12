@@ -3,12 +3,11 @@ use super::{
     amount,
     error::{invalid, Error, Result},
     model::Direction,
-    wallet, Service,
+    repo, wallet, Service,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio_postgres::Row;
 use uuid::Uuid;
 
 /// Wider than `escrow::MAX_EVER_UNITS` on purpose: offers settle peer-to-peer and never reach the escrow factory.
@@ -146,17 +145,14 @@ impl PublicOfferDraft {
         }))
     }
 }
-fn offer(row: &Row) -> Value {
-    let expires: DateTime<Utc> = row.get("expires_at");
-    let state: &str = row.get("state");
-    let seller: String = row.get("seller_ever");
+fn offer((id, seller, body, state, created_at, expires): repo::public_offers::OfferRow) -> Value {
     let avatar = super::avatar::identicon(&seller);
-    json!({"id":row.get::<_,Uuid>("id"), "seller_ever":seller,
+    json!({"id":id, "seller_ever":seller,
         "seller_avatar":avatar,
-        "owner_ever":row.get::<_,String>("seller_ever"),
-        "terms":row.get::<_,Value>("body"),
-        "state":if state == "open" && expires <= Utc::now() {"expired"} else {state},
-        "created_at":row.get::<_,DateTime<Utc>>("created_at"), "expires_at":expires})
+        "owner_ever":seller,
+        "terms":body,
+        "state":if state == "open" && expires <= Utc::now() {"expired"} else {state.as_str()},
+        "created_at":created_at, "expires_at":expires})
 }
 impl Service {
     /// Whether the desk publishes offers the route engine may quote as a venue.
@@ -170,31 +166,23 @@ impl Service {
     pub(crate) async fn public_offers(&self, owner: Option<&str>) -> Result<Value> {
         let client = self.pool.get().await?;
         let rows = match owner {
-            Some(actor) => client.query("SELECT * FROM otc_public_offers WHERE actor=$1 ORDER BY created_at DESC LIMIT 100", &[&actor]).await?,
-            None => client.query("SELECT * FROM otc_public_offers WHERE state='open' AND expires_at>now() AND body->>'ethereum_chain_id'='1' AND COALESCE(body->>'stablecoin','USDT') IN ('USDT','USDC') ORDER BY created_at DESC LIMIT 100", &[]).await?,
+            Some(actor) => repo::public_offers::offers_by_actor(&client, actor).await?,
+            None => repo::public_offers::open_offers(&client).await?,
         };
-        Ok(Value::Array(rows.iter().map(offer).collect()))
+        Ok(Value::Array(rows.into_iter().map(offer).collect()))
     }
     /// Public chart history contains publication terms only; closed offers stay
     /// in history without exposing their wallet addresses or current state.
     pub(crate) async fn public_offer_history(&self) -> Result<Value> {
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                "SELECT id, body, created_at FROM (
-                   SELECT id, body, created_at FROM otc_public_offers
-                   ORDER BY created_at DESC LIMIT $1
-                 ) recent ORDER BY created_at ASC",
-                &[&MAX_HISTORY_ROWS],
-            )
-            .await?;
+        let rows = repo::public_offers::offer_history(&client, MAX_HISTORY_ROWS).await?;
         Ok(Value::Array(
             rows.iter()
-                .map(|row| {
-                    let terms: Value = row.get("body");
+                .map(|(id, body, created_at)| {
+                    let terms: &Value = body;
                     json!({
-                        "id": row.get::<_, Uuid>("id"),
-                        "created_at": row.get::<_, DateTime<Utc>>("created_at"),
+                        "id": id,
+                        "created_at": created_at,
                         "terms": {
                             "direction": terms.get("direction").cloned().unwrap_or(json!("sell")),
                             "ever_amount": terms.get("ever_amount").cloned().unwrap_or(Value::Null),
@@ -318,35 +306,42 @@ impl Service {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         // Serialize idempotent replays for this account.
-        tx.query_one(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-            &[&format!("otc-offers:{actor}")],
-        )
-        .await?;
-        if let Some(row) = tx
-            .query_opt(
-                "SELECT * FROM otc_public_offers WHERE actor=$1 AND idempotency_key=$2",
-                &[&actor, &key],
-            )
-            .await?
+        repo::public_offers::lock_account(&tx, &format!("otc-offers:{actor}")).await?;
+        if let Some((id, seller_ever, body)) =
+            repo::public_offers::offer_by_key(&tx, actor, key).await?
         {
-            if row.get::<_, Value>("body") != terms || row.get::<_, String>("seller_ever") != seller
-            {
+            if body != terms || seller_ever != seller {
                 return Err(Error::Conflict(
                     "publication key reused with different terms".into(),
                 ));
             }
-            return Ok(offer(&row));
+            let expires: DateTime<Utc> = body
+                .get("expires_at")
+                .and_then(Value::as_str)
+                .and_then(|at| at.parse().ok())
+                .unwrap_or_else(Utc::now);
+            return Ok(offer((
+                id,
+                seller_ever,
+                body,
+                "open".to_string(),
+                Utc::now(),
+                expires,
+            )));
         }
-        let row = tx.query_one("INSERT INTO otc_public_offers(id,actor,seller_ever,body,idempotency_key) VALUES($1,$2,$3,$4,$5) RETURNING *", &[&Uuid::new_v4(),&actor,&seller,&terms,&key]).await?;
-        let result = offer(&row);
+        let row =
+            repo::public_offers::insert_offer(&tx, &Uuid::new_v4(), actor, &seller, &terms, key)
+                .await?;
+        let result = offer(row);
         tx.commit().await?;
         Ok(result)
     }
     pub(crate) async fn cancel_public_offer(&self, actor: &str, id: Uuid) -> Result<Value> {
         let client = self.pool.get().await?;
-        let row = client.query_opt("UPDATE otc_public_offers SET state='cancelled' WHERE id=$1 AND actor=$2 AND state='open' RETURNING *", &[&id,&actor]).await?.ok_or(Error::NotFound)?;
-        Ok(offer(&row))
+        let row = repo::public_offers::cancel_offer(&client, &id, actor)
+            .await?
+            .ok_or(Error::NotFound)?;
+        Ok(offer(row))
     }
 }
 

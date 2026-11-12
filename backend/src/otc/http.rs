@@ -3,6 +3,7 @@ use super::{
     error::{invalid, Error, Result},
     operations::IncidentAction,
     p2p::{AcceptOfferRequest, DealPrepareRequest, DealSubmitRequest},
+    repo,
     transfers::{PrepareRequest, SubmitRequest},
     wallet::{ChallengeRequest, LinkRequest, ProofRequest},
 };
@@ -138,12 +139,7 @@ async fn login_prove(
 async fn revoke(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>> {
     let (session, _) = state.otc.session(bearer(&headers)?).await?;
     let client = state.pool.get().await?;
-    client
-        .execute(
-            "UPDATE otc_sessions SET revoked=TRUE WHERE id=$1",
-            &[&session],
-        )
-        .await?;
+    repo::login::revoke_session(&client, &session).await?;
     Ok(Json(json!({"revoked":true})))
 }
 async fn challenge(

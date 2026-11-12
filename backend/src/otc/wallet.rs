@@ -1,7 +1,7 @@
 use super::{
     config::PROFILE,
     error::{invalid, Error, Result},
-    Service,
+    repo, Service,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::{Duration, Utc};
@@ -132,12 +132,8 @@ impl Service {
         let encrypted = self.secrets.encrypt(&request.credential)?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        tx.execute("INSERT INTO otc_actor_links(actor,credential) VALUES($1,$2) ON CONFLICT(actor) DO UPDATE SET credential=$2,revoked=FALSE,provisioned=TRUE,updated_at=now()",&[&request.actor,&encrypted]).await?;
-        tx.execute(
-            "INSERT INTO otc_sessions(id,actor,credential,expires_at) VALUES($1,$2,$3,$4)",
-            &[&id, &request.actor, &encrypted, &expires],
-        )
-        .await?;
+        repo::login::upsert_actor_link(&tx, &request.actor, &encrypted).await?;
+        repo::login::insert_plain_session(&tx, &id, &request.actor, &encrypted, &expires).await?;
         tx.commit().await?;
         Ok(
             json!({"token":self.jwt.sign(&format!("otc:{id}"))?,"actor":request.actor,"desk":request.actor==self.cfg.desk_actor,"expires_at":expires}),
@@ -154,7 +150,16 @@ impl Service {
         let expires = Utc::now() + Duration::minutes(5);
         let message=format!("Pay3flow OTC wallet ownership\nOrigin: {}\nActor: {actor}\nChain: {}\nAddress: {address}\nNonce: {id}\nExpires: {expires}\nThis authorizes no transfer.",self.cfg.origin,request.chain);
         let client = self.pool.get().await?;
-        client.execute("INSERT INTO otc_wallet_challenges(id,session_id,chain,address,message,expires_at) VALUES($1,$2,$3,$4,$5,$6)",&[&id,&session,&request.chain,&address,&message,&expires]).await?;
+        repo::login::insert_wallet_challenge(
+            &client,
+            &id,
+            &session,
+            &request.chain,
+            &address,
+            &message,
+            &expires,
+        )
+        .await?;
         Ok(
             json!({"id":id,"message":message,"expires_at":expires,"everscale_data":STANDARD.encode(message.as_bytes()),"withSignatureId":false}),
         )
@@ -166,21 +171,23 @@ impl Service {
         request: ProofRequest,
     ) -> Result<Value> {
         let client = self.pool.get().await?;
-        let row=client.query_opt("SELECT chain,address,message FROM otc_wallet_challenges WHERE id=$1 AND session_id=$2 AND expires_at>now() AND consumed_at IS NULL",&[&request.challenge_id,&session]).await?.ok_or(Error::Unauthorized)?;
-        let chain: String = row.get(0);
-        let address: String = row.get(1);
-        let message: String = row.get(2);
+        let (chain, address, message) =
+            repo::login::wallet_challenge(&client, &request.challenge_id, &session)
+                .await?
+                .ok_or(Error::Unauthorized)?;
         drop(client);
         self.verify_wallet_signature(&chain, &address, &message, &request)
             .await?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        if tx.execute("UPDATE otc_wallet_challenges SET consumed_at=now() WHERE id=$1 AND session_id=$2 AND consumed_at IS NULL AND expires_at>now()",&[&request.challenge_id,&session]).await?!=1 {return Err(Error::Unauthorized);}
-        if tx.query_opt("SELECT id FROM otc_sessions WHERE id=$1 AND NOT revoked AND expires_at>now() FOR SHARE", &[&session]).await?.is_none() {
+        if repo::login::consume_wallet_challenge(&tx, &request.challenge_id, &session).await? != 1 {
+            return Err(Error::Unauthorized);
+        }
+        if !repo::login::live_session(&tx, &session).await? {
             return Err(Error::Unauthorized);
         }
         super::login::attach_wallet(&tx, actor, &chain, &address).await?;
-        tx.execute("INSERT INTO otc_wallets(actor,chain,address,verified_at) VALUES($1,$2,$3,now()) ON CONFLICT(actor,chain) DO UPDATE SET address=$3,verified_at=now()",&[&actor,&chain,&address]).await?;
+        repo::login::verify_wallet(&tx, &actor, &chain, &address).await?;
         super::avatar::record(&tx, &chain, &address, request.public_key.as_deref()).await?;
         tx.commit().await?;
         Ok(json!({"chain":chain,"address":address,"verified":true}))

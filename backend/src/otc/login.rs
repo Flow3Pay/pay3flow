@@ -2,11 +2,12 @@
 use super::{
     config::PROFILE,
     error::{invalid, Error, Result},
+    repo,
     wallet::{address, ChallengeRequest, ProofRequest},
     Service,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use deadpool_postgres::GenericClient;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -17,13 +18,7 @@ pub(crate) async fn lock_wallet(
     chain: &str,
     address: &str,
 ) -> Result<()> {
-    client
-        .query_one(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-            &[&format!("otc-login:{chain}:{address}")],
-        )
-        .await?;
-    Ok(())
+    repo::login::lock_wallet(client, &format!("otc-login:{chain}:{address}")).await
 }
 
 pub(crate) async fn wallet_owner(
@@ -31,13 +26,10 @@ pub(crate) async fn wallet_owner(
     chain: &str,
     address: &str,
 ) -> Result<Option<String>> {
-    let rows = client.query(
-        "SELECT actor FROM otc_login_wallets WHERE chain=$1 AND address=$2 UNION SELECT actor FROM otc_wallets WHERE chain=$1 AND lower(address)=$2",
-        &[&chain, &address],
-    ).await?;
+    let rows = repo::login::wallet_owners(client, chain, address).await?;
     match rows.as_slice() {
         [] => Ok(None),
-        [row] => Ok(Some(row.get(0))),
+        [owner] => Ok(Some(owner.clone())),
         _ => Err(Error::Conflict(
             "Wallet has conflicting account mappings; contact support.".into(),
         )),
@@ -59,8 +51,7 @@ pub(crate) async fn attach_wallet(
             "Wallet already belongs to another OTC account.".into(),
         ));
     }
-    client.execute("INSERT INTO otc_login_wallets(chain,address,actor) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", &[&chain, &address, &actor]).await?;
-    Ok(())
+    repo::login::bind_login_wallet(client, chain, address, actor).await
 }
 
 impl Service {
@@ -94,13 +85,14 @@ impl Service {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         lock_wallet(&tx, &request.chain, &address).await?;
-        let count: i64 = tx.query_one("SELECT count(*) FROM otc_login_challenges WHERE chain=$1 AND address=$2 AND expires_at>now()", &[&request.chain, &address]).await?.get(0);
+        let count = repo::login::recent_challenges(&tx, &request.chain, &address).await?;
         if count >= 10 {
             return Err(invalid(
                 "Too many sign-in requests. Try again in five minutes.",
             ));
         }
-        tx.execute("INSERT INTO otc_login_challenges(id,chain,address,message,expires_at) VALUES($1,$2,$3,$4,$5)", &[&id, &request.chain, &address, &message, &expires]).await?;
+        repo::login::insert_login_challenge(&tx, &id, &request.chain, &address, &message, &expires)
+            .await?;
         tx.commit().await?;
         Ok(
             json!({"id":id,"message":message,"expires_at":expires,"everscale_data":STANDARD.encode(message.as_bytes()),"withSignatureId":false}),
@@ -113,10 +105,10 @@ impl Service {
                 "Wallet sign-in is not configured. Contact support.",
             ));
         }
-        let row = self.pool.get().await?.query_opt("SELECT chain,address,message FROM otc_login_challenges WHERE id=$1 AND expires_at>now() AND consumed_at IS NULL", &[&request.challenge_id]).await?.ok_or(Error::Unauthorized)?;
-        let chain: String = row.get(0);
-        let address: String = row.get(1);
-        let message: String = row.get(2);
+        let (chain, address, message) =
+            repo::login::login_challenge(&self.pool.get().await?, &request.challenge_id)
+                .await?
+                .ok_or(Error::Unauthorized)?;
         self.verify_wallet_signature(&chain, &address, &message, &request)
             .await?;
 
@@ -142,7 +134,7 @@ impl Service {
                     );
                     self.relay_actor_url(&actor)?;
                     let encrypted = self.secrets.encrypt("")?;
-                    tx.execute("INSERT INTO otc_actor_links(actor,credential,managed,provisioned) VALUES($1,$2,TRUE,FALSE)", &[&actor, &encrypted]).await?;
+                    repo::login::insert_actor_link(&tx, &actor, &encrypted).await?;
                     actor
                 }
             };
@@ -157,20 +149,24 @@ impl Service {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         // Both replay races and expiry during provisioning must fail before issuing access.
-        if tx.execute("UPDATE otc_login_challenges SET consumed_at=now() WHERE id=$1 AND consumed_at IS NULL AND expires_at>now()", &[&request.challenge_id]).await? != 1 {
+        if repo::login::consume_login_challenge(&tx, &request.challenge_id).await? != 1 {
             return Err(Error::Unauthorized);
         }
         attach_wallet(&tx, &actor, &chain, &address).await?;
-        let credential: String = tx
-            .query_opt(
-                "SELECT credential FROM otc_actor_links WHERE actor=$1 AND NOT revoked",
-                &[&actor],
-            )
+        let credential: String = repo::login::unrevoked_credential(&tx, &actor)
             .await?
-            .ok_or(Error::Unauthorized)?
-            .get(0);
-        tx.execute("INSERT INTO otc_sessions(id,actor,credential,expires_at,login_chain,login_address) VALUES($1,$2,$3,$4,$5,$6)", &[&id,&actor,&credential,&expires,&chain,&address]).await?;
-        tx.execute("INSERT INTO otc_wallets(actor,chain,address,verified_at) VALUES($1,$2,$3,now()) ON CONFLICT(actor,chain) DO UPDATE SET address=$3,verified_at=now()", &[&actor,&chain,&address]).await?;
+            .ok_or(Error::Unauthorized)?;
+        repo::login::insert_session(
+            &tx,
+            &id,
+            &actor,
+            &credential,
+            &expires,
+            Some(&chain),
+            Some(&address),
+        )
+        .await?;
+        repo::login::verify_wallet(&tx, &actor, &chain, &address).await?;
         super::avatar::record(&tx, &chain, &address, request.public_key.as_deref()).await?;
         tx.commit().await?;
         drop(client);
@@ -211,23 +207,21 @@ impl Service {
     pub(crate) async fn provision_login_actor(&self, actor: &str) -> Result<()> {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        tx.query_one(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-            &[&format!("otc-relay:{actor}")],
-        )
-        .await?;
-        let row = tx.query_opt("SELECT credential,managed,provisioned FROM otc_actor_links WHERE actor=$1 AND NOT revoked", &[&actor]).await?.ok_or_else(|| invalid("Account relay access must be restored by an operator."))?;
-        if row.get::<_, bool>(2) {
+        repo::login::lock_relay_link(&tx, &format!("otc-relay:{actor}")).await?;
+        let (stored, managed, provisioned) = repo::login::actor_link(&tx, actor)
+            .await?
+            .ok_or_else(|| invalid("Account relay access must be restored by an operator."))?;
+        if provisioned {
             return Ok(());
         }
-        if !row.get::<_, bool>(1) {
+        if !managed {
             return Err(Error::Unauthorized);
         }
-        let mut credential = self.secrets.decrypt(&row.get::<_, String>(0))?;
+        let mut credential = self.secrets.decrypt(&stored)?;
         if credential.is_empty() {
             credential = self.create_login_delegation(actor).await?;
             let encrypted = self.secrets.encrypt(&credential)?;
-            tx.execute("UPDATE otc_actor_links SET credential=$2,updated_at=now() WHERE actor=$1 AND NOT revoked", &[&actor, &encrypted]).await?;
+            repo::login::set_credential(&tx, actor, &encrypted).await?;
         }
         // Persist delegation before claiming so network failures retry with the same key.
         tx.commit().await?;
@@ -272,27 +266,33 @@ impl Service {
         {
             return Err(Error::Unauthorized);
         }
-        self.pool.get().await?.execute("UPDATE otc_actor_links SET provisioned=TRUE,updated_at=now() WHERE actor=$1 AND NOT revoked", &[&actor]).await?;
+        repo::login::mark_provisioned(&self.pool.get().await?, actor).await?;
         Ok(())
     }
 
     pub(crate) async fn session_info(&self, token: &str) -> Result<Value> {
         let (id, actor) = self.session(token).await?;
         let client = self.pool.get().await?;
-        let row = client.query_opt("SELECT expires_at,login_chain,login_address FROM otc_sessions WHERE id=$1 AND NOT revoked AND expires_at>now()", &[&id]).await?.ok_or(Error::Unauthorized)?;
-        let wallets: Vec<Value> = client.query("SELECT chain,address,verified_at FROM otc_wallets WHERE actor=$1 AND verified_at>now()-make_interval(days=>$2) ORDER BY chain", &[&actor,&super::repo::WALLET_VERIFICATION_DAYS]).await?.iter().map(|r| {
-            let chain: String = r.get(0);
-            let address: String = r.get(1);
+        let (expires_at, login_chain, login_address) = repo::login::session_info(&client, &id)
+            .await?
+            .ok_or(Error::Unauthorized)?;
+        let wallets: Vec<Value> = repo::login::verified_wallets(
+            &client,
+            &actor,
+            super::repo::WALLET_VERIFICATION_DAYS,
+        )
+        .await?
+        .into_iter()
+        .map(|(chain, address, verified_at)| {
             let avatar = super::avatar::identicon(&address);
-            json!({"chain":chain,"address":address,"verified_at":r.get::<_,DateTime<Utc>>(2),"avatar":avatar})
-        }).collect();
-        let login_chain: Option<String> = row.get(1);
-        let login_address: Option<String> = row.get(2);
+            json!({"chain":chain,"address":address,"verified_at":verified_at,"avatar":avatar})
+        })
+        .collect();
         let signing_wallet = login_chain
             .zip(login_address)
             .map(|(chain, address)| json!({"chain":chain,"address":address}));
         Ok(
-            json!({"token":token,"actor":actor,"desk":actor==self.cfg.desk_actor,"expires_at":row.get::<_,DateTime<Utc>>(0),"signing_wallet":signing_wallet,"wallets":wallets}),
+            json!({"token":token,"actor":actor,"desk":actor==self.cfg.desk_actor,"expires_at":expires_at,"signing_wallet":signing_wallet,"wallets":wallets}),
         )
     }
 }

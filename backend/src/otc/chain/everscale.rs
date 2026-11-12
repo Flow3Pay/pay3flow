@@ -2,7 +2,7 @@ use super::{
     super::{
         error::{invalid, Result},
         model::{Evidence, Leg},
-        Service,
+        repo, Service,
     },
     number,
 };
@@ -190,13 +190,7 @@ impl Service {
             .as_u64()
             .ok_or_else(|| invalid("missing masterchain sequence"))?;
         let client = self.pool.get().await?;
-        let previous: Value = client
-            .query_one(
-                "SELECT checkpoint FROM otc_observers WHERE chain='everscale'",
-                &[],
-            )
-            .await?
-            .get(0);
+        let previous: Value = repo::chain::everscale_checkpoint(&client).await?;
         let start = previous["next_seq"]
             .as_u64()
             .unwrap_or(seq.saturating_sub(1));
@@ -229,12 +223,7 @@ impl Service {
         }
         let next_seq = if cursor.is_none() { end } else { start };
         if next_seq <= seq {
-            client
-                .execute(
-                    "UPDATE otc_observers SET checkpoint=$1 WHERE chain='everscale'",
-                    &[&json!({"next_seq":next_seq,"cursor":cursor,"end_seq":if cursor.is_some(){Some(end)}else{None}})],
-                )
-                .await?;
+            repo::chain::save_everscale_checkpoint(&client,&json!({"next_seq":next_seq,"cursor":cursor,"end_seq":if cursor.is_some(){Some(end)}else{None}})).await?;
             return Err(invalid("Everscale complete scan has not reached head"));
         }
         Ok((

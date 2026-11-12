@@ -11,7 +11,6 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use tokio_postgres::Row;
 
 use crate::db::DbPool;
 use crate::route_engine::{Amount, Asset, PublicRouteProvider, PublicRouteQuote, QuoteUnavailable};
@@ -80,8 +79,7 @@ pub(crate) fn floor_units(value: &str, decimals: u32) -> Option<u128> {
     whole_units.checked_mul(scale)?.checked_add(fraction_units)
 }
 
-fn offer_from_row(row: &Row) -> Option<BookOffer> {
-    let body: Value = row.get("body");
+fn offer_from_row(id: &uuid::Uuid, body: &Value, expires_at: &DateTime<Utc>) -> Option<BookOffer> {
     let units = |key: &str| {
         body.get(key)
             .and_then(Value::as_str)
@@ -93,7 +91,7 @@ fn offer_from_row(row: &Row) -> Option<BookOffer> {
         return None;
     }
     Some(BookOffer {
-        id: row.get::<_, uuid::Uuid>("id").to_string(),
+        id: id.to_string(),
         direction: body
             .get("direction")
             .and_then(Value::as_str)
@@ -101,7 +99,7 @@ fn offer_from_row(row: &Row) -> Option<BookOffer> {
             .to_string(),
         ever_units,
         usdt_units,
-        expires_at: row.get("expires_at"),
+        expires_at: *expires_at,
     })
 }
 
@@ -227,16 +225,13 @@ impl OtcRouteProvider {
             .get()
             .await
             .context("otc route provider: pool acquisition failed")?;
-        let rows = client
-            .query(
-                "SELECT id, body, expires_at FROM otc_public_offers \
-                 WHERE state='open' AND expires_at>now() \
-                 ORDER BY created_at DESC LIMIT $1",
-                &[&(MAX_BOOK_ROWS as i64)],
-            )
+        let rows = super::repo::route_provider::book(&client, MAX_BOOK_ROWS as i64)
             .await
             .context("otc route provider: book query failed")?;
-        Ok(rows.iter().filter_map(offer_from_row).collect())
+        Ok(rows
+            .iter()
+            .filter_map(|(id, body, expires_at)| offer_from_row(id, body, expires_at))
+            .collect())
     }
 }
 

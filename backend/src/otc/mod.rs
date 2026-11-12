@@ -24,7 +24,7 @@ mod operations;
 mod p2p;
 mod protocol;
 mod public_offers;
-mod repo;
+pub(crate) mod repo;
 mod reporting;
 mod review;
 mod route_provider;
@@ -93,18 +93,12 @@ impl Service {
             return Err(Error::Disabled);
         }
         let client = self.pool.get().await?;
-        let mode: Option<bool> = client
-            .query_one("SELECT demo FROM otc_controls WHERE singleton", &[])
-            .await?
-            .get(0);
+        let mode = crate::otc::repo::metrics::control_demo(&client).await?;
         if mode.is_some_and(|mode| mode != self.cfg.demo) {
             return Err(Error::Disabled);
         }
-        let paused: bool = client
-            .query_one("SELECT paused FROM otc_controls WHERE singleton", &[])
-            .await?
-            .get(0);
-        let unhealthy: i64 = client.query_one("SELECT count(*) FROM otc_observers WHERE paused OR last_scan IS NULL OR last_scan < now()-interval '60 seconds'",&[]).await?.get(0);
+        let paused = crate::otc::repo::metrics::control_paused(&client).await?;
+        let unhealthy = crate::otc::repo::metrics::unhealthy_observers(&client).await?;
         if paused || unhealthy > 0 {
             return Err(Error::Disabled);
         }

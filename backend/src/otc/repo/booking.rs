@@ -23,6 +23,10 @@ const MARK_RFQ_QUOTED: &str = "UPDATE otc_rfq SET state='quoted' WHERE id=$1";
 const MARK_BOOKING_PENDING: &str =
     "UPDATE otc_trades SET state='booking_pending',offer=$2,updated_at=now() WHERE id=$1";
 const SET_DECISION: &str = "UPDATE otc_trades SET decision=$2,updated_at=now() WHERE id=$1";
+const RESERVED_INVENTORY: &str = "SELECT COALESCE(sum(amount),0)::text FROM otc_reservations WHERE chain=$1 AND status!='released'";
+const INSERT_RESERVATION: &str = "INSERT INTO otc_reservations(trade_id,chain,amount,status) VALUES($1,$2,$3::text::numeric,'active')";
+// Shared with `transfers::prepare` and `wallet::prove`; formatted at the call site.
+pub(crate) const ACTOR_LOCK: &str = "SELECT pg_advisory_xact_lock(hashtext($1))";
 
 pub(crate) async fn rfq_by_key(
     client: &(impl GenericClient + Sync),
@@ -170,5 +174,27 @@ pub(crate) async fn set_decision(
     decision: &Value,
 ) -> Result<()> {
     client.execute(SET_DECISION, &[id, &decision]).await?;
+    Ok(())
+}
+
+pub(crate) async fn reserved_inventory(
+    client: &(impl GenericClient + Sync),
+    chain: &str,
+) -> Result<String> {
+    Ok(client
+        .query_one(RESERVED_INVENTORY, &[&chain])
+        .await?
+        .get(0))
+}
+
+pub(crate) async fn insert_reservation(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    chain: &str,
+    amount: &str,
+) -> Result<()> {
+    client
+        .execute(INSERT_RESERVATION, &[trade_id, &chain, &amount])
+        .await?;
     Ok(())
 }

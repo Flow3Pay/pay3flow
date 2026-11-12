@@ -4,7 +4,7 @@
 //! whose stablecoin leg was delivered. The figures are aggregates, so the
 //! endpoint needs no session and exposes no counterparties.
 
-use super::{amount, error::Result, Service};
+use super::{amount, error::Result, repo, Service};
 use chrono::Utc;
 use serde_json::{json, Value};
 
@@ -35,45 +35,14 @@ impl Service {
     /// Completed volumes over the last 24 hours, 7 days and since launch.
     pub(crate) async fn volumes(&self) -> Result<Value> {
         let client = self.pool.get().await?;
-        let row = client
-            .query_one(
-                "WITH fills AS (
-                   SELECT created_at,
-                          CASE WHEN terms->>'direction'='buy' THEN terms->>'output_units' ELSE terms->>'input_units' END AS ever_units,
-                          CASE WHEN terms->>'direction'='buy' THEN terms->>'input_units' ELSE terms->>'output_units' END AS usdt_units
-                     FROM otc_trades
-                    WHERE state='completed' AND terms->>'direction' IN ('buy','sell')
-                   UNION ALL
-                   SELECT created_at, body->>'ever_units', body->>'usdt_units'
-                     FROM otc_p2p_trades
-                    WHERE state='completed'
-                 ), exact AS (
-                   SELECT created_at,
-                          CASE WHEN ever_units ~ '^[0-9]{1,40}$' THEN ever_units::numeric END AS ever_units,
-                          CASE WHEN usdt_units ~ '^[0-9]{1,40}$' THEN usdt_units::numeric END AS usdt_units
-                     FROM fills
-                 )
-                 SELECT
-                   count(*) FILTER (WHERE created_at>=now()-interval '24 hours'),
-                   count(*) FILTER (WHERE created_at>=now()-interval '7 days'),
-                   count(*),
-                   COALESCE(sum(ever_units) FILTER (WHERE created_at>=now()-interval '24 hours'),0)::text,
-                   COALESCE(sum(ever_units) FILTER (WHERE created_at>=now()-interval '7 days'),0)::text,
-                   COALESCE(sum(ever_units),0)::text,
-                   COALESCE(sum(usdt_units) FILTER (WHERE created_at>=now()-interval '24 hours'),0)::text,
-                   COALESCE(sum(usdt_units) FILTER (WHERE created_at>=now()-interval '7 days'),0)::text,
-                   COALESCE(sum(usdt_units),0)::text
-                 FROM exact",
-                &[],
-            )
-            .await?;
+        let row = repo::volumes::volumes(&client).await?;
         Ok(json!({
             "market": "EVER-USDT",
             "updated_at": Utc::now(),
             "windows": {
-                "24h": window(row.get(0), row.get::<_, Option<String>>(3), row.get::<_, Option<String>>(6)),
-                "7d": window(row.get(1), row.get::<_, Option<String>>(4), row.get::<_, Option<String>>(7)),
-                "all": window(row.get(2), row.get::<_, Option<String>>(5), row.get::<_, Option<String>>(8)),
+                "24h": window(row.0, row.3, row.6),
+                "7d": window(row.1, row.4, row.7),
+                "all": window(row.2, row.5, row.8),
             },
         }))
     }

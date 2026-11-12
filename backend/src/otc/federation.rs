@@ -101,14 +101,8 @@ impl Service {
         }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        if let Some(existing) = tx
-            .query_opt(
-                "SELECT body FROM otc_inbox WHERE actor=$1 AND activity_id=$2",
-                &[&actor, &id],
-            )
-            .await?
-        {
-            if existing.get::<_, Value>(0) != *body {
+        if let Some(existing) = repo::federation::inbox_activity(&tx, actor, &id).await? {
+            if existing != *body {
                 return Err(Error::Conflict(
                     "incoming activity ID reused with changed body".into(),
                 ));
@@ -116,13 +110,15 @@ impl Service {
         } else {
             match body["type"].as_str() {
                 Some("Proposal") => {
-                    let known=tx.query_opt("SELECT body FROM otc_rfq WHERE body->>'id'=$1 AND actor=$2 UNION ALL SELECT terms->'proposal' FROM otc_trades WHERE terms->'proposal'->>'id'=$1 AND desk_actor=$2",&[&id,&author]).await?;
-                    if known.as_ref().is_none_or(|r| r.get::<_, Value>(0) != *body) {
+                    let known = repo::federation::known_proposal(&tx, &id, &author).await?;
+                    if known.as_ref().is_none_or(|stored| *stored != *body) {
                         return Err(invalid("unsolicited or altered OTC Proposal"));
                     }
                 }
                 Some("OfferAgreement") => {
-                    let row=tx.query_opt("SELECT * FROM otc_trades WHERE offer->>'id'=$1 AND desk_actor=$2 FOR UPDATE",&[&id,&actor]).await?.ok_or(Error::NotFound)?;
+                    let row = repo::federation::lock_desk_offer(&tx, &id, actor)
+                        .await?
+                        .ok_or(Error::NotFound)?;
                     let trade = repo::trade(&row)?;
                     protocol::validate_offer(body, &trade.terms, trade.terms.quote_by)?;
                     if trade.offer.as_ref() != Some(body) {
@@ -131,7 +127,9 @@ impl Service {
                 }
                 Some("AcceptAgreement") | Some("RejectAgreement") => {
                     let reference = protocol::text(body, "object")?;
-                    let row=tx.query_opt("SELECT * FROM otc_trades WHERE offer->>'id'=$1 AND customer_actor=$2 FOR UPDATE",&[&reference,&actor]).await?.ok_or(Error::NotFound)?;
+                    let row = repo::federation::lock_customer_offer(&tx, &reference, actor)
+                        .await?
+                        .ok_or(Error::NotFound)?;
                     let trade = repo::trade(&row)?;
                     let offer = trade
                         .offer
@@ -147,11 +145,7 @@ impl Service {
                         "rejected"
                     };
                     if trade.state == "booking_pending" {
-                        tx.execute(
-                            "UPDATE otc_trades SET state=$2,updated_at=now() WHERE id=$1",
-                            &[&trade.id, &next],
-                        )
-                        .await?;
+                        repo::federation::set_trade_state(&tx, &trade.id, next).await?;
                         repo::event(
                             &tx,
                             Some(trade.id),
@@ -166,28 +160,17 @@ impl Service {
                 Some("Accept") => {}
                 _ => return Err(invalid("unsupported OTC activity")),
             }
-            tx.execute(
-                "INSERT INTO otc_inbox(actor,activity_id,body) VALUES($1,$2,$3)",
-                &[&actor, &id, &body],
-            )
-            .await?;
+            repo::federation::insert_inbox(&tx, actor, &id, body).await?;
         }
-        tx.execute(
-            "UPDATE otc_outbox SET delivered_at=now() WHERE activity_id=$1 AND actor=$2",
-            &[&id, &author],
-        )
-        .await?;
-        tx.execute("INSERT INTO otc_relay_cursors(actor,sequence) VALUES($1,$2) ON CONFLICT(actor) DO UPDATE SET sequence=GREATEST(otc_relay_cursors.sequence,$2)",&[&actor,&sequence]).await?;
+        repo::federation::mark_delivered(&tx, &id, &author).await?;
+        repo::federation::advance_cursor(&tx, &actor, sequence).await?;
         tx.commit().await?;
         Ok(())
     }
     pub(crate) async fn relay_tick(&self) -> Result<()> {
         let client = self.pool.get().await?;
-        let jobs=client.query("UPDATE otc_outbox SET lease_until=now()+interval '60 seconds' WHERE activity_id IN (SELECT activity_id FROM otc_outbox WHERE delivered_at IS NULL AND queued_at IS NULL AND next_attempt_at<=now() AND (lease_until IS NULL OR lease_until<now()) ORDER BY CASE purpose WHEN 'subscription' THEN 0 ELSE 1 END,created_at FOR UPDATE SKIP LOCKED LIMIT 10) RETURNING activity_id,actor,body",&[]).await?;
-        for job in jobs {
-            let id: String = job.get(0);
-            let actor: String = job.get(1);
-            let body: Value = job.get(2);
+        let jobs = repo::federation::lease_jobs(&client).await?;
+        for (id, actor, body) in jobs {
             let result = async {
                 let token = self.credential(&actor).await?;
                 let response = self
@@ -216,29 +199,18 @@ impl Service {
             .await;
             match result {
                 Ok(()) => {
-                    client.execute("UPDATE otc_outbox SET queued_at=now(),delivered_at=CASE WHEN purpose IN ('listing','subscription') THEN now() ELSE delivered_at END,lease_until=NULL WHERE activity_id=$1",&[&id]).await?;
+                    repo::federation::mark_queued(&client, &id).await?;
                 }
                 Err(error) => {
                     tracing::warn!(activity_id=%id,error=%error,"otc.relay.retry");
-                    client.execute("UPDATE otc_outbox SET attempts=attempts+1,next_attempt_at=now()+interval '15 seconds',lease_until=NULL WHERE activity_id=$1",&[&id]).await?;
+                    repo::federation::reschedule_job(&client, &id).await?;
                 }
             }
         }
-        let actors = client
-            .query(
-                "SELECT actor FROM otc_actor_links WHERE NOT revoked AND provisioned",
-                &[],
-            )
-            .await?;
-        for row in actors {
-            let actor: String = row.get(0);
-            let cursor = client
-                .query_opt(
-                    "SELECT sequence FROM otc_relay_cursors WHERE actor=$1",
-                    &[&actor],
-                )
+        let actors = repo::federation::provisioned_actors(&client).await?;
+        for actor in actors {
+            let cursor = repo::federation::actor_sequence(&client, &actor)
                 .await?
-                .map(|r| r.get::<_, i64>(0))
                 .unwrap_or(0);
             let token = self.credential(&actor).await?;
             let response = self

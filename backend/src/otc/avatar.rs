@@ -5,7 +5,7 @@
 //! next to the avatar for future wallet-level identity checks, not mixed into
 //! the picture: a seller address in the orderbook must always render the same
 //! image as that wallet in the menu.
-use super::error::Result;
+use super::{error::Result, repo};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use deadpool_postgres::GenericClient;
 use md5::{Digest, Md5};
@@ -81,15 +81,7 @@ pub(crate) async fn record(
             .to_ascii_lowercase()
     });
     let avatar = identicon(&address);
-    client
-        .execute(
-            "INSERT INTO otc_avatars(chain,address,public_key,avatar,updated_at) VALUES($1,$2,$3,$4,now()) \
-             ON CONFLICT(chain,address) DO UPDATE SET \
-             public_key=COALESCE(EXCLUDED.public_key,otc_avatars.public_key), \
-             avatar=EXCLUDED.avatar,updated_at=now()",
-            &[&chain, &address, &public_key, &avatar],
-        )
-        .await?;
+    repo::avatar::record_avatar(client, chain, &address, &public_key, &avatar).await?;
     Ok(())
 }
 

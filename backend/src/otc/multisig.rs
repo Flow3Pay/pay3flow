@@ -1,10 +1,10 @@
 //! Public agreement bridge to the Rust evernode CLI. Signing stays in EVER Wallet.
 use super::{
     error::{invalid, Error, Result},
-    Service,
+    repo, Service,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use ed25519_dalek::{Signature, VerifyingKey};
 use evernode_multisig::{
     backend::{Assets, Backend},
@@ -148,8 +148,8 @@ impl Service {
         let address = review["trade"]["wallet_address"]
             .as_str()
             .ok_or_else(|| invalid("Missing multisig address"))?;
-        let pending = self.pool.get().await?.query_opt("SELECT id,terms_hash,created_at FROM otc_ever_calls WHERE address=$1 AND state='unknown'", &[&address]).await?;
-        review["handoff"] = pending.map(|row| json!({"id":row.get::<_,Uuid>(0),"terms_hash":row.get::<_,String>(1),"created_at":row.get::<_,DateTime<Utc>>(2)})).unwrap_or(Value::Null);
+        let pending = repo::multisig::pending_call(&self.pool.get().await?, address).await?;
+        review["handoff"] = pending.map(|(id,terms_hash,created_at)| json!({"id":id,"terms_hash":terms_hash,"created_at":created_at})).unwrap_or(Value::Null);
         Ok(review)
     }
     pub(super) async fn multisig_prepare(
@@ -174,38 +174,40 @@ impl Service {
             .as_str()
             .ok_or_else(|| invalid("Missing wallet address"))?
             .to_owned();
-        tx.query_one(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-            &[&format!("ever-multisig:{address}")],
-        )
-        .await?;
-        let paused: bool = tx
-            .query_one(
-                "SELECT signing_paused FROM otc_controls WHERE singleton=TRUE",
-                &[],
-            )
-            .await?
-            .get(0);
+        repo::multisig::lock_wallet(&tx, &format!("ever-multisig:{address}")).await?;
+        let paused = repo::multisig::signing_paused(&tx).await?;
         if paused {
             return Err(Error::Disabled);
         }
-        if let Some(row) = tx.query_opt("SELECT id,instructions,state,reference FROM otc_ever_calls WHERE actor=$1 AND idempotency_key=$2", &[&actor,&key]).await? {
-            let saved: Value = row.get(1);
-            if saved["request"] != identity { return Err(Error::Conflict("Idempotency key already has different terms".into())); }
-            if row.get::<_,String>(2) == "unknown" {
-                let fresh = self.multisig_verify(ReviewRequest { trade: request.trade.clone(), terms_hash: request.terms_hash.clone() }, Some(request.operation.clone())).await?;
-                if fresh["call"] != saved["review"]["call"] { return Err(Error::Conflict("Original wallet call changed; signing remains blocked".into())); }
-            }
-            return Ok(json!({"id":row.get::<_,Uuid>(0),"instructions":saved,"state":row.get::<_,String>(2),"reference":row.get::<_,Option<String>>(3),"resumed":true}));
-        }
-        if tx
-            .query_opt(
-                "SELECT id FROM otc_ever_calls WHERE address=$1 AND state='unknown'",
-                &[&address],
-            )
-            .await?
-            .is_some()
+        if let Some((call, saved, state, reference)) =
+            repo::multisig::call_by_key(&tx, actor, key).await?
         {
+            if saved["request"] != identity {
+                return Err(Error::Conflict(
+                    "Idempotency key already has different terms".into(),
+                ));
+            }
+            if state == "unknown" {
+                let fresh = self
+                    .multisig_verify(
+                        ReviewRequest {
+                            trade: request.trade.clone(),
+                            terms_hash: request.terms_hash.clone(),
+                        },
+                        Some(request.operation.clone()),
+                    )
+                    .await?;
+                if fresh["call"] != saved["review"]["call"] {
+                    return Err(Error::Conflict(
+                        "Original wallet call changed; signing remains blocked".into(),
+                    ));
+                }
+            }
+            return Ok(
+                json!({"id":call,"instructions":saved,"state":state,"reference":reference,"resumed":true}),
+            );
+        }
+        if repo::multisig::unresolved_call(&tx, &address).await? {
             return Err(Error::Conflict(
                 "An earlier wallet handoff is unresolved. Reconcile it before signing again."
                     .into(),
@@ -224,14 +226,8 @@ impl Service {
             .as_str()
             .ok_or_else(|| invalid("Missing agreement hash"))?;
         let manifest = serde_json::to_value(&request.trade)?;
-        tx.execute("INSERT INTO otc_ever_agreements(address,terms_hash,manifest) VALUES($1,$2,$3) ON CONFLICT(address) DO NOTHING", &[&address,&hash,&manifest]).await?;
-        let saved: String = tx
-            .query_one(
-                "SELECT terms_hash FROM otc_ever_agreements WHERE address=$1",
-                &[&address],
-            )
-            .await?
-            .get(0);
+        repo::multisig::bind_agreement(&tx, &address, hash, &manifest).await?;
+        let saved = repo::multisig::agreement_hash(&tx, &address).await?;
         if saved != hash {
             return Err(Error::Conflict(
                 "This wallet is already bound to another agreement".into(),
@@ -239,17 +235,28 @@ impl Service {
         }
         let id = Uuid::new_v4();
         let instructions = json!({"request":identity,"review":review});
-        tx.execute("INSERT INTO otc_ever_calls(id,address,actor,public_key,terms_hash,instructions,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7)", &[&id,&address,&actor,&request.operation.public_key.as_hex(),&hash,&instructions,&key]).await?;
+        repo::multisig::insert_call(
+            &tx,
+            &id,
+            &address,
+            actor,
+            request.operation.public_key.as_hex(),
+            hash,
+            &instructions,
+            key,
+        )
+        .await?;
         tx.commit().await?;
         Ok(
             json!({"id":id,"instructions":instructions,"state":"unknown","reference":null,"resumed":false}),
         )
     }
     pub(super) async fn multisig_call(&self, id: Uuid) -> Result<Value> {
-        let row = self.pool.get().await?.query_opt("SELECT state,reference,evidence,address,terms_hash FROM otc_ever_calls WHERE id=$1", &[&id]).await?.ok_or(Error::NotFound)?;
+        let (state, reference, evidence, address, terms_hash) =
+            repo::multisig::call_view(&self.pool.get().await?, &id).await?;
         // Agreement, receipts and call ids contain public chain data only.
         Ok(
-            json!({"id":id,"state":row.get::<_,String>(0),"reference":row.get::<_,Option<String>>(1),"evidence":row.get::<_,Option<Value>>(2),"address":row.get::<_,String>(3),"terms_hash":row.get::<_,String>(4),"settlement_delivery_verified":false}),
+            json!({"id":id,"state":state,"reference":reference,"evidence":evidence,"address":address,"terms_hash":terms_hash,"settlement_delivery_verified":false}),
         )
     }
     pub(super) async fn multisig_reference(
@@ -267,12 +274,10 @@ impl Service {
             return Err(invalid("Expected a 64-digit Everscale transaction hash"));
         }
         let hash = request.transaction_hash.to_ascii_lowercase();
-        let row = self.pool.get().await?.query_opt("SELECT address,instructions,created_at,state,reference FROM otc_ever_calls WHERE id=$1", &[&id]).await?.ok_or(Error::NotFound)?;
-        let address: String = row.get(0);
-        let instructions: Value = row.get(1);
-        let created: DateTime<Utc> = row.get(2);
-        if row.get::<_, String>(3) != "unknown" {
-            if row.get::<_, Option<String>>(4).as_deref() != Some(&hash) {
+        let (address, instructions, created, state, reference) =
+            repo::multisig::call_receipt(&self.pool.get().await?, &id).await?;
+        if state != "unknown" {
+            if reference.as_deref() != Some(&hash) {
                 return Err(Error::Conflict(
                     "Call already reconciled with another receipt".into(),
                 ));
@@ -326,32 +331,18 @@ impl Service {
         )?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let locked = tx
-            .query_one(
-                "SELECT state,reference FROM otc_ever_calls WHERE id=$1 FOR UPDATE",
-                &[&id],
-            )
-            .await?;
-        if locked.get::<_, String>(0) != "unknown"
-            && locked.get::<_, Option<String>>(1).as_deref() != Some(&hash)
-        {
+        let (locked_state, locked_reference) = repo::multisig::lock_call(&tx, &id).await?;
+        if locked_state != "unknown" && locked_reference.as_deref() != Some(&hash) {
             return Err(Error::Conflict(
                 "Call already reconciled with another receipt".into(),
             ));
         }
-        if tx
-            .query_opt(
-                "SELECT id FROM otc_ever_calls WHERE reference=$1 AND id<>$2",
-                &[&hash, &id],
-            )
-            .await?
-            .is_some()
-        {
+        if repo::multisig::call_by_reference(&tx, &hash, &id).await? {
             return Err(Error::Conflict(
                 "Receipt already belongs to another handoff".into(),
             ));
         }
-        tx.execute("UPDATE otc_ever_calls SET state=$2,reference=$3,evidence=$4 WHERE id=$1 AND state='unknown'", &[&id,&state,&hash,&receipt]).await?;
+        repo::multisig::reconcile_call(&tx, &id, state, &hash, &receipt).await?;
         tx.commit().await?;
         self.multisig_call(id).await
     }

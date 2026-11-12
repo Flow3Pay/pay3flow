@@ -1,6 +1,6 @@
 use super::{
     error::{invalid, Error, Result},
-    Service,
+    repo, Service,
 };
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -23,14 +23,19 @@ impl Service {
         evidence: Value,
     ) -> Result<()> {
         let client = self.pool.get().await?;
-        client.execute("INSERT INTO otc_incidents(incident_key,severity,owner,backup,trade_id,runbook,evidence,next_update_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()+interval '30 minutes') ON CONFLICT(incident_key) DO UPDATE SET evidence=$7,severity=CASE WHEN otc_incidents.severity='P0' THEN 'P0' WHEN $2='P0' THEN 'P0' WHEN otc_incidents.severity='P1' THEN 'P1' ELSE $2 END",&[&key,&severity,&self.cfg.incident_owner,&self.cfg.incident_backup,&trade,&format!("/otc-runbook#{runbook}"),&evidence]).await?;
+        repo::operations::upsert_incident(
+            &client,
+            key,
+            severity,
+            &self.cfg.incident_owner,
+            &self.cfg.incident_backup,
+            &trade,
+            &format!("/otc-runbook#{runbook}"),
+            &evidence,
+        )
+        .await?;
         if severity == "P0" {
-            client
-                .execute(
-                    "UPDATE otc_controls SET paused=TRUE,signing_paused=TRUE WHERE singleton",
-                    &[],
-                )
-                .await?;
+            repo::operations::pause_controls(&client).await?;
         }
         Ok(())
     }
@@ -46,53 +51,50 @@ impl Service {
             "completed",
             "refunded",
         ] {
-            let row=client.query_one("WITH first_event AS (SELECT COALESCE(trade_id,rfq_id) AS entity,min(created_at) AS at FROM otc_events WHERE kind=$1 GROUP BY COALESCE(trade_id,rfq_id)) SELECT count(*),count(*) FROM first_event WHERE at>now()-interval '24 hours'",&[&event]).await?;
-            funnel.insert(event.into(), json!(row.get::<_, i64>(0)));
+            let count = repo::operations::funnel_entities(&client, event).await?;
+            funnel.insert(event.into(), json!(count));
         }
-        let coverage=client.query_one("SELECT count(*),count(*) FILTER(WHERE EXISTS(SELECT 1 FROM otc_trades t JOIN otc_inbox i ON i.activity_id=t.terms->'proposal'->>'id' AND i.actor=t.customer_actor WHERE t.rfq_id=r.id AND i.processed_at<=r.created_at+interval '120 seconds' AND i.processed_at<=(t.terms->>'quote_by')::timestamptz)) FROM otc_rfq r WHERE created_at<=now()-interval '120 seconds' AND created_at>now()-interval '24 hours'",&[]).await?;
-        let quotes_den: i64 = coverage.get(0);
-        let quotes_num: i64 = coverage.get(1);
-        let payout=client.query_one("WITH due AS (SELECT t.*,CASE WHEN t.terms->'escrow' IS NULL THEN (t.terms->>'payout_by')::timestamptz ELSE x.expires_at END AS deadline FROM otc_trades t LEFT JOIN otc_escrows x ON x.trade_id=t.id WHERE EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=t.id AND e.kind='payment') OR EXISTS(SELECT 1 FROM otc_escrow_evidence e WHERE e.trade_id=t.id AND e.kind='funding' AND valid)) SELECT count(*),count(*) FILTER(WHERE EXISTS(SELECT 1 FROM otc_events e WHERE e.trade_id=t.id AND e.kind='completed' AND e.created_at<=t.deadline)) FROM due t WHERE t.deadline BETWEEN now()-interval '24 hours' AND now()",&[]).await?;
-        let states:Vec<Value>=client.query("SELECT state,count(*),min(created_at) FROM otc_trades GROUP BY state",&[]).await?.iter().map(|r|json!({"state":r.get::<_,String>(0),"count":r.get::<_,i64>(1),"oldest":r.get::<_,Option<DateTime<Utc>>>(2)})).collect();
-        let observers:Vec<Value>=client.query("SELECT chain,checkpoint,last_scan,failures,lag,paused FROM otc_observers ORDER BY chain",&[]).await?.iter().map(|r|json!({"chain":r.get::<_,String>(0),"checkpoint":r.get::<_,Value>(1),"last_scan":r.get::<_,Option<DateTime<Utc>>>(2),"failures":r.get::<_,i32>(3),"lag":r.get::<_,Option<i64>>(4),"paused":r.get::<_,bool>(5)})).collect();
-        let fees:Vec<Value>=client.query("SELECT kind,currency,sum(amount)::text FROM otc_ledger GROUP BY kind,currency",&[]).await?.iter().map(|r|json!({"kind":r.get::<_,String>(0),"currency":r.get::<_,String>(1),"units":r.get::<_,String>(2)})).collect();
-        let inventory:Vec<Value>=client.query("SELECT i.chain,i.balance::text,i.gas_reserve::text,i.observed_at,COALESCE(sum(r.amount) FILTER(WHERE r.status!='released'),0)::text FROM otc_inventory i LEFT JOIN otc_reservations r USING(chain) GROUP BY i.chain",&[]).await?.iter().map(|r|json!({"chain":r.get::<_,String>(0),"balance":r.get::<_,String>(1),"gas_reserve":r.get::<_,String>(2),"observed_at":r.get::<_,DateTime<Utc>>(3),"reserved":r.get::<_,String>(4)})).collect();
-        let incidents:Vec<Value>=client.query("SELECT incident_key,severity,owner,backup,trade_id,runbook,evidence,detected_at,acknowledged_at,service_restored_at,financially_resolved_at,closed_at,next_update_at,actions,customer_updates FROM otc_incidents ORDER BY detected_at DESC LIMIT 100",&[]).await?.iter().map(|r|json!({"key":r.get::<_,String>(0),"severity":r.get::<_,String>(1),"owner":r.get::<_,String>(2),"backup":r.get::<_,String>(3),"trade_id":r.get::<_,Option<Uuid>>(4),"runbook":r.get::<_,String>(5),"evidence":r.get::<_,Value>(6),"detected_at":r.get::<_,DateTime<Utc>>(7),"acknowledged_at":r.get::<_,Option<DateTime<Utc>>>(8),"service_restored_at":r.get::<_,Option<DateTime<Utc>>>(9),"financially_resolved_at":r.get::<_,Option<DateTime<Utc>>>(10),"closed_at":r.get::<_,Option<DateTime<Utc>>>(11),"next_update_at":r.get::<_,Option<DateTime<Utc>>>(12),"actions":r.get::<_,Value>(13),"customer_updates":r.get::<_,Value>(14)})).collect();
-        let rfq_cohort=client.query_one("SELECT count(*),count(*) FILTER(WHERE EXISTS(SELECT 1 FROM otc_trades t WHERE t.rfq_id=r.id AND t.state='completed')) FROM otc_rfq r WHERE r.created_at>now()-interval '7 days'",&[]).await?;
-        let volume:String=client.query_one("SELECT COALESCE(sum((terms->'fee_policy'->>'basis_units')::numeric),0)::text FROM otc_trades t WHERE state='completed' AND (SELECT min(created_at) FROM otc_events e WHERE e.trade_id=t.id AND e.kind='completed')>now()-interval '24 hours'",&[]).await?.get(0);
-        let oldest: Option<DateTime<Utc>> = client
-            .query_one(
-                "SELECT min(created_at) FROM otc_outbox WHERE delivered_at IS NULL",
-                &[],
-            )
+        let (quotes_den, quotes_num) = repo::operations::quote_coverage(&client).await?;
+        let (payout_den, payout_num) = repo::operations::on_time_payout(&client).await?;
+        let states: Vec<Value> = repo::operations::trade_states(&client)
             .await?
-            .get(0);
-        let paused: bool = client
-            .query_one("SELECT paused FROM otc_controls WHERE singleton", &[])
+            .into_iter()
+            .map(|(state, count, oldest)| json!({"state":state,"count":count,"oldest":oldest}))
+            .collect();
+        let observers:Vec<Value>=repo::operations::observers(&client).await?.into_iter().map(|(chain,checkpoint,last_scan,failures,lag,paused)|json!({"chain":chain,"checkpoint":checkpoint,"last_scan":last_scan,"failures":failures,"lag":lag,"paused":paused})).collect();
+        let fees: Vec<Value> = repo::operations::ledger_fees(&client)
             .await?
-            .get(0);
-        let totals=client.query_one("SELECT COALESCE(sum(amount) FILTER(WHERE kind='fee_accrued'),0)::text,COALESCE(sum(amount) FILTER(WHERE kind='fee_collected'),0)::text,COALESCE(sum(amount) FILTER(WHERE kind='fee_compensation'),0)::text,COALESCE(sum(amount) FILTER(WHERE kind IN ('support_cost','monitoring_cost','exception_cost')),0)::text,COALESCE(sum(amount) FILTER(WHERE kind='operator_minutes'),0)::text,COALESCE(sum(amount) FILTER(WHERE kind='fee_refunded'),0)::text FROM otc_ledger",&[]).await?;
-        let accrued = super::amount::integer(&totals.get::<_, String>(0))?;
-        let collected = super::amount::integer(&totals.get::<_, String>(1))?
-            .saturating_sub(super::amount::integer(&totals.get::<_, String>(5))?);
-        let compensation = super::amount::integer(&totals.get::<_, String>(2))?;
-        let costs = super::amount::integer(&totals.get::<_, String>(3))?;
+            .into_iter()
+            .map(|(kind, currency, units)| json!({"kind":kind,"currency":currency,"units":units}))
+            .collect();
+        let inventory:Vec<Value>=repo::operations::inventory(&client).await?.into_iter().map(|(chain,balance,gas_reserve,observed_at,reserved)|json!({"chain":chain,"balance":balance,"gas_reserve":gas_reserve,"observed_at":observed_at,"reserved":reserved})).collect();
+        let incidents:Vec<Value>=repo::operations::incidents(&client).await?.into_iter().map(|(key,severity,owner,backup,trade_id,runbook,evidence,detected_at,acknowledged_at,service_restored_at,financially_resolved_at,closed_at,next_update_at,actions,customer_updates)|json!({"key":key,"severity":severity,"owner":owner,"backup":backup,"trade_id":trade_id,"runbook":runbook,"evidence":evidence,"detected_at":detected_at,"acknowledged_at":acknowledged_at,"service_restored_at":service_restored_at,"financially_resolved_at":financially_resolved_at,"closed_at":closed_at,"next_update_at":next_update_at,"actions":actions,"customer_updates":customer_updates})).collect();
+        let (rfq_den, rfq_num) = repo::operations::rfq_cohort(&client).await?;
+        let volume = repo::operations::completed_volume_24h(&client).await?;
+        let oldest = repo::operations::oldest_undelivered(&client).await?;
+        let paused = repo::operations::paused(&client).await?;
+        let totals = repo::operations::ledger_totals(&client).await?;
+        let accrued = super::amount::integer(&totals.0)?;
+        let collected =
+            super::amount::integer(&totals.1)?.saturating_sub(super::amount::integer(&totals.5)?);
+        let compensation = super::amount::integer(&totals.2)?;
+        let costs = super::amount::integer(&totals.3)?;
         let contribution = if collected >= costs {
             (collected - costs).to_string()
         } else {
             format!("-{}", costs - collected)
         };
-        let obligations:Vec<Value>=client.query("SELECT t.id,t.state,t.terms,min(e.included_at) AS funded_at FROM otc_trades t JOIN (SELECT trade_id,included_at FROM otc_evidence WHERE kind IN ('payment','review_payment') UNION ALL SELECT trade_id,included_at FROM otc_escrow_evidence WHERE kind='funding' AND valid) e ON e.trade_id=t.id WHERE t.state NOT IN ('completed','refunded') GROUP BY t.id ORDER BY min(e.included_at)",&[]).await?.iter().map(|r|json!({"trade_id":r.get::<_,Uuid>(0),"state":r.get::<_,String>(1),"terms":r.get::<_,Value>(2),"funded_at":r.get::<_,DateTime<Utc>>(3)})).collect();
+        let obligations:Vec<Value>=repo::operations::open_obligations(&client).await?.into_iter().map(|(trade_id,state,terms,funded_at)|json!({"trade_id":trade_id,"state":state,"terms":terms,"funded_at":funded_at})).collect();
         let reporting = self.reporting().await?;
         Ok(
-            json!({"reporting":reporting,"environment":if self.cfg.demo{"demo"}else{"live"},"desk":self.cfg.desk_actor,"paused":paused,"funnel":funnel,"states":states,"quote_coverage":{"numerator":quotes_num,"denominator":quotes_den,"rate":rate(quotes_num,quotes_den)},"on_time_payout":{"numerator":payout.get::<_,i64>(1),"denominator":payout.get::<_,i64>(0),"rate":rate(payout.get(1),payout.get(0))},"conversion_7d":{"numerator":rfq_cohort.get::<_,i64>(1),"denominator":rfq_cohort.get::<_,i64>(0)},"completed_usdt_units_24h":volume,"oldest_undelivered":oldest,"observers":observers,"inventory":inventory,"fees":fees,"incidents":incidents,"open_funded_cases":obligations,"economics":{"operator_minutes":totals.get::<_,String>(4),"attributable_costs_usdt_units":costs.to_string(),"collected_usdt_units":collected.to_string(),"accrued_usdt_units":accrued.to_string(),"unpaid_usdt_units":accrued.saturating_sub(compensation).saturating_sub(collected).to_string(),"contribution_usdt_units":contribution}}),
+            json!({"reporting":reporting,"environment":if self.cfg.demo{"demo"}else{"live"},"desk":self.cfg.desk_actor,"paused":paused,"funnel":funnel,"states":states,"quote_coverage":{"numerator":quotes_num,"denominator":quotes_den,"rate":rate(quotes_num,quotes_den)},"on_time_payout":{"numerator":payout_num,"denominator":payout_den,"rate":rate(payout_num,payout_den)},"conversion_7d":{"numerator":rfq_num,"denominator":rfq_den},"completed_usdt_units_24h":volume,"oldest_undelivered":oldest,"observers":observers,"inventory":inventory,"fees":fees,"incidents":incidents,"open_funded_cases":obligations,"economics":{"operator_minutes":totals.4,"attributable_costs_usdt_units":costs.to_string(),"collected_usdt_units":collected.to_string(),"accrued_usdt_units":accrued.to_string(),"unpaid_usdt_units":accrued.saturating_sub(compensation).saturating_sub(collected).to_string(),"contribution_usdt_units":contribution}}),
         )
     }
     pub(crate) async fn control(&self, actor: &str, paused: bool) -> Result<Value> {
         self.desk(actor)?;
         if !paused {
             let client = self.pool.get().await?;
-            let unsafe_incidents:i64=client.query_one("SELECT count(*) FROM otc_incidents WHERE severity='P0' AND service_restored_at IS NULL AND closed_at IS NULL",&[]).await?.get(0);
+            let unsafe_incidents = repo::operations::unsafe_incidents(&client).await?;
             if unsafe_incidents > 0 {
                 return Err(Error::Conflict(
                     "restore and verify P0 containment before signing resumes".into(),
@@ -103,13 +105,13 @@ impl Service {
                 return Err(Error::Disabled);
             }
             let client = self.pool.get().await?;
-            let count:i64=client.query_one("SELECT count(*) FROM otc_observers WHERE paused OR last_scan IS NULL OR last_scan<now()-interval '60 seconds'",&[]).await?.get(0);
+            let count = repo::operations::stale_observers(&client).await?;
             if count > 0 {
                 return Err(Error::Disabled);
             }
         }
         let client = self.pool.get().await?;
-        client.execute("UPDATE otc_controls SET paused=$1,signing_paused=CASE WHEN NOT $1 THEN FALSE ELSE signing_paused END WHERE singleton",&[&paused]).await?;
+        repo::operations::set_paused(&client, paused).await?;
         Ok(json!({"paused":paused}))
     }
     pub(crate) async fn incident_action(
@@ -121,14 +123,10 @@ impl Service {
         self.desk(actor)?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        let row = tx
-            .query_opt(
-                "SELECT trade_id,severity FROM otc_incidents WHERE incident_key=$1 FOR UPDATE",
-                &[&key],
-            )
+        let row = repo::operations::lock_incident(&tx, key)
             .await?
             .ok_or(Error::NotFound)?;
-        let trade: Option<Uuid> = row.get(0);
+        let trade: Option<Uuid> = row.0;
         let field = match request.action.as_str() {
             "acknowledge" => "acknowledged_at",
             "service_restored" => "service_restored_at",
@@ -142,10 +140,9 @@ impl Service {
         }
         if ["financially_resolved", "close"].contains(&request.action.as_str()) {
             if let Some(trade) = trade {
-                let state: String = tx
-                    .query_one("SELECT state FROM otc_trades WHERE id=$1", &[&trade])
+                let state = repo::operations::trade_state(&tx, &trade)
                     .await?
-                    .get(0);
+                    .ok_or(Error::NotFound)?;
                 if !["completed", "refunded", "rejected", "expired"].contains(&state.as_str()) {
                     return Err(Error::Conflict(
                         "financial obligation remains unresolved".into(),
@@ -153,7 +150,7 @@ impl Service {
                 }
             }
             if request.action == "close" {
-                let allowed:bool=tx.query_one("SELECT service_restored_at IS NOT NULL AND financially_resolved_at IS NOT NULL FROM otc_incidents WHERE incident_key=$1",&[&key]).await?.get(0);
+                let allowed = repo::operations::incident_resolved(&tx, key).await?;
                 if !allowed {
                     return Err(Error::Conflict(
                         "record service restoration and financial resolution before closure".into(),
@@ -162,15 +159,14 @@ impl Service {
             }
         }
         if let (Some(id), Some(message)) = (trade, request.customer_update.as_ref()) {
-            let row = tx
-                .query_one("SELECT customer_actor FROM otc_trades WHERE id=$1", &[&id])
-                .await?;
-            let customer: String = row.get(0);
+            let customer = repo::operations::trade_customer(&tx, &id)
+                .await?
+                .ok_or(Error::NotFound)?;
             let update_id = Uuid::new_v4();
             let body = json!({"@context":super::protocol::context(),"id":format!("{actor}/updates/{update_id}"),"type":"Create","actor":actor,"to":[customer],"object":{"id":format!("{actor}/updates/{update_id}/notice"),"type":"Document","context":format!("{actor}/decisions/{id}/agreement"),"name":"OTC incident update","content":message}});
             super::repo::enqueue(&tx, actor, &body, "customer_update").await?;
         }
-        if request.action == "close" && ["P0", "P1"].contains(&row.get::<_, String>(1).as_str()) {
+        if request.action == "close" && ["P0", "P1"].contains(&row.1.as_str()) {
             for field in [
                 "root_cause",
                 "preventive_test",
@@ -191,17 +187,15 @@ impl Service {
         } else {
             format!("{field}=COALESCE({field},now()),")
         };
-        let query=format!("UPDATE otc_incidents SET {stamp}actions=actions||$2::jsonb,customer_updates=customer_updates||$3::jsonb,next_update_at=now()+interval '30 minutes' WHERE incident_key=$1");
-        tx.execute(
-            &query,
-            &[
-                &key,
-                &json!([action]),
-                &request
-                    .customer_update
-                    .map(|message| json!([{"message":message,"at":Utc::now()}]))
-                    .unwrap_or(json!([])),
-            ],
+        repo::operations::record_incident_action(
+            &tx,
+            key,
+            &stamp,
+            &json!([action]),
+            &request
+                .customer_update
+                .map(|message| json!([{"message":message,"at":Utc::now()}]))
+                .unwrap_or(json!([])),
         )
         .await?;
         tx.commit().await?;
@@ -212,12 +206,9 @@ impl Service {
             return Ok(());
         };
         let client = self.pool.get().await?;
-        let rows=client.query("SELECT incident_key,severity,owner,backup,runbook,detected_at,acknowledged_at FROM otc_incidents WHERE closed_at IS NULL AND next_notification_at<=now() ORDER BY detected_at LIMIT 20",&[]).await?;
+        let rows = repo::operations::due_notifications(&client).await?;
         for row in rows {
-            let key: String = row.get(0);
-            let severity: String = row.get(1);
-            let detected: DateTime<Utc> = row.get(5);
-            let acknowledged: Option<DateTime<Utc>> = row.get(6);
+            let (key, severity, owner, backup, runbook, detected, acknowledged) = row;
             let limit = match severity.as_str() {
                 "P0" => 300,
                 "P1" => 900,
@@ -234,7 +225,7 @@ impl Service {
                 } else {
                     (Utc::now() - detected).num_seconds() > limit
                 };
-            let body = json!({"incident_key":super::protocol::digest(&json!(key)),"severity":severity,"owner":row.get::<_,String>(if escalated{3}else{2}),"escalated":escalated,"runbook":row.get::<_,String>(4),"dashboard":format!("{}/#/otc",self.cfg.origin)});
+            let body = json!({"incident_key":super::protocol::digest(&json!(key)),"severity":severity,"owner":if escalated{backup}else{owner},"escalated":escalated,"runbook":runbook,"dashboard":format!("{}/#/otc",self.cfg.origin)});
             if self
                 .http
                 .post(url)
@@ -244,7 +235,7 @@ impl Service {
                 .status()
                 .is_success()
             {
-                client.execute("UPDATE otc_incidents SET notifications=notifications+1,next_notification_at=now()+interval '15 minutes' WHERE incident_key=$1",&[&key]).await?;
+                repo::operations::incident_notified(&client, &key).await?;
             }
         }
         Ok(())

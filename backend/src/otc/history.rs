@@ -3,7 +3,7 @@
 //! Candles and book levels are aggregated on read from the desk's own settled
 //! prints and published advertisements; the indicative price series is merged
 //! in by the route handler because it lives with the market price service.
-use super::{amount, error::Result, Service};
+use super::{amount, error::Result, repo, Service};
 use crate::market_prices::ExchangeCandle;
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Value};
@@ -251,40 +251,15 @@ fn round(value: f64, places: u32) -> f64 {
 impl Service {
     pub(crate) async fn history(&self, window: &Window) -> Result<Vec<Print>> {
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                "SELECT 'trade' AS side, created_at AS at,
-                        CASE WHEN terms->>'direction'='buy' THEN terms->>'output_units'
-                             ELSE terms->>'input_units' END AS ever_units,
-                        CASE WHEN terms->>'direction'='buy' THEN terms->>'input_units'
-                             ELSE terms->>'output_units' END AS usdt_units
-                   FROM otc_trades
-                  WHERE state='completed' AND terms->>'direction' IN ('buy','sell')
-                    AND created_at>=$1
-                 UNION ALL
-                 SELECT 'trade', created_at, body->>'ever_units', body->>'usdt_units'
-                   FROM otc_p2p_trades
-                  WHERE state='completed' AND created_at>=$1
-                 UNION ALL
-                 SELECT CASE WHEN body->>'direction'='buy' THEN 'bid' ELSE 'ask' END,
-                        created_at, body->>'ever_units', body->>'usdt_units'
-                   FROM otc_public_offers
-                  WHERE created_at>=$1
-                  ORDER BY at",
-                &[&window.from],
-            )
-            .await?;
+        let rows = repo::history::prints(&client, &window.from).await?;
         let mut prints = Vec::with_capacity(rows.len());
-        for row in rows {
-            let side = match row.get::<_, String>("side").as_str() {
+        for (side, at, ever_units, usdt_units) in rows {
+            let side = match side.as_str() {
                 "bid" => Side::Bid,
                 "ask" => Side::Ask,
                 _ => Side::Trade,
             };
-            let (Some(ever), Some(usdt)) = (
-                row.get::<_, Option<String>>("ever_units"),
-                row.get::<_, Option<String>>("usdt_units"),
-            ) else {
+            let (Some(ever), Some(usdt)) = (ever_units, usdt_units) else {
                 continue;
             };
             let (Ok(ever_units), Ok(usdt_units)) = (amount::integer(&ever), amount::integer(&usdt))
@@ -293,7 +268,7 @@ impl Service {
             };
             prints.push(Print {
                 side,
-                at: row.get("at"),
+                at,
                 ever_units,
                 usdt_units,
             });
