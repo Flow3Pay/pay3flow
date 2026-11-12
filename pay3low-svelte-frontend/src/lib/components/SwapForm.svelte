@@ -63,7 +63,7 @@
   .assetAmount span { display: flex; align-items: center; gap: 8px; font-weight: 750; }
   .assetAmount img { width: 28px; height: 28px; }
   .swapArrow { display: flex; justify-content: center; color: var(--color-text-soft); line-height: 1; }
-  .bridgeIcon { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: var(--exchange-card-bg); color: var(--color-text-soft); cursor: default; box-shadow: none; }
+  .bridgeIcon { display: grid; width: 28px; height: 28px; min-height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: var(--exchange-card-bg); color: var(--color-text-soft); cursor: default; box-shadow: none; }
   .bridgeIcon:disabled { opacity: 1; cursor: default; }
   :global(html[data-theme="dark"]) .bridgeIcon { color: #fff; }
   .bridgeIcon svg { width: 22px; height: 22px; fill: currentColor; }
