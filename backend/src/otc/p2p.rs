@@ -124,12 +124,14 @@ impl Service {
             && self.wallet_login_chain_available("ethereum")
             && self.cfg.p2p_rpc().len() >= 2
     }
-    pub(crate) fn p2p_direct_evm_network_available(&self, network: &str) -> bool {
-        super::config::evm_chain_id(network).is_some()
-            && self
-                .cfg
+    pub(crate) fn p2p_direct_network_available(&self, network: &str) -> bool {
+        if super::config::evm_chain_id(network).is_some() {
+            self.cfg
                 .p2p_evm_rpcs(network)
                 .is_some_and(|endpoints| endpoints.len() >= 2)
+        } else {
+            self.cfg.p2p_chain_endpoints(network).is_some()
+        }
     }
     /// Reads always follow the network the deal was booked on. If an operator
     /// repoints the peer contour mid-deal, the chain check fails and the attempt
@@ -573,17 +575,6 @@ impl Service {
         if !["payment", "payout", "fee"].contains(&kind) {
             return Err(invalid("invalid transfer kind"));
         }
-        // Wallet freshness proves the signing party controls the booked sender address.
-        let verified = self
-            .wallet(
-                actor,
-                if kind == "payout" {
-                    "everscale"
-                } else {
-                    "ethereum"
-                },
-            )
-            .await?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         if let Some(existing) = tx
@@ -619,13 +610,51 @@ impl Service {
         let state: String = row.get("state");
         let body: Value = row.get("body");
         let pay_by: DateTime<Utc> = row.get("pay_by");
+        let network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
+        // A non-EVM direct payment is signed by the booked wallet itself; the
+        // transfer evidence, not an Ethereum login wallet, proves control.
+        let direct_non_evm_payment = kind == "payment"
+            && super::config::evm_chain_id(network).is_none()
+            && self.p2p_direct_network_available(network)
+            && crate::route_execution::validate_otc_wallet_address(
+                network,
+                body["usdt_payer"].as_str().unwrap_or_default(),
+            )
+            .is_ok();
+        if kind == "payment"
+            && super::config::evm_chain_id(network).is_none()
+            && !direct_non_evm_payment
+        {
+            return Err(Error::Conflict(
+                "this payment requires a supported conversion route".into(),
+            ));
+        }
+        // Wallet freshness proves the signing party controls the booked sender
+        // address. A non-EVM direct payment is proven by its signed transfer, so
+        // it does not require an Ethereum login wallet.
+        let verified = if kind == "payout" {
+            self.wallet(actor, "everscale").await?
+        } else if direct_non_evm_payment || kind == "fee" {
+            // The fee leg sender follows the verified payment leg below; a
+            // non-EVM payer may not have an Ethereum login wallet.
+            body["usdt_payer"].as_str().unwrap_or_default().to_string()
+        } else {
+            self.wallet(actor, "ethereum").await?
+        };
         if kind == "payment" {
-            let network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
-            if !self.p2p_direct_evm_network_available(network) {
-                return Err(Error::Conflict(
-                    "this payment requires a supported conversion route".into(),
-                ));
+            let expected_payer = match body["direction"].as_str() {
+                Some("sell") => row.get::<_, String>("taker_actor"),
+                Some("buy") => row.get::<_, String>("owner_actor"),
+                _ => return Err(invalid("deal direction is malformed")),
+            };
+            if actor != expected_payer {
+                return Err(Error::Unauthorized);
             }
+        }
+        if kind == "payment" && !self.p2p_direct_network_available(network) {
+            return Err(Error::Conflict(
+                "this payment requires a supported conversion route".into(),
+            ));
         }
         if kind != "fee" {
             let payer_field = if kind == "payment" {
@@ -633,7 +662,7 @@ impl Service {
             } else {
                 "ever_payer"
             };
-            if body[payer_field] != json!(verified) {
+            if body[payer_field] != json!(verified) && !direct_non_evm_payment {
                 return Err(Error::Unauthorized);
             }
         }
@@ -646,7 +675,9 @@ impl Service {
             .is_some();
         let allowed = match state.as_str() {
             "payment_pending" => {
-                kind == "payment" && Utc::now() <= pay_by && body["usdt_payer"] == json!(verified)
+                kind == "payment"
+                    && Utc::now() <= pay_by
+                    && (body["usdt_payer"] == json!(verified) || direct_non_evm_payment)
             }
             // The stablecoin leg is already verified and the counterparty has paid.
             // Refusing a late EVER delivery would strand those funds, so the
@@ -713,7 +744,7 @@ impl Service {
             if payment_source != format!("USDT@{fee_network}")
                 || expected_fee_asset_id
                     .is_some_and(|expected| payment_source_asset_id != Some(expected))
-                || !self.p2p_direct_evm_network_available(fee_network)
+                || !self.p2p_direct_network_available(fee_network)
             {
                 return Err(Error::Conflict(
                     "this service fee requires a supported conversion route".into(),
@@ -724,7 +755,10 @@ impl Service {
                     "service-fee recipient is not configured for the deal network".into(),
                 )
             })?;
-            fee_leg(fee_network, &fee.get::<_, String>(0), &verified, recipient)?
+            let fee_sender = payment_instructions["leg"]["sender"]
+                .as_str()
+                .unwrap_or(verified.as_str());
+            fee_leg(fee_network, &fee.get::<_, String>(0), fee_sender, recipient)?
         } else {
             self.deal_leg(&body, kind)?
         };
@@ -740,8 +774,8 @@ impl Service {
                 "this deal leg already has an unresolved attempt".into(),
             ));
         }
-        let net = if kind == "payout" {
-            self.p2p_evm()
+        let evm_net = if kind == "payout" || super::config::evm_chain_id(&leg.chain).is_none() {
+            None
         } else {
             let mut net = self.p2p_net(&body)?;
             if kind == "fee" {
@@ -750,24 +784,50 @@ impl Service {
                     .unwrap_or(self.cfg.p2p_usdt())
                     .to_string();
             }
-            net
+            Some(net)
         };
-        let call = if kind == "payment" || kind == "fee" {
-            if super::chain::number(&self.evm_agree(&net, "eth_chainId", json!([])).await?)?
-                != u128::from(net.chain_id)
-            {
-                return Err(invalid("wrong EVM network"));
+        let call = match (kind, &evm_net) {
+            ("payout", _) => {
+                json!({"family":"everscale","sender":leg.sender,"recipient":leg.recipient,"amount":leg.transfer_amount,"bounce":true})
             }
-            let nonce = format!("0x{:x}", self.evm_pending_nonce(&net, &leg.sender).await?);
-            let data = super::chain::ethereum::transfer_data(&leg)?;
-            json!({"family":"evm","chain_id":net.chain_id,"from":leg.sender,"to":net.usdt,"data":data,"value":"0x0","nonce":nonce})
-        } else {
-            json!({"family":"everscale","sender":leg.sender,"recipient":leg.recipient,"amount":leg.transfer_amount,"bounce":true})
+            (_, Some(net)) => {
+                if super::chain::number(&self.evm_agree(net, "eth_chainId", json!([])).await?)?
+                    != u128::from(net.chain_id)
+                {
+                    return Err(invalid("wrong EVM network"));
+                }
+                let nonce = format!("0x{:x}", self.evm_pending_nonce(net, &leg.sender).await?);
+                let data = super::chain::ethereum::transfer_data(&leg)?;
+                json!({"family":"evm","chain_id":net.chain_id,"from":leg.sender,"to":net.usdt,"data":data,"value":"0x0","nonce":nonce})
+            }
+            (_, None) => {
+                let token = if kind == "fee" {
+                    body["fee_usdt_contract"]
+                        .as_str()
+                        .unwrap_or(self.cfg.p2p_usdt())
+                } else {
+                    body.get("stablecoin_contract")
+                        .or_else(|| body.get("usdt_contract"))
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| invalid("deal token is missing"))?
+                };
+                match leg.chain.as_str() {
+                    "tron" => super::chain::tron::call(&leg, token),
+                    "ton" => super::chain::ton::call(&leg, token),
+                    "solana" => super::chain::solana::call(&leg, token),
+                    _ => {
+                        return Err(Error::Conflict(
+                            "direct settlement is not configured for this network".into(),
+                        ))
+                    }
+                }
+            }
         };
-        let checkpoint = if kind == "payment" || kind == "fee" {
-            json!({"block": format!("0x{:x}", self.evm_finalized_height(&net).await?)})
-        } else {
-            Value::Null
+        let checkpoint = match &evm_net {
+            Some(net) => {
+                json!({"block": format!("0x{:x}", self.evm_finalized_height(net).await?)})
+            }
+            None => Value::Null,
         };
         let fee_preflight = if kind == "payment" {
             let source_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
@@ -790,7 +850,7 @@ impl Service {
                 &source_asset,
                 &fee_asset,
                 source_network,
-                self.p2p_direct_evm_network_available(source_network),
+                self.p2p_direct_network_available(source_network),
                 source_token.asset_id == fee_token.asset_id,
             );
             if direct_fee_transfer {
@@ -923,7 +983,7 @@ impl Service {
         let output_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
         let to = Asset::new(stablecoin.symbol(), Some(output_network))?;
         if from == to {
-            if !self.p2p_direct_evm_network_available(network) {
+            if !self.p2p_direct_network_available(network) {
                 return Err(Error::Conflict(
                     "direct payment is not configured for this receiving network".into(),
                 ));
@@ -1039,7 +1099,7 @@ impl Service {
             &to,
             &source_token.asset_id,
             &destination_token.asset_id,
-        ) && self.p2p_direct_evm_network_available(network);
+        ) && self.p2p_direct_network_available(network);
         if from == to && !direct_payment {
             return Err(invalid(
                 "source and destination token identities do not match",
@@ -1053,7 +1113,7 @@ impl Service {
             &from,
             &fee_asset,
             output_network,
-            self.p2p_direct_evm_network_available(output_network),
+            self.p2p_direct_network_available(output_network),
             source_token.asset_id == fee_token.asset_id,
         );
         if fee_token.decimals != Some(6)
@@ -1128,7 +1188,15 @@ impl Service {
                 return Err(invalid("unsupported Ethereum stablecoin contract"));
             }
         }
-        if from == to {
+        // Direct settlement signs from the booked `usdt_payer`. That address is
+        // valid on every EVM network but only on its own non-EVM network, so a
+        // same-network route from a different wallet must stay a provider quote.
+        let same_payer = if super::config::evm_chain_id(network).is_some() {
+            source_address.eq_ignore_ascii_case(body["usdt_payer"].as_str().unwrap_or_default())
+        } else {
+            source_address == body["usdt_payer"].as_str().unwrap_or_default()
+        };
+        if from == to && same_payer {
             tx.rollback().await?;
             drop(client);
             return Box::pin(self.p2p_prepare(actor, id, key, "payment")).await;
@@ -1516,6 +1584,10 @@ impl Service {
             ) {
                 return Err(invalid("invalid NEAR Intents transaction reference"));
             }
+        } else if chain == "solana" {
+            if !super::chain::solana::reference_valid(reference) {
+                return Err(invalid("invalid Solana transaction reference"));
+            }
         } else {
             let bytes = wallet::unhex(reference)?;
             if bytes.len() != 32
@@ -1713,10 +1785,12 @@ impl Service {
                     self.locate_ethereum(&leg, &instructions, &evm_net())
                         .await
                         .unwrap_or(None)
-                } else {
+                } else if chain == "everscale" {
                     self.locate_everscale(&leg, &instructions)
                         .await
                         .unwrap_or(None)
+                } else {
+                    None
                 };
                 if let Some(found) = located {
                     client
@@ -1746,8 +1820,31 @@ impl Service {
                     evidence.chain = chain.clone();
                 }
                 result
-            } else {
+            } else if chain == "everscale" {
                 self.everscale_deal_evidence(&reference, &leg).await
+            } else {
+                let endpoints = self
+                    .cfg
+                    .p2p_chain_endpoints(&chain)
+                    .unwrap_or_default()
+                    .to_vec();
+                let token = instructions["call"]["contract"]
+                    .as_str()
+                    .or_else(|| instructions["call"]["mint"].as_str())
+                    .or_else(|| instructions["call"]["jetton"].as_str())
+                    .ok_or_else(|| invalid("deal token is missing"))?;
+                match chain.as_str() {
+                    "tron" => {
+                        self.tron_evidence(&reference, &leg, token, &endpoints)
+                            .await
+                    }
+                    "ton" => self.ton_evidence(&reference, &leg, token, &endpoints).await,
+                    "solana" => {
+                        self.solana_evidence(&reference, &leg, token, &endpoints)
+                            .await
+                    }
+                    _ => Err(invalid("unsupported deal network")),
+                }
             };
             match result {
                 Ok(Some(evidence)) if evidence.finalized && evidence.successful => {

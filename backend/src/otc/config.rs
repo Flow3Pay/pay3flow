@@ -37,6 +37,9 @@ pub(crate) struct Config {
     pub p2p_ethereum_rpc: Vec<String>,
     #[serde(default)]
     pub p2p_evm_rpcs: BTreeMap<String, Vec<String>>,
+    /// Direct non-EVM contours, keyed by `tron`, `ton` or `solana`.
+    #[serde(default)]
+    pub p2p_chain_rpcs: BTreeMap<String, Vec<String>>,
     pub origin: String,
     pub relay_origin: String,
     pub matcher_actor: String,
@@ -90,6 +93,7 @@ impl Default for Config {
             p2p_usdt_contract: None,
             p2p_ethereum_rpc: Vec::new(),
             p2p_evm_rpcs: BTreeMap::new(),
+            p2p_chain_rpcs: BTreeMap::new(),
             origin: String::new(),
             relay_origin: String::new(),
             matcher_actor: String::new(),
@@ -168,6 +172,15 @@ impl Config {
                 return Err(invalid("invalid direct OTC EVM network configuration"));
             }
         }
+        for (network, endpoints) in &self.p2p_chain_rpcs {
+            if !matches!(network.as_str(), "tron" | "ton" | "solana")
+                || endpoints.len() < 2
+                || endpoints[0] == endpoints[1]
+                || (!self.demo && endpoints.iter().any(|url| !url.starts_with("https://")))
+            {
+                return Err(invalid("invalid direct OTC chain configuration"));
+            }
+        }
         Ok(())
     }
     fn check_evm_network(&self, chain_id: u64, contract: &str) -> Result<()> {
@@ -206,6 +219,12 @@ impl Config {
         } else {
             self.p2p_evm_rpcs.get(network).map(Vec::as_slice)
         }
+    }
+    pub fn p2p_chain_endpoints(&self, network: &str) -> Option<&[String]> {
+        self.p2p_chain_rpcs
+            .get(network)
+            .filter(|endpoints| endpoints.len() >= 2)
+            .map(Vec::as_slice)
     }
 }
 
@@ -521,11 +540,55 @@ mod config_tests {
         );
         assert!(cfg.validate_network().is_err());
         cfg.p2p_evm_rpcs.insert(
-            "sepolia".into(),
+            "goerli".into(),
             vec![
                 "https://rpc-a.example".into(),
                 "https://rpc-b.example".into(),
             ],
+        );
+        assert!(cfg.validate_network().is_err());
+    }
+
+    #[test]
+    fn validates_independent_endpoint_pairs_for_direct_non_evm_networks() {
+        let mut cfg = Config {
+            p2p_chain_rpcs: [
+                (
+                    "tron".into(),
+                    vec![
+                        "https://tron-a.example".into(),
+                        "https://tron-b.example".into(),
+                    ],
+                ),
+                (
+                    "ton".into(),
+                    vec![
+                        "https://ton-a.example".into(),
+                        "https://ton-b.example".into(),
+                    ],
+                ),
+                (
+                    "solana".into(),
+                    vec![
+                        "https://sol-a.example".into(),
+                        "https://sol-b.example".into(),
+                    ],
+                ),
+            ]
+            .into(),
+            ..Config::default()
+        };
+        assert!(cfg.validate_network().is_ok());
+        assert_eq!(cfg.p2p_chain_endpoints("solana").unwrap().len(), 2);
+
+        cfg.p2p_chain_rpcs.insert(
+            "solana".into(),
+            vec!["https://same.example".into(), "https://same.example".into()],
+        );
+        assert!(cfg.validate_network().is_err());
+        cfg.p2p_chain_rpcs.insert(
+            "cosmos".into(),
+            vec!["https://a.example".into(), "https://b.example".into()],
         );
         assert!(cfg.validate_network().is_err());
     }

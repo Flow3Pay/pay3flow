@@ -1,5 +1,8 @@
 pub(crate) mod ethereum;
 pub(crate) mod everscale;
+pub(crate) mod solana;
+pub(crate) mod ton;
+pub(crate) mod tron;
 use super::{
     error::{invalid, Result},
     Service,

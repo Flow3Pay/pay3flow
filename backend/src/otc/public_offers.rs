@@ -281,7 +281,7 @@ impl Service {
         {
             return Err(Error::RouteUnavailable);
         }
-        let direct_network = self.p2p_direct_evm_network_available(&receiving_network);
+        let direct_network = self.p2p_direct_network_available(&receiving_network);
         let mut route_available = false;
         for source_token in provider.supported_tokens().await {
             let source_network =
@@ -497,9 +497,9 @@ mod tests {
     }
 
     #[test]
-    fn offers_reject_sepolia_even_when_the_peer_contour_is_configured_for_it() {
+    fn offers_reject_a_testnet_even_when_the_peer_contour_is_configured_for_it() {
         let cfg = super::super::config::Config {
-            p2p_ethereum_chain_id: Some(11155111),
+            p2p_ethereum_chain_id: Some(5),
             p2p_usdt_contract: Some(format!("0x{}", "c".repeat(40))),
             ..Default::default()
         };

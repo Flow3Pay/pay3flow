@@ -19,11 +19,7 @@ fn entry(chain: &str, symbol: &str, network: &str, amount: Option<String>, state
 
 impl Service {
     pub(crate) async fn balances(&self, actor: &str) -> Value {
-        let network = if self.cfg.p2p_chain() == 1 {
-            "Ethereum"
-        } else {
-            "Sepolia"
-        };
+        let network = "Ethereum";
         let ever = self
             .balance("everscale", "EVER", "Everscale", EVER_DECIMALS, async {
                 let address = self.wallet(actor, "everscale").await?;
@@ -95,8 +91,14 @@ mod tests {
             assert_eq!(gap["state"], json!(state));
             assert_eq!(gap["symbol"], json!("EVER"));
         }
-        let funded = entry("ethereum", "USDT", "Sepolia", Some("15812.49".into()), "ok");
+        let funded = entry(
+            "ethereum",
+            "USDT",
+            "Ethereum",
+            Some("15812.49".into()),
+            "ok",
+        );
         assert_eq!(funded["amount"], json!("15812.49"));
-        assert_eq!(funded["network"], json!("Sepolia"));
+        assert_eq!(funded["network"], json!("Ethereum"));
     }
 }

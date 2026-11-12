@@ -118,26 +118,35 @@ settlement on EVM receiving networks is configured with `p2p_evm_rpcs`, a JSON
 object mapping canonical network IDs (`base`, `arbitrum-one`, `optimism`,
 `bnb-smart-chain`, `gnosis`, `polygon-pos`, `avalanche-c`) to two independently
 operated HTTPS RPC URLs. Ethereum uses `p2p_ethereum_rpc`; other networks with
-no configured pair remain unavailable for direct settlement. The backend
-checks each pair's chain ID before preparing a transfer and observes the exact
-token transfer on that same network. NEAR Intents is used for supported routed
-cross-network payments; direct same-network NEAR and TRON settlement is not
-implemented.
+no configured pair remain unavailable for direct settlement. TRON, TON and
+Solana use `p2p_chain_rpcs`, a JSON object mapping `tron`, `ton` or `solana` to
+two independently operated HTTPS endpoints (TronGrid-compatible solidity API,
+TonAPI v2, and Solana JSON-RPC respectively). The backend checks each EVM pair's
+chain ID before preparing a transfer and observes the exact token transfer on
+the booked network. NEAR Intents is used for supported routed cross-network
+payments; direct same-network NEAR, Sui and Aptos settlement is not implemented.
 
 The deal stores the receiving network, exact catalog asset identity, token
-contract and EVM chain ID. Direct same-network EVM settlement is enabled only
-when the exact source/destination asset IDs match and the required observer
-pair is configured. A fee transfer is direct only when its source is the exact
-USDT token on the configured recipient network; otherwise it requires an
+contract and EVM chain ID. Direct same-network settlement is enabled only when
+the exact source/destination asset IDs match and the required observer pair is
+configured. A fee transfer is direct only when its source is the exact USDT
+token on the configured recipient network; otherwise it requires an
 exact-output route. `validate_network` keeps the base network on canonical
 Ethereum mainnet and requires a usable `p2p_ever_fee_reserve`. The EVER leg adds
 that reserve to the booked amount and accepts a balance increase of at least
 the booked amount, because a receiving contract may take its fee from the
 transfer.
 
-Every direct EVM network needs two independent HTTPS observers, and the EVER
-leg needs two Everscale GraphQL endpoints. Finalized heights and pending nonces
-are read conservatively because public providers may be at different heads.
+Every direct network needs two independent HTTPS observers, and the EVER leg
+needs two Everscale GraphQL endpoints. Finalized heights and pending nonces are
+read conservatively because public providers may be at different heads. TRON
+uses solidity-node transaction info, Solana waits for `finalized` commitment,
+and TON waits for a five-minute trace window before crediting. A submitted
+reference is mandatory for these non-EVM observers; an attempt without one
+remains prepared rather than guessing from a scan. Direct non-EVM payment signs
+from the booked stablecoin payer; a sell offer books the taker's Ethereum login
+wallet, so a taker paying on a non-EVM network uses the routed flow even when
+the source and destination networks match.
 
 ### Desk settlement setup
 

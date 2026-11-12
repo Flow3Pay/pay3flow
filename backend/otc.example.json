@@ -15,6 +15,7 @@
       "https://sei-evm-rpc.publicnode.com"
     ]
   },
+  "p2p_chain_rpcs": {},
   "origin": "https://app.example",
   "relay_origin": "https://relay.example",
   "matcher_actor": "https://relay.example/actors/fmatch",

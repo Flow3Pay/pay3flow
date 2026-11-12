@@ -1606,12 +1606,12 @@ async fn p2p_payment_verification_accrues_the_service_fee_once() {
 }
 #[tokio::test]
 #[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
-async fn p2p_publication_rejects_sepolia_even_when_the_desk_keeps_mainnet() {
+async fn p2p_publication_rejects_a_testnet_even_when_the_desk_keeps_mainnet() {
     let (service, task, owner, taker) = p2p_fixture().await;
-    let sepolia_usdt = format!("0x{}", "2c".repeat(20));
+    let testnet_usdt = format!("0x{}", "2c".repeat(20));
     let mut cfg = (*service.cfg).clone();
-    cfg.p2p_ethereum_chain_id = Some(11155111);
-    cfg.p2p_usdt_contract = Some(sepolia_usdt.clone());
+    cfg.p2p_ethereum_chain_id = Some(5);
+    cfg.p2p_usdt_contract = Some(testnet_usdt.clone());
     let peer = Service {
         cfg: Arc::new(cfg),
         ..service
@@ -1619,12 +1619,12 @@ async fn p2p_publication_rejects_sepolia_even_when_the_desk_keeps_mainnet() {
     // The desk contour keeps its own network while peers trade elsewhere.
     assert_eq!(peer.cfg.ethereum_chain_id, 1);
     assert_eq!(peer.cfg.usdt_contract, super::config::USDT);
-    assert_eq!(peer.cfg.p2p_chain(), 11155111);
+    assert_eq!(peer.cfg.p2p_chain(), 5);
     assert!(!peer.public_offers_available());
     assert!(matches!(
         peer.post_public_offer(
             &owner,
-            "sepolia-offer",
+            "testnet-offer",
             draft(Direction::Sell, &format!("0x{}", "b".repeat(40))),
         )
         .await,

@@ -1046,7 +1046,7 @@ mod tests {
         for network in ["sei", "solana", "sui", "ton", "aptos"] {
             assert!(supports_otc_wallet_network(network), "{network}");
         }
-        assert!(!supports_otc_wallet_network("sepolia"));
+        assert!(!supports_otc_wallet_network("goerli"));
     }
 
     #[test]

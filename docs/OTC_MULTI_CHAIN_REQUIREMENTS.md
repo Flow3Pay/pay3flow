@@ -7,7 +7,7 @@ verified implementation status. It remains the working requirements baseline
 for extending OTC from its Ethereum-centric USDT flow to multi-chain USDT and
 USDC flows; implemented support is narrower than the full target.
 
-The original request was to block Sepolia for OTC offers, add USDC alongside
+The original request was to block test networks for OTC offers, add USDC alongside
 USDT, and provide a searchable token picker. The scope was subsequently
 expanded: supported production networks must remain selectable, both stablecoins
 must be available on those networks when supported, and wallet connections
@@ -24,8 +24,7 @@ identifies a network.
 3. Make production networks available where the selected token is actually
    supported by the configured settlement provider and the full wallet/payment
    flow is implemented.
-4. Exclude test networks (including Sepolia) from OTC offer creation and
-   settlement.
+4. Exclude all test networks from OTC offer creation and settlement.
 5. Support cross-network settlement using NEAR Intents, so the input and output
    networks may differ. An example is paying USDT from TRON and receiving USDT
    on Solana.
@@ -235,8 +234,8 @@ identifies a network.
 - USDT and USDC can each be selected through a searchable picker.
 - A user can select a production network for the selected token, and the
   backend stores and validates that choice.
-- Sepolia and all other test networks are rejected by both UI availability and
-  backend validation.
+- All test networks are rejected by both UI availability and backend
+  validation.
 - Every visible network has a working compatible wallet connection, signing,
   submission, confirmation, and failure/refund path for the OTC flow.
 - At least one supported cross-network USDT route and one supported
@@ -249,7 +248,7 @@ identifies a network.
   USDT.
 - The existing EVER leg and unrelated wallet connections continue to work.
 
-## Implementation status (2026-11-06)
+## Implementation status (2026-11-12)
 
 The OTC principal-payment path supports cross-network USDT and USDC settlement
 through NEAR Intents when the selected assets and route are present in the
@@ -302,14 +301,20 @@ Implemented:
 - Route attempts are idempotent and persisted for restart-safe polling.
   Unknown provider state remains pending; only an exact expected output
   advances the trade, and a confirmed refund permits retry.
-- For identical EVM source and destination assets, the ordinary direct
-  payment path is used without a provider quote only when the exact catalog
-  asset IDs match and two independent RPC endpoints are configured for that
-  receiving network. Ethereum uses the peer Ethereum RPC pair; Base, Arbitrum
-  One, Optimism, BNB Smart Chain, Gnosis, Polygon PoS, Avalanche C-Chain, and
-  Sei use `p2p_evm_rpcs`. The backend validates chain IDs and observes
-  transfers on the booked network. Non-EVM same-network direct payments remain
-  unavailable.
+- For identical source and destination assets, the ordinary direct payment
+  path is used without a provider quote only when the exact catalog asset IDs
+  match and two independent observers are configured for that receiving
+  network. Ethereum uses the peer Ethereum RPC pair; Base, Arbitrum One,
+  Optimism, BNB Smart Chain, Gnosis, Polygon PoS, Avalanche C-Chain, and Sei
+  use `p2p_evm_rpcs`. TRON, TON and Solana use `p2p_chain_rpcs`; TRON evidence
+  requires one exact TRC-20 `Transfer` log in solidity-node transaction info,
+  TON walks the wallet-to-jetton-wallet trace and waits for a five-minute
+  finality window, and Solana requires one exact finalized
+  `transferChecked`. The backend observes transfers on the booked network.
+  A non-EVM direct payment can be signed from its booked wallet without a
+  separate Ethereum login wallet. This applies when the booked payer is the
+  owner (a buy offer); a sell offer books the taker's Ethereum login wallet, so
+  a non-EVM taker payment uses the routed flow instead of direct settlement.
 - A direct EVM USDT fee transfer bypasses route lookup when the payment source
   is the exact USDT token on the receiving network. This avoids rejecting a
   valid direct payment because the route provider does not expose a redundant
@@ -343,12 +348,16 @@ Not implemented or not yet verified:
   deployment validation.
 - Memo handling is implemented for NEAR, Solana, and TON deposits. Memo-bearing
   routes for other networks are rejected rather than sent without the memo.
-- Direct same-network settlement on non-EVM networks is still unsupported;
-  those cases must not be presented as working direct transfers. The OTC asset
-  endpoint excludes those pairs because the current direct-transfer observers
-  do not verify their chains. Direct EVM settlement requires two configured
-  HTTPS RPCs and an unambiguous exact stablecoin identity. Cross-network
-  principal and fee routes use exact-output quotes and status verification.
+- Direct same-network settlement is implemented for EVM, TRON, TON and
+  Solana; NEAR, Sui, Aptos and other networks still require a routed
+  cross-network payment or remain unavailable. The asset endpoint excludes a
+  pair unless its observers are configured and the exact stablecoin identity is
+  unambiguous. TRON and TON use a submitted transaction/message reference and
+  do not provide a locate scan; an attempt without a reference stays prepared.
+  No live TRON, TON or Solana payment, fee collection or refund has been
+  executed in this work, so production wallet/provider combinations and
+  failure/refund paths remain unverified. Cross-network principal and fee
+  routes continue to use exact-output quotes and status verification.
 - Real-wallet end-to-end payments, fee collection, refund handling, and status
   observation across production token/network combinations have not been run.
   A network is offered only when the live token catalog, configured fee
