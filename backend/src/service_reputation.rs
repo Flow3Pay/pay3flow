@@ -231,29 +231,11 @@ impl ServiceReputation {
                 interval.tick().await;
                 match pool.get().await {
                     Ok(client) => {
-                        if let Err(error) = client
-                            .execute(
-                                r#"
-UPDATE services
-SET reputation_score = GREATEST(0, reputation_score - 15),
-    reputation_last_decay_at = now()
-WHERE reputation_last_interaction_at <= now() - interval '1 day'
-  AND reputation_last_decay_at <= now() - interval '1 day'
-  AND reputation_score > 0
-"#,
-                                &[],
-                            )
-                            .await
-                        {
+                        if let Err(error) = crate::db::repo::reputation::decay(&client).await {
                             tracing::warn!(%error, "service.reputation.daily_decay_failed");
                         }
-                        if let Err(error) = client
-                            .execute(
-                                r#"DELETE FROM reputation_spam_sessions
-                                   WHERE session_started_at < now() - interval '1 day'"#,
-                                &[],
-                            )
-                            .await
+                        if let Err(error) =
+                            crate::db::repo::reputation::purge_spam_sessions(&client).await
                         {
                             tracing::warn!(%error, "service.reputation.spam_session_cleanup_failed");
                         }
@@ -261,10 +243,10 @@ WHERE reputation_last_interaction_at <= now() - interval '1 day'
                             "service_vote_session_baselines",
                             "route_vote_session_baselines",
                         ] {
-                            let query = format!(
-                                "DELETE FROM {table} WHERE session_started_at < now() - interval '1 day'"
-                            );
-                            if let Err(error) = client.execute(&query, &[]).await {
+                            if let Err(error) =
+                                crate::db::repo::reputation::purge_vote_baselines(&client, table)
+                                    .await
+                            {
                                 tracing::warn!(%error, table, "service.reputation.vote_baseline_cleanup_failed");
                             }
                         }
@@ -278,24 +260,20 @@ WHERE reputation_last_interaction_at <= now() - interval '1 day'
     }
 
     async fn lock_reputation_session(
-        transaction: &tokio_postgres::Transaction<'_>,
+        transaction: &deadpool_postgres::Transaction<'_>,
         anonymous_id: Uuid,
         session_started_at: DateTime<Utc>,
     ) -> Result<bool, ReputationError> {
-        let lock_key = format!("{anonymous_id}:{}", session_started_at.timestamp());
-        transaction
-            .query_one(
-                "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-                &[&lock_key],
-            )
-            .await?;
-        let row = transaction
-            .query_one(
-                "SELECT EXISTS (SELECT 1 FROM reputation_spam_sessions WHERE anonymous_id = $1 AND session_started_at = $2)",
-                &[&anonymous_id, &session_started_at],
-            )
-            .await?;
-        Ok(row.get(0))
+        crate::db::repo::reputation::lock_session(transaction, anonymous_id, session_started_at)
+            .await
+            .map_err(ReputationError::from)?;
+        crate::db::repo::reputation::spam_session_exists(
+            transaction,
+            anonymous_id,
+            session_started_at,
+        )
+        .await
+        .map_err(ReputationError::from)
     }
 
     async fn rollback_spam_session(
@@ -307,207 +285,145 @@ WHERE reputation_last_interaction_at <= now() - interval '1 day'
             session_started_at + chrono::Duration::seconds(REPUTATION_SESSION_SECS as i64);
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
-        let lock_key = format!("{anonymous_id}:{}", session_started_at.timestamp());
-        transaction
-            .query_one(
-                "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-                &[&lock_key],
-            )
+        crate::db::repo::reputation::lock_session(&transaction, anonymous_id, session_started_at)
             .await?;
-        let newly_marked = transaction
-            .query_opt(
-                r#"
-INSERT INTO reputation_spam_sessions (anonymous_id, session_started_at)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING
-RETURNING anonymous_id
-"#,
-                &[&anonymous_id, &session_started_at],
-            )
-            .await?
-            .is_some();
+        let newly_marked = crate::db::repo::reputation::mark_spam_session(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+        )
+        .await?;
         if !newly_marked {
             transaction.commit().await?;
             return Ok(());
         }
 
-        let affected_services = transaction
-            .query(
-                r#"SELECT service_id FROM service_vote_session_baselines
-                   WHERE anonymous_id = $1 AND session_started_at = $2
-                   UNION
-                   SELECT service_id FROM service_executions
-                   WHERE anonymous_id = $1 AND created_at >= $2 AND created_at < $3
-                   UNION
-                   SELECT service_id FROM service_instruction_opens
-                   WHERE anonymous_id = $1 AND created_at >= $2 AND created_at < $3
-                   ORDER BY service_id"#,
-                &[&anonymous_id, &session_started_at, &session_ends_at],
-            )
-            .await?
-            .into_iter()
-            .map(|row| row.get::<_, Uuid>(0))
-            .collect::<Vec<_>>();
-        transaction
-            .query(
-                "SELECT id FROM services WHERE id = ANY($1) ORDER BY id FOR UPDATE",
-                &[&affected_services],
-            )
-            .await?;
+        let affected_services = crate::db::repo::reputation::affected_services(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+            session_ends_at,
+        )
+        .await?;
+        crate::db::repo::reputation::lock_services(&transaction, &affected_services).await?;
 
-        let service_baselines = transaction
-            .query(
-                r#"
-SELECT service_id, previous_vote, reputation_score_delta
-FROM service_vote_session_baselines
-WHERE anonymous_id = $1 AND session_started_at = $2
-ORDER BY service_id
-FOR UPDATE
-"#,
-                &[&anonymous_id, &session_started_at],
-            )
-            .await?;
-        for row in service_baselines {
-            let service_id: Uuid = row.get(0);
-            let previous = row
-                .get::<_, Option<String>>(1)
-                .as_deref()
-                .and_then(VoteChoice::parse);
-            let score_delta: i16 = row.get(2);
-            let current = transaction
-                .query_opt(
-                    "SELECT vote FROM service_votes WHERE anonymous_id = $1 AND service_id = $2 FOR UPDATE",
-                    &[&anonymous_id, &service_id],
-                )
-                .await?
-                .and_then(|row| VoteChoice::parse(row.get::<_, String>(0).as_str()));
+        let service_baselines = crate::db::repo::reputation::service_baselines(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+        )
+        .await?;
+        for (service_id, previous, score_delta) in service_baselines {
+            let previous = previous.as_deref().and_then(VoteChoice::parse);
+            let current =
+                crate::db::repo::reputation::service_vote(&transaction, anonymous_id, service_id)
+                    .await?
+                    .and_then(|vote| VoteChoice::parse(vote.as_str()));
             let (likes_delta, dislikes_delta, _) = vote_state_deltas(current, previous);
             match previous {
                 Some(previous) => {
-                    transaction
-                        .execute(
-                            r#"INSERT INTO service_votes (anonymous_id, service_id, vote)
-                           VALUES ($1, $2, $3)
-                           ON CONFLICT (anonymous_id, service_id) DO UPDATE SET
-                               vote = EXCLUDED.vote, updated_at = now()"#,
-                            &[&anonymous_id, &service_id, &previous.as_str()],
-                        )
-                        .await?;
+                    crate::db::repo::reputation::restore_service_vote(
+                        &transaction,
+                        anonymous_id,
+                        service_id,
+                        previous.as_str(),
+                    )
+                    .await?;
                 }
                 None => {
-                    transaction
-                        .execute(
-                            "DELETE FROM service_votes WHERE anonymous_id = $1 AND service_id = $2",
-                            &[&anonymous_id, &service_id],
-                        )
-                        .await?;
+                    crate::db::repo::reputation::delete_service_vote(
+                        &transaction,
+                        anonymous_id,
+                        service_id,
+                    )
+                    .await?;
                 }
             }
-            transaction
-                .execute(
-                    r#"UPDATE services SET
-                           likes_total = GREATEST(0, likes_total + $2),
-                           dislikes_total = GREATEST(0, dislikes_total + $3),
-                           reputation_score = GREATEST(0, LEAST(100, reputation_score - $4)),
-                           updated_at = now()
-                       WHERE id = $1"#,
-                    &[&service_id, &likes_delta, &dislikes_delta, &score_delta],
-                )
-                .await?;
-        }
-
-        let route_baselines = transaction
-            .query(
-                r#"
-SELECT route_id, previous_vote
-FROM route_vote_session_baselines
-WHERE anonymous_id = $1 AND session_started_at = $2
-ORDER BY route_id
-FOR UPDATE
-"#,
-                &[&anonymous_id, &session_started_at],
+            crate::db::repo::reputation::revert_service_totals(
+                &transaction,
+                service_id,
+                likes_delta,
+                dislikes_delta,
+                score_delta,
             )
             .await?;
-        for row in route_baselines {
-            let route_id: String = row.get(0);
-            let previous = row
-                .get::<_, Option<String>>(1)
-                .as_deref()
-                .and_then(VoteChoice::parse);
+        }
+
+        let route_baselines = crate::db::repo::reputation::route_baselines(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+        )
+        .await?;
+        for (route_id, previous) in route_baselines {
+            let previous = previous.as_deref().and_then(VoteChoice::parse);
             match previous {
                 Some(previous) => {
-                    transaction
-                        .execute(
-                            r#"INSERT INTO route_votes (anonymous_id, route_id, vote)
-                           VALUES ($1, $2, $3)
-                           ON CONFLICT (anonymous_id, route_id) DO UPDATE SET
-                               vote = EXCLUDED.vote, updated_at = now()"#,
-                            &[&anonymous_id, &route_id, &previous.as_str()],
-                        )
-                        .await?;
+                    crate::db::repo::reputation::restore_route_vote(
+                        &transaction,
+                        anonymous_id,
+                        &route_id,
+                        previous.as_str(),
+                    )
+                    .await?;
                 }
                 None => {
-                    transaction
-                        .execute(
-                            "DELETE FROM route_votes WHERE anonymous_id = $1 AND route_id = $2",
-                            &[&anonymous_id, &route_id],
-                        )
-                        .await?;
+                    crate::db::repo::reputation::delete_route_vote(
+                        &transaction,
+                        anonymous_id,
+                        &route_id,
+                    )
+                    .await?;
                 }
             }
         }
 
-        let removed_executions = transaction
-            .query(
-                r#"DELETE FROM service_executions
-                   WHERE anonymous_id = $1 AND created_at >= $2 AND created_at < $3
-                   RETURNING service_id, reputation_score_delta"#,
-                &[&anonymous_id, &session_started_at, &session_ends_at],
-            )
-            .await?;
-        let removed_instructions = transaction
-            .query(
-                r#"DELETE FROM service_instruction_opens
-                   WHERE anonymous_id = $1 AND created_at >= $2 AND created_at < $3
-                   RETURNING service_id, reputation_score_delta"#,
-                &[&anonymous_id, &session_started_at, &session_ends_at],
-            )
-            .await?;
+        let removed_executions = crate::db::repo::reputation::remove_executions(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+            session_ends_at,
+        )
+        .await?;
+        let removed_instructions = crate::db::repo::reputation::remove_instruction_opens(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+            session_ends_at,
+        )
+        .await?;
         let mut removed_by_service = HashMap::<Uuid, (i64, i64, i64)>::new();
-        for row in &removed_executions {
-            let entry = removed_by_service.entry(row.get(0)).or_default();
+        for (service_id, score_delta) in &removed_executions {
+            let entry = removed_by_service.entry(*service_id).or_default();
             entry.0 += 1;
-            entry.2 += i64::from(row.get::<_, i16>(1));
+            entry.2 += i64::from(*score_delta);
         }
-        for row in &removed_instructions {
-            let entry = removed_by_service.entry(row.get(0)).or_default();
+        for (service_id, score_delta) in &removed_instructions {
+            let entry = removed_by_service.entry(*service_id).or_default();
             entry.1 += 1;
-            entry.2 += i64::from(row.get::<_, i16>(1));
+            entry.2 += i64::from(*score_delta);
         }
         for (service_id, (executions, _instructions, score_delta)) in removed_by_service {
-            transaction
-                .execute(
-                    r#"UPDATE services SET
-                           executions_total = GREATEST(0, executions_total - $2),
-                           reputation_score = GREATEST(0, LEAST(100, reputation_score - $3)),
-                           updated_at = now()
-                       WHERE id = $1"#,
-                    &[&service_id, &executions, &score_delta],
-                )
-                .await?;
+            crate::db::repo::reputation::revert_execution_totals(
+                &transaction,
+                service_id,
+                executions,
+                score_delta,
+            )
+            .await?;
         }
-        transaction
-            .execute(
-                "DELETE FROM service_vote_session_baselines WHERE anonymous_id = $1 AND session_started_at = $2",
-                &[&anonymous_id, &session_started_at],
-            )
-            .await?;
-        transaction
-            .execute(
-                "DELETE FROM route_vote_session_baselines WHERE anonymous_id = $1 AND session_started_at = $2",
-                &[&anonymous_id, &session_started_at],
-            )
-            .await?;
+        crate::db::repo::reputation::delete_service_baselines(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+        )
+        .await?;
+        crate::db::repo::reputation::delete_route_baselines(
+            &transaction,
+            anonymous_id,
+            session_started_at,
+        )
+        .await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -635,16 +551,15 @@ return {count, spam}
         let client = self.pool.get().await?;
         let source_currency = source_currency.trim().to_ascii_uppercase();
         let target_currency = target_currency.trim().to_ascii_uppercase();
-        client
-            .execute(
-                r#"
-INSERT INTO route_searches (id, source_currency, target_currency, anonymous_id, counted_for_activity, status, routes_found)
-VALUES ($1, $2, $3, $4, $5, 'searching', 0)
-ON CONFLICT (id) DO NOTHING
-"#,
-                &[&search_id, &source_currency, &target_currency, &anonymous_id, &count_activity],
-            )
-            .await?;
+        crate::db::repo::reputation::insert_search(
+            &client,
+            search_id,
+            &source_currency,
+            &target_currency,
+            anonymous_id,
+            count_activity,
+        )
+        .await?;
         Ok(())
     }
 
@@ -656,71 +571,32 @@ ON CONFLICT (id) DO NOTHING
     ) -> Result<Vec<RouteSearchActivityHour>, ReputationError> {
         let client = self.pool.get().await?;
         let oldest: Option<DateTime<Utc>> = if matches!(period, SearchActivityPeriod::All) {
-            client
-                .query_one(
-                    "SELECT min(created_at) FROM route_searches WHERE source_currency = $1 AND target_currency = $2 AND counted_for_activity AND status = 'finished'",
-                    &[&source_currency, &target_currency],
-                )
+            crate::db::repo::reputation::oldest_search(&client, &source_currency, &target_currency)
                 .await?
-                .get(0)
         } else {
             None
         };
         let (grain, span) = period.aggregation(oldest);
-        let rows = client
-            .query(
-                r#"
-WITH bounds AS (
-    SELECT date_trunc($3::text, now()) AS end_bucket,
-           CASE $3::text
-               WHEN 'minute' THEN interval '1 minute'
-               WHEN 'hour' THEN interval '1 hour'
-               WHEN 'day' THEN interval '1 day'
-               WHEN 'week' THEN interval '1 week'
-               ELSE interval '1 month'
-           END AS bucket_size
-), hours AS (
-    SELECT generate_series(
-        least(date_trunc($3::text, coalesce($5::timestamptz, now() - ($4::text)::interval)), end_bucket - bucket_size),
-        end_bucket,
-        bucket_size
-    ) AS started_at, bucket_size
-    FROM bounds
-)
-SELECT hours.started_at, count(searches.id)::bigint
-FROM hours
-LEFT JOIN route_searches searches
-    ON searches.created_at >= hours.started_at
-    AND searches.created_at < hours.started_at + hours.bucket_size
-    AND searches.source_currency = $1
-    AND searches.target_currency = $2
-    AND searches.counted_for_activity
-    AND searches.status = 'finished'
-GROUP BY hours.started_at
-ORDER BY hours.started_at
-"#,
-                &[&source_currency, &target_currency, &grain, &span, &oldest],
-            )
-            .await?;
+        let rows = crate::db::repo::reputation::search_activity(
+            &client,
+            &source_currency,
+            &target_currency,
+            grain,
+            span,
+            oldest,
+        )
+        .await?;
         Ok(rows
             .into_iter()
-            .map(|row| RouteSearchActivityHour {
-                started_at: row.get(0),
-                count: row.get(1),
-            })
+            .map(|(started_at, count)| RouteSearchActivityHour { started_at, count })
             .collect())
     }
 
     pub async fn count_searches_last_hour(&self) -> Result<i64, ReputationError> {
         let client = self.pool.get().await?;
-        let row = client
-            .query_one(
-                "SELECT COUNT(*)::BIGINT FROM route_searches \
-                 WHERE created_at >= now() - INTERVAL '1 hour'",
-                &[],
-            )
-            .await?;
-        Ok(row.get(0))
+        crate::db::repo::reputation::count_searches_last_hour(&client)
+            .await
+            .map_err(ReputationError::from)
     }
 
     pub async fn update_search(
@@ -731,15 +607,7 @@ ORDER BY hours.started_at
     ) -> Result<(), ReputationError> {
         let routes_found = i64::try_from(routes_found).unwrap_or(i64::MAX);
         let client = self.pool.get().await?;
-        client
-            .execute(
-                r#"
-UPDATE route_searches
-SET routes_found = $2, status = $3, updated_at = now()
-WHERE id = $1
-"#,
-                &[&search_id, &routes_found, &status],
-            )
+        crate::db::repo::reputation::finish_search(&client, search_id, routes_found, status)
             .await?;
         Ok(())
     }
@@ -753,19 +621,7 @@ WHERE id = $1
         }
         let client = self.pool.get().await?;
         for (slug, display_name) in services {
-            client
-                .execute(
-                    r#"
-INSERT INTO services (slug, display_name)
-VALUES ($1, $2)
-ON CONFLICT (slug) DO UPDATE SET
-    display_name = EXCLUDED.display_name,
-    updated_at = now()
-WHERE services.display_name IS DISTINCT FROM EXCLUDED.display_name
-"#,
-                    &[slug, display_name],
-                )
-                .await?;
+            crate::db::repo::reputation::upsert_service(&client, slug, display_name).await?;
         }
         Ok(())
     }
@@ -796,16 +652,7 @@ WHERE services.display_name IS DISTINCT FROM EXCLUDED.display_name
             cached
         } else {
             let client = self.pool.get().await?;
-            let rows = client
-                .query(
-                    r#"
-SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
-       s.dislikes_total, s.reputation_score, NULL::TEXT
-FROM services s
-"#,
-                    &[],
-                )
-                .await?;
+            let rows = crate::db::repo::reputation::all_service_stats(&client).await?;
             let stats = rows
                 .into_iter()
                 .map(row_to_stats)
@@ -830,20 +677,11 @@ FROM services s
         stats.retain(|slug, _| canonical_slugs.binary_search(slug).is_ok());
         if let Some(anonymous_id) = anonymous_id {
             let client = self.pool.get().await?;
-            let votes = client
-                .query(
-                    r#"
-SELECT s.slug, v.vote
-FROM services s
-JOIN service_votes v ON v.service_id = s.id
-WHERE s.slug = ANY($1) AND v.anonymous_id = $2
-"#,
-                    &[&canonical_slugs, &anonymous_id],
-                )
-                .await?;
-            for row in votes {
-                if let Some(service) = stats.get_mut(row.get::<_, String>(0).as_str()) {
-                    let vote = row.get::<_, String>(1);
+            let votes =
+                crate::db::repo::reputation::viewer_votes(&client, &canonical_slugs, anonymous_id)
+                    .await?;
+            for (slug, vote) in votes {
+                if let Some(service) = stats.get_mut(slug.as_str()) {
                     service.viewer_vote = VoteChoice::parse(&vote);
                 }
             }
@@ -860,22 +698,8 @@ WHERE s.slug = ANY($1) AND v.anonymous_id = $2
             return Ok(HashMap::new());
         }
         let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                r#"
-SELECT requested.route_id,
-       COUNT(votes.*) FILTER (WHERE votes.vote = 'like')::BIGINT,
-       COUNT(votes.*) FILTER (WHERE votes.vote = 'dislike')::BIGINT,
-       viewer.vote
-FROM unnest($1::TEXT[]) AS requested(route_id)
-LEFT JOIN route_votes votes ON votes.route_id = requested.route_id
-LEFT JOIN route_votes viewer
-  ON viewer.route_id = requested.route_id AND viewer.anonymous_id = $2
-GROUP BY requested.route_id, viewer.vote
-"#,
-                &[&route_ids, &anonymous_id],
-            )
-            .await?;
+        let rows =
+            crate::db::repo::reputation::route_feedbacks(&client, route_ids, anonymous_id).await?;
         Ok(rows
             .into_iter()
             .map(|row| {
@@ -930,18 +754,13 @@ GROUP BY requested.route_id, viewer.vote
             self.rollback_spam_session(anonymous_id, event_status.session_started_at)
                 .await?;
             let client = self.pool.get().await?;
-            let row = client
-                .query_opt(
-                    r#"SELECT s.id, s.slug, s.display_name, s.executions_total,
-                              s.likes_total, s.dislikes_total, s.reputation_score, v.vote
-                       FROM services s
-                       LEFT JOIN service_votes v
-                         ON v.service_id = s.id AND v.anonymous_id = $2
-                       WHERE s.id = $1"#,
-                    &[&claims.service_id, &anonymous_id],
-                )
-                .await?
-                .ok_or(ReputationError::ServiceNotFound)?;
+            let row = crate::db::repo::reputation::service_stats(
+                &client,
+                claims.service_id,
+                anonymous_id,
+            )
+            .await?
+            .ok_or(ReputationError::ServiceNotFound)?;
             return Ok(ExecutionOpen {
                 execution_id: Uuid::new_v4(),
                 newly_recorded: false,
@@ -959,18 +778,13 @@ GROUP BY requested.route_id, viewer.vote
         )
         .await?
         {
-            let row = transaction
-                .query_opt(
-                    r#"SELECT s.id, s.slug, s.display_name, s.executions_total,
-                              s.likes_total, s.dislikes_total, s.reputation_score, v.vote
-                       FROM services s
-                       LEFT JOIN service_votes v
-                         ON v.service_id = s.id AND v.anonymous_id = $2
-                       WHERE s.id = $1"#,
-                    &[&claims.service_id, &anonymous_id],
-                )
-                .await?
-                .ok_or(ReputationError::ServiceNotFound)?;
+            let row = crate::db::repo::reputation::service_stats(
+                &transaction,
+                claims.service_id,
+                anonymous_id,
+            )
+            .await?
+            .ok_or(ReputationError::ServiceNotFound)?;
             let service = row_to_stats(row);
             transaction.commit().await?;
             return Ok(ExecutionOpen {
@@ -980,90 +794,54 @@ GROUP BY requested.route_id, viewer.vote
                 service,
             });
         }
-        let reputation_before = transaction
-            .query_opt(
-                "SELECT reputation_score FROM services WHERE id = $1 FOR UPDATE",
-                &[&claims.service_id],
-            )
-            .await?
-            .map(|row| row.get::<_, i16>(0))
-            .ok_or(ReputationError::ServiceNotFound)?;
-        let inserted = transaction
-            .query_opt(
-                r#"
-INSERT INTO service_executions
-    (service_id, search_id, route_id, anonymous_id, status)
-VALUES ($1, $2, $3, $4, 'started')
-ON CONFLICT (anonymous_id, service_id, search_id, route_id) DO NOTHING
-RETURNING id
-"#,
-                &[
-                    &claims.service_id,
-                    &claims.search_id,
-                    &claims.route_id,
-                    &anonymous_id,
-                ],
-            )
-            .await?;
+        let reputation_before =
+            crate::db::repo::reputation::lock_service_score(&transaction, claims.service_id)
+                .await?
+                .ok_or(ReputationError::ServiceNotFound)?;
+        let inserted = crate::db::repo::reputation::insert_execution(
+            &transaction,
+            claims.service_id,
+            claims.search_id,
+            &claims.route_id,
+            anonymous_id,
+        )
+        .await?;
         let (execution_id, newly_recorded) = match inserted {
-            Some(row) => {
-                let score_row = transaction
-                    .query_one(
-                        r#"
-UPDATE services
-SET executions_total = executions_total + 1,
-    reputation_score = LEAST(100, reputation_score + 5),
-    reputation_last_interaction_at = now(),
-    reputation_last_decay_at = now(),
-    updated_at = now()
-WHERE id = $1
-RETURNING reputation_score
-"#,
-                        &[&claims.service_id],
-                    )
-                    .await?;
-                let score_delta = score_row.get::<_, i16>(0) - reputation_before;
-                transaction
-                    .execute(
-                        "UPDATE service_executions SET reputation_score_delta = $2 WHERE id = $1",
-                        &[&row.get::<_, Uuid>(0), &score_delta],
-                    )
-                    .await?;
-                (row.get(0), true)
+            Some(execution_id) => {
+                let score_after = crate::db::repo::reputation::bump_execution_totals(
+                    &transaction,
+                    claims.service_id,
+                )
+                .await?;
+                let score_delta = score_after - reputation_before;
+                crate::db::repo::reputation::set_execution_delta(
+                    &transaction,
+                    execution_id,
+                    score_delta,
+                )
+                .await?;
+                (execution_id, true)
             }
             None => {
-                let row = transaction
-                    .query_opt(
-                        r#"
-SELECT id FROM service_executions
-WHERE anonymous_id = $1 AND service_id = $2 AND search_id = $3 AND route_id = $4
-"#,
-                        &[
-                            &anonymous_id,
-                            &claims.service_id,
-                            &claims.search_id,
-                            &claims.route_id,
-                        ],
-                    )
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("execution conflict winner was not found"))?;
-                (row.get(0), false)
+                let execution_id = crate::db::repo::reputation::execution_by_key(
+                    &transaction,
+                    anonymous_id,
+                    claims.service_id,
+                    claims.search_id,
+                    &claims.route_id,
+                )
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("execution conflict winner was not found"))?;
+                (execution_id, false)
             }
         };
-        let row = transaction
-            .query_opt(
-                r#"
-SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
-       s.dislikes_total, s.reputation_score, v.vote
-FROM services s
-LEFT JOIN service_votes v
-  ON v.service_id = s.id AND v.anonymous_id = $2
-WHERE s.id = $1
-"#,
-                &[&claims.service_id, &anonymous_id],
-            )
-            .await?
-            .ok_or(ReputationError::ServiceNotFound)?;
+        let row = crate::db::repo::reputation::pledged_service_stats(
+            &transaction,
+            claims.service_id,
+            anonymous_id,
+        )
+        .await?
+        .ok_or(ReputationError::ServiceNotFound)?;
         let service = row_to_stats(row);
         transaction.commit().await?;
 
@@ -1095,16 +873,7 @@ WHERE s.id = $1
             self.rollback_spam_session(anonymous_id, event_status.session_started_at)
                 .await?;
             let client = self.pool.get().await?;
-            let row = client
-                .query_opt(
-                    r#"SELECT s.id, s.slug, s.display_name, s.executions_total,
-                              s.likes_total, s.dislikes_total, s.reputation_score, v.vote
-                       FROM services s
-                       LEFT JOIN service_votes v
-                         ON v.service_id = s.id AND v.anonymous_id = $2
-                       WHERE s.id = $1"#,
-                    &[&service_id, &anonymous_id],
-                )
+            let row = crate::db::repo::reputation::service_stats(&client, service_id, anonymous_id)
                 .await?
                 .ok_or(ReputationError::ServiceNotFound)?;
             return Ok(row_to_stats(row));
@@ -1118,117 +887,68 @@ WHERE s.id = $1
         )
         .await?
         {
-            let row = transaction
-                .query_opt(
-                    r#"SELECT s.id, s.slug, s.display_name, s.executions_total,
-                              s.likes_total, s.dislikes_total, s.reputation_score, v.vote
-                       FROM services s
-                       LEFT JOIN service_votes v
-                         ON v.service_id = s.id AND v.anonymous_id = $2
-                       WHERE s.id = $1"#,
-                    &[&service_id, &anonymous_id],
-                )
-                .await?
-                .ok_or(ReputationError::ServiceNotFound)?;
+            let row =
+                crate::db::repo::reputation::service_stats(&transaction, service_id, anonymous_id)
+                    .await?
+                    .ok_or(ReputationError::ServiceNotFound)?;
             let stats = row_to_stats(row);
             transaction.commit().await?;
             return Ok(stats);
         }
-        let service_score_before = transaction
-            .query_opt(
-                "SELECT reputation_score FROM services WHERE id = $1 FOR UPDATE",
-                &[&service_id],
-            )
-            .await?
-            .map(|row| row.get::<_, i16>(0))
-            .ok_or(ReputationError::ServiceNotFound)?;
-        let previous = transaction
-            .query_opt(
-                r#"
-SELECT vote FROM service_votes
-WHERE service_id = $1 AND anonymous_id = $2
-FOR UPDATE
-"#,
-                &[&service_id, &anonymous_id],
-            )
-            .await?
-            .and_then(|row| VoteChoice::parse(row.get::<_, String>(0).as_str()));
+        let service_score_before =
+            crate::db::repo::reputation::lock_service_score(&transaction, service_id)
+                .await?
+                .ok_or(ReputationError::ServiceNotFound)?;
+        let previous = crate::db::repo::reputation::session_service_vote(
+            &transaction,
+            service_id,
+            anonymous_id,
+        )
+        .await?
+        .and_then(|vote| VoteChoice::parse(vote.as_str()));
 
-        transaction
-            .execute(
-                r#"INSERT INTO service_vote_session_baselines
-                       (anonymous_id, session_started_at, service_id, previous_vote)
-                   VALUES ($1, $2, $3, $4)
-                   ON CONFLICT DO NOTHING"#,
-                &[
-                    &anonymous_id,
-                    &event_status.session_started_at,
-                    &service_id,
-                    &previous.map(VoteChoice::as_str),
-                ],
-            )
-            .await?;
+        crate::db::repo::reputation::insert_service_baseline(
+            &transaction,
+            anonymous_id,
+            event_status.session_started_at,
+            service_id,
+            previous.map(VoteChoice::as_str),
+        )
+        .await?;
 
-        transaction
-            .execute(
-                r#"
-INSERT INTO service_votes (anonymous_id, service_id, vote)
-VALUES ($1, $2, $3)
-ON CONFLICT (anonymous_id, service_id) DO UPDATE SET
-    vote = EXCLUDED.vote,
-    updated_at = now()
-"#,
-                &[&anonymous_id, &service_id, &vote.as_str()],
-            )
-            .await?;
+        crate::db::repo::reputation::upsert_service_vote(
+            &transaction,
+            anonymous_id,
+            service_id,
+            vote.as_str(),
+        )
+        .await?;
 
         let (likes_delta, dislikes_delta) = vote_deltas(previous, vote);
-        let score_row = transaction
-            .query_one(
-                r#"
-UPDATE services
-SET likes_total = likes_total + $2,
-    dislikes_total = dislikes_total + $3,
-    reputation_score = GREATEST(0, LEAST(100, reputation_score + $4)),
-    reputation_last_interaction_at = CASE WHEN $5 THEN now() ELSE reputation_last_interaction_at END,
-    reputation_last_decay_at = CASE WHEN $5 THEN now() ELSE reputation_last_decay_at END,
-    updated_at = now()
-WHERE id = $1
-RETURNING reputation_score
-"#,
-                &[
-                    &service_id,
-                    &likes_delta,
-                    &dislikes_delta,
-                    &vote_score_delta(previous, vote),
-                    &(previous != Some(vote)),
-                ],
-            )
-            .await?;
-        let score_delta = score_row.get::<_, i16>(0) - service_score_before;
-        transaction
-            .execute(
-                r#"UPDATE service_vote_session_baselines
-                   SET reputation_score_delta = reputation_score_delta + $4
-                   WHERE anonymous_id = $1 AND session_started_at = $2 AND service_id = $3"#,
-                &[
-                    &anonymous_id,
-                    &event_status.session_started_at,
-                    &service_id,
-                    &score_delta,
-                ],
-            )
-            .await?;
-        let row = transaction
-            .query_one(
-                r#"
-SELECT id, slug, display_name, executions_total, likes_total, dislikes_total,
-       reputation_score, $2::TEXT
-FROM services WHERE id = $1
-"#,
-                &[&service_id, &vote.as_str()],
-            )
-            .await?;
+        let score_after = crate::db::repo::reputation::apply_service_vote(
+            &transaction,
+            service_id,
+            likes_delta,
+            dislikes_delta,
+            vote_score_delta(previous, vote),
+            previous != Some(vote),
+        )
+        .await?;
+        let score_delta = score_after - service_score_before;
+        crate::db::repo::reputation::add_service_baseline_delta(
+            &transaction,
+            anonymous_id,
+            event_status.session_started_at,
+            service_id,
+            score_delta,
+        )
+        .await?;
+        let row = crate::db::repo::reputation::voted_service_stats(
+            &transaction,
+            service_id,
+            vote.as_str(),
+        )
+        .await?;
         let stats = row_to_stats(row);
         transaction.commit().await?;
         Ok(stats)
@@ -1299,51 +1019,32 @@ FROM services WHERE id = $1
         service_ids.sort_unstable();
         service_ids.dedup();
         for service_id in service_ids {
-            let reputation_before = transaction
-                .query_opt(
-                    "SELECT reputation_score FROM services WHERE id = $1 FOR UPDATE",
-                    &[&service_id],
-                )
-                .await?
-                .map(|row| row.get::<_, i16>(0))
-                .ok_or(ReputationError::ServiceNotFound)?;
-            let inserted = transaction
-                .execute(
-                    r#"
-INSERT INTO service_instruction_opens (anonymous_id, service_id, search_id, route_id)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT DO NOTHING
-"#,
-                    &[
-                        &anonymous_id,
-                        &service_id,
-                        &first.search_id,
-                        &first.route_id,
-                    ],
+            let reputation_before =
+                crate::db::repo::reputation::lock_service_score(&transaction, service_id)
+                    .await?
+                    .ok_or(ReputationError::ServiceNotFound)?;
+            let inserted = crate::db::repo::reputation::insert_instruction_open(
+                &transaction,
+                anonymous_id,
+                service_id,
+                first.search_id,
+                &first.route_id,
+            )
+            .await?;
+            if inserted > 0 {
+                let score_after =
+                    crate::db::repo::reputation::bump_instruction_score(&transaction, service_id)
+                        .await?;
+                let score_delta = score_after - reputation_before;
+                crate::db::repo::reputation::set_instruction_delta(
+                    &transaction,
+                    anonymous_id,
+                    service_id,
+                    first.search_id,
+                    &first.route_id,
+                    score_delta,
                 )
                 .await?;
-            if inserted > 0 {
-                let score_row = transaction
-                    .query_one(
-                        "UPDATE services SET reputation_score = LEAST(100, reputation_score + 5), reputation_last_interaction_at = now(), reputation_last_decay_at = now(), updated_at = now() WHERE id = $1 RETURNING reputation_score",
-                        &[&service_id],
-                    )
-                    .await?;
-                let score_delta = score_row.get::<_, i16>(0) - reputation_before;
-                transaction
-                    .execute(
-                        r#"UPDATE service_instruction_opens
-                           SET reputation_score_delta = $5
-                           WHERE anonymous_id = $1 AND service_id = $2 AND search_id = $3 AND route_id = $4"#,
-                        &[
-                            &anonymous_id,
-                            &service_id,
-                            &first.search_id,
-                            &first.route_id,
-                            &score_delta,
-                        ],
-                    )
-                    .await?;
                 newly_recorded += 1;
             }
         }
@@ -1371,15 +1072,7 @@ ON CONFLICT DO NOTHING
             self.rollback_spam_session(anonymous_id, event_status.session_started_at)
                 .await?;
             let client = self.pool.get().await?;
-            let row = client
-                .query_opt(
-                    r#"SELECT COUNT(*) FILTER (WHERE vote = 'like')::BIGINT,
-                              COUNT(*) FILTER (WHERE vote = 'dislike')::BIGINT,
-                              (SELECT vote::TEXT FROM route_votes
-                               WHERE route_id = $1 AND anonymous_id = $2)
-                       FROM route_votes WHERE route_id = $1"#,
-                    &[&route_id, &anonymous_id],
-                )
+            let row = crate::db::repo::reputation::route_feedback(&client, route_id, anonymous_id)
                 .await?;
             return Ok(route_feedback_from_row(
                 row.ok_or_else(|| anyhow::anyhow!("route vote state was not found"))?,
@@ -1395,66 +1088,41 @@ ON CONFLICT DO NOTHING
         )
         .await?
         {
-            let row = transaction
-                .query_one(
-                    r#"SELECT COUNT(*) FILTER (WHERE vote = 'like')::BIGINT,
-                              COUNT(*) FILTER (WHERE vote = 'dislike')::BIGINT,
-                              (SELECT vote::TEXT FROM route_votes
-                               WHERE route_id = $1 AND anonymous_id = $2)
-                       FROM route_votes WHERE route_id = $1"#,
-                    &[&route_id, &anonymous_id],
-                )
-                .await?;
+            let row = crate::db::repo::reputation::updated_route_feedback(
+                &transaction,
+                route_id,
+                anonymous_id,
+            )
+            .await?;
             let feedback = route_feedback_from_row(row, 0);
             transaction.commit().await?;
             return Ok(feedback);
         }
-        let previous = transaction
-            .query_opt(
-                "SELECT vote FROM route_votes WHERE route_id = $1 AND anonymous_id = $2 FOR UPDATE",
-                &[&route_id, &anonymous_id],
-            )
-            .await?
-            .and_then(|row| VoteChoice::parse(row.get::<_, String>(0).as_str()));
-        transaction
-            .execute(
-                r#"INSERT INTO route_vote_session_baselines
-                       (anonymous_id, session_started_at, route_id, previous_vote)
-                   VALUES ($1, $2, $3, $4)
-                   ON CONFLICT DO NOTHING"#,
-                &[
-                    &anonymous_id,
-                    &event_status.session_started_at,
-                    &route_id,
-                    &previous.map(VoteChoice::as_str),
-                ],
-            )
-            .await?;
-        transaction
-            .execute(
-                r#"
-INSERT INTO route_votes (anonymous_id, route_id, vote)
-VALUES ($1, $2, $3)
-ON CONFLICT (anonymous_id, route_id) DO UPDATE SET
-    vote = EXCLUDED.vote,
-    updated_at = now()
-"#,
-                &[&anonymous_id, &route_id, &vote.as_str()],
-            )
-            .await?;
-        let row = transaction
-            .query_one(
-                r#"
-SELECT COUNT(*) FILTER (WHERE vote = 'like')::BIGINT,
-       COUNT(*) FILTER (WHERE vote = 'dislike')::BIGINT,
-       (SELECT vote::TEXT FROM route_votes
-        WHERE route_id = $1 AND anonymous_id = $2)
-FROM route_votes
-WHERE route_id = $1
-"#,
-                &[&route_id, &anonymous_id],
-            )
-            .await?;
+        let previous =
+            crate::db::repo::reputation::session_route_vote(&transaction, route_id, anonymous_id)
+                .await?
+                .and_then(|vote| VoteChoice::parse(vote.as_str()));
+        crate::db::repo::reputation::insert_route_baseline(
+            &transaction,
+            anonymous_id,
+            event_status.session_started_at,
+            route_id,
+            previous.map(VoteChoice::as_str),
+        )
+        .await?;
+        crate::db::repo::reputation::upsert_route_vote(
+            &transaction,
+            anonymous_id,
+            route_id,
+            vote.as_str(),
+        )
+        .await?;
+        let row = crate::db::repo::reputation::updated_route_feedback(
+            &transaction,
+            route_id,
+            anonymous_id,
+        )
+        .await?;
         let feedback = route_feedback_from_row(row, 0);
         transaction.commit().await?;
         Ok(feedback)

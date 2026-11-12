@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio_postgres::NoTls;
 
 pub type DbPool = Pool;
+pub type DbPoolObject = deadpool_postgres::Client;
 
 /// Connection budget for one backend replica. Deadpool's own default is four
 /// per *physical* core, which on this host is sixteen — small enough that a
