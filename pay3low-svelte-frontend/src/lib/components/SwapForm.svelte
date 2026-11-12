@@ -14,7 +14,7 @@
   $: copy = (key: string) => t(key, {}, $locale);
 </script>
 <section class="execution" data-testid="route-wallet-execution" data-provider={provider} aria-label={copy("Execute with wallet")}>
-    <div class="executionTitle"><strong>Pay3Flow · SWAP</strong><span>{copy("Non-custodial")}</span></div>
+    <div class="executionTitle"><strong>Pay3Flow · SWAP</strong></div>
     <div class="provider"><img src={venueIcon(provider)} alt="" width="20" height="20" /><span>{providerName}</span></div>
     <div class="swapForm" data-testid="wallet-swap-form" data-provider={provider} aria-busy={busy}>
       <div class="assetCard">
@@ -23,7 +23,11 @@
         </label>
         <small>{networkNames[fromNetwork] ?? fromNetwork}</small>
       </div>
-      <div class="swapArrow" aria-hidden="true">↓</div>
+      <div class="swapArrow">
+        <button type="button" class="bridgeIcon" aria-label={copy("Swap sender and recipient")} title={copy("Swap sender and recipient")} disabled>
+          <svg width="22" height="22" viewBox="5.5 5.7 13 13" aria-hidden="true" focusable="false"><path d="M17.85 14.1C17.81 14.19 17.76 14.27 17.69 14.34L14.65 17.38C14.5 17.53 14.31 17.6 14.12 17.6C13.93 17.6 13.74 17.53 13.59 17.38C13.3 17.09 13.3 16.61 13.59 16.32L15.35 14.56H6.85C6.44 14.56 6.1 14.22 6.1 13.81C6.1 13.4 6.44 13.06 6.85 13.06H17.16C17.26 13.06 17.35 13.08 17.45 13.12C17.63 13.2 17.78 13.34 17.86 13.53C17.92 13.71 17.92 13.92 17.85 14.1ZM17.15 10.93H6.85C6.75 10.93 6.65 10.91 6.56 10.87C6.38 10.79 6.23 10.65 6.15 10.46C6.07 10.28 6.07 10.07 6.15 9.89C6.19 9.8 6.24 9.72 6.31 9.65L9.35 6.61C9.64 6.32 10.12 6.32 10.41 6.61C10.7 6.9 10.7 7.38 10.41 7.67L8.66 9.43H17.16C17.57 9.43 17.91 9.77 17.91 10.18C17.91 10.59 17.57 10.93 17.15 10.93Z"></path></svg>
+        </button>
+      </div>
       <div class="assetCard">
         <small>{copy("Estimated output")}</small>
         <div class="assetAmount"><strong data-testid="swap-output">{output ?? "—"}</strong><span><img src={assetIcon(toSymbol)} alt="" />{toSymbol}</span></div>
@@ -36,7 +40,7 @@
   .execution { min-width: 0; color: var(--color-text); display: grid; gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-panel); }
   .executionTitle, .provider, .choiceRow { display: flex; align-items: center; gap: 8px; }
   .executionTitle { justify-content: space-between; flex-wrap: wrap; }
-  .executionTitle span { padding: 4px 8px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent-text); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+
   fieldset { display: grid; gap: 9px; margin: 0; padding: 0; border: 0; }
   legend, small { color: var(--color-text-soft); font-size: 12px; }
   button, input { min-height: 40px; border: 1px solid var(--color-border); border-radius: 11px; font: inherit; }
@@ -58,7 +62,11 @@
   .assetAmount input, .assetAmount strong { min-width: 0; width: 100%; padding: 0; border: 0; font-size: clamp(22px, 4vw, 30px); font-weight: 750; overflow-wrap: anywhere; }
   .assetAmount span { display: flex; align-items: center; gap: 8px; font-weight: 750; }
   .assetAmount img { width: 28px; height: 28px; }
-  .swapArrow { text-align: center; color: var(--color-text-soft); line-height: 1; }
+  .swapArrow { display: flex; justify-content: center; color: var(--color-text-soft); line-height: 1; }
+  .bridgeIcon { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: var(--exchange-card-bg); color: var(--color-text-soft); cursor: default; box-shadow: none; }
+  .bridgeIcon:disabled { opacity: 1; cursor: default; }
+  :global(html[data-theme="dark"]) .bridgeIcon { color: #fff; }
+  .bridgeIcon svg { width: 22px; height: 22px; fill: currentColor; }
   .review { display: grid; gap: 7px; padding: 10px; border-radius: 12px; background: rgba(127,127,127,.08); }
   .review span { display: flex; justify-content: space-between; gap: 12px; }
   .review strong { overflow-wrap: anywhere; text-align: right; font-size: 12px; }
