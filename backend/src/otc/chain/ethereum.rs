@@ -208,6 +208,34 @@ impl Service {
             lag,
         ))
     }
+    /// Reads an EVM token balance from the first endpoint that answers. Unlike
+    /// settlement reads this is display-only, so one healthy RPC is enough.
+    pub(crate) async fn token_balance(
+        &self,
+        rpcs: &[String],
+        contract: &str,
+        holder: &str,
+    ) -> Result<u128> {
+        let data = format!(
+            "0x70a08231{:0>64}",
+            holder.trim_start_matches("0x").to_ascii_lowercase()
+        );
+        let mut last = None;
+        for url in rpcs.iter().take(2) {
+            match self
+                .evm_read(
+                    url,
+                    "eth_call",
+                    json!([{"to": contract, "data": data}, "latest"]),
+                )
+                .await
+            {
+                Ok(value) => return number(&value),
+                Err(error) => last = Some(error),
+            }
+        }
+        Err(last.unwrap_or_else(|| invalid("no EVM endpoint configured for balance reads")))
+    }
     pub(crate) async fn locate_ethereum(
         &self,
         leg: &Leg,

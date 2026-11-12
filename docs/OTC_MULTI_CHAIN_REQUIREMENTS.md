@@ -315,6 +315,14 @@ Implemented:
   separate Ethereum login wallet. This applies when the booked payer is the
   owner (a buy offer); a sell offer books the taker's Ethereum login wallet, so
   a non-EVM taker payment uses the routed flow instead of direct settlement.
+- The portfolio balance panel reads every USDT/USDC pair the provider catalog
+  knows on a supported wallet network: Ethereum and every `p2p_evm_rpcs`
+  network through pinned ERC-20 `balanceOf`, TRON through a solidity-node
+  constant call, Solana through the owner's finalized token accounts, and TON
+  through the owner's jetton wallet. Rows are display-only, use the verified
+  Ethereum wallet as on every chain (the address booked as `usdt_payer`), and
+  report `unavailable` when the network has no configured reader instead of a
+  misleading zero.
 - A direct EVM USDT fee transfer bypasses route lookup when the payment source
   is the exact USDT token on the receiving network. This avoids rejecting a
   valid direct payment because the route provider does not expose a redundant

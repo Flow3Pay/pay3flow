@@ -30,7 +30,7 @@ pub(crate) fn call(leg: &Leg, contract: &str) -> Value {
 }
 
 /// Raw 20-byte account body used by TRON logs and topics.
-fn account_hex(address: &str) -> Result<String> {
+pub(crate) fn account_hex(address: &str) -> Result<String> {
     if address.len() == 40 && address.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Ok(address.to_ascii_lowercase());
     }
@@ -152,6 +152,54 @@ fn core(evidence: &Evidence) -> Value {
 }
 
 impl Service {
+    /// Reads a TRC-20 balance with a constant-call trigger from the first
+    /// Solidity endpoint that answers.
+    pub(crate) async fn tron_token_balance(
+        &self,
+        endpoints: &[String],
+        contract: &str,
+        holder: &str,
+    ) -> Result<u128> {
+        if endpoints.is_empty() {
+            return Err(invalid("no TRON endpoint configured for balance reads"));
+        }
+        account_hex(holder)?;
+        account_hex(contract)?;
+        let parameter = format!("{:0>64}", holder.trim_start_matches("0x"));
+        let mut last = None;
+        for endpoint in endpoints.iter().take(2) {
+            let response = self
+                .http
+                .post(format!(
+                    "{}/walletsolidity/triggerconstantcontract",
+                    endpoint.trim_end_matches('/')
+                ))
+                .json(&json!({
+                    "owner_address": holder,
+                    "contract_address": contract,
+                    "function_selector": "balanceOf(address)",
+                    "parameter": parameter,
+                    "visible": true,
+                }))
+                .send()
+                .await;
+            match response {
+                Ok(response) => match response.error_for_status() {
+                    Ok(response) => {
+                        let body: Value = response.json().await?;
+                        let result = &body["constant_result"][0];
+                        if let Some(result) = result.as_str() {
+                            return number(&json!(format!("0x{result}")));
+                        }
+                        last = Some(invalid("TRON balance call returned no result"));
+                    }
+                    Err(error) => last = Some(error.into()),
+                },
+                Err(error) => last = Some(error.into()),
+            }
+        }
+        Err(last.unwrap_or_else(|| invalid("TRON balance read failed")))
+    }
     pub(crate) async fn tron_evidence(
         &self,
         reference: &str,

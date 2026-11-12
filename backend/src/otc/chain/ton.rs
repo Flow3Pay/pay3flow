@@ -71,6 +71,61 @@ impl Service {
         Ok(Some(response.error_for_status()?.json().await?))
     }
 
+    /// Reads a jetton balance from the first TonAPI endpoint that answers.
+    /// Falls back to reading the owner's jetton wallet directly when the
+    /// account index has not caught up yet.
+    pub(crate) async fn ton_token_balance(
+        &self,
+        endpoints: &[String],
+        owner: &str,
+        master: &str,
+    ) -> Result<u128> {
+        let expected = canonical_address(master).ok_or_else(|| invalid("invalid jetton master"))?;
+        let mut last = None;
+        for endpoint in endpoints.iter().take(2) {
+            match self
+                .ton_get(endpoint, &format!("/v2/accounts/{owner}/jettons"))
+                .await
+            {
+                Ok(Some(body)) => {
+                    let entry = body["balances"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find(|balance| {
+                            address(&balance["jetton"])
+                                .and_then(canonical_address)
+                                .as_deref()
+                                == Some(expected.as_str())
+                        });
+                    let Some(entry) = entry else {
+                        return Ok(0);
+                    };
+                    if let Some(balance) = number(&entry["balance"]).ok() {
+                        return Ok(balance);
+                    }
+                    let Some(wallet) = address(&entry["wallet_address"]) else {
+                        return Ok(0);
+                    };
+                    match self
+                        .ton_get(endpoint, &format!("/v2/accounts/{wallet}"))
+                        .await
+                    {
+                        Ok(Some(account)) => {
+                            return number(&account["balance"])
+                                .map_err(|_| invalid("TON jetton wallet balance is malformed"))
+                        }
+                        Ok(None) => return Ok(0),
+                        Err(error) => last = Some(error),
+                    }
+                }
+                Ok(None) => return Ok(0),
+                Err(error) => last = Some(error),
+            }
+        }
+        Err(last.unwrap_or_else(|| invalid("no TON endpoint configured for balance reads")))
+    }
+
     async fn ton_transaction(&self, endpoint: &str, hash: &str) -> Result<Option<Value>> {
         self.ton_get(
             endpoint,

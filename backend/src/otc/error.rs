@@ -15,6 +15,8 @@ pub(crate) enum Error {
     Disabled,
     #[error("OTC payment route is temporarily unavailable")]
     RouteUnavailable,
+    #[error("chain reader is not configured")]
+    Unavailable,
     #[error("OTC authentication required")]
     Unauthorized,
     #[error("No wallet on {0} has been verified within the allowed period. Reconnect that wallet and sign the verification again.")]
@@ -39,7 +41,9 @@ impl IntoResponse for Error {
             Self::Invalid(message) => (StatusCode::BAD_REQUEST, message),
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::Disabled => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
-            Self::RouteUnavailable => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
+            Self::RouteUnavailable | Self::Unavailable => {
+                (StatusCode::SERVICE_UNAVAILABLE, self.to_string())
+            }
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
             Self::VerificationRequired(_) => (StatusCode::FORBIDDEN, self.to_string()),
             Self::NotFound => (StatusCode::NOT_FOUND, self.to_string()),

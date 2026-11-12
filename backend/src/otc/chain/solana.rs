@@ -160,6 +160,43 @@ impl Service {
         Ok(body["result"].clone())
     }
 
+    /// Reads an SPL token balance from the first RPC that answers, summing the
+    /// finalized ATA balances the owner holds for this mint.
+    pub(crate) async fn solana_token_balance(
+        &self,
+        endpoints: &[String],
+        owner: &str,
+        mint: &str,
+    ) -> Result<u128> {
+        if endpoints.is_empty() {
+            return Err(invalid("no Solana endpoint configured for balance reads"));
+        }
+        let mut last = None;
+        for endpoint in endpoints.iter().take(2) {
+            match self
+                .solana_read(
+                    endpoint,
+                    "getTokenAccountsByOwner",
+                    json!([owner, {"mint": mint}, {"encoding": "jsonParsed", "commitment": "finalized"}]),
+                )
+                .await
+            {
+                Ok(value) => {
+                    let mut total = 0u128;
+                    for account in value["value"].as_array().into_iter().flatten() {
+                        let amount = &account["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"];
+                        if let Some(amount) = amount.as_str() {
+                            total = total.saturating_add(amount.parse().unwrap_or(0));
+                        }
+                    }
+                    return Ok(total);
+                }
+                Err(error) => last = Some(error),
+            }
+        }
+        Err(last.unwrap_or_else(|| invalid("Solana balance read failed")))
+    }
+
     pub(crate) async fn solana_evidence(
         &self,
         reference: &str,
