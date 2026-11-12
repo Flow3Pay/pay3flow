@@ -6,7 +6,7 @@ const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sol", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
 ]);
-const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "sei"]);
+const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei"]);
 const LOCAL_FIAT_ICONS = new Set(["amd", "byn", "kzt", "rub", "uah", "usd"]);
 
 export const likeIcon = "/icons/ui/like.svg";
@@ -20,6 +20,7 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
   [/ethereum|arbitrum|optimism|base/i, "eth"],
   [/(?:bnb|binance)[- ]smart[- ]chain|\bbsc\b|\bbep[- ]?20\b/i, "bnb"],
   [/solana/i, "sol"],
+  [/^cronos$/i, "cro"],
   [/^sei$/i, "sei"],
   [/tron|trc-20/i, "trx"],
   [/everscale|^ever$/i, "ever"],
