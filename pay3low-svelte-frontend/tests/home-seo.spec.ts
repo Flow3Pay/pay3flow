@@ -25,6 +25,20 @@ test("server HTML contains Russian product content, canonical and brand metadata
   }
 });
 
+test("short asset links redirect to their wildcard exchange pair", async ({ request }) => {
+  const cases = [
+    ["/EVER", "/#/swap/EVER/ANY?from=any-EVER&to=any-ANY"],
+    ["/btc?amount=1,5&lang=ru", "/#/swap/BTC/ANY?amount=1.5&from=any-BTC&to=any-ANY&lang=ru"],
+    ["/AMD", "/#/swap/AMD/ANY?from=any-AMD&to=any-ANY"],
+  ];
+  for (const [path, location] of cases) {
+    const response = await request.get(path, { maxRedirects: 0 });
+    expect(response.status()).toBe(302);
+    expect(response.headers()["location"]).toBe(location);
+  }
+  expect((await request.get("/EVER/BTC", { maxRedirects: 0 })).status()).toBe(404);
+});
+
 test("homepage product content is usable without JavaScript", async ({ browser, baseURL, isMobile }) => {
   const context = await browser.newContext({
     javaScriptEnabled: false,

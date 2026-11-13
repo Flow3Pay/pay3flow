@@ -1,5 +1,5 @@
-import { guideParameters } from "./guide-link";
-import { canonicalAssetTicker } from "./asset-identity";
+import { guideParameters } from "./guide-link.ts";
+import { canonicalAssetTicker } from "./asset-identity.ts";
 
 export type ExchangeShareState = {
   source: string;

@@ -195,7 +195,11 @@ flowchart LR
   matching offers but those offers did not produce a ranked route.
 - Click a venue icon above the results to show its ranked routes; click it
   again to return to all venues. Shared `/swap/SOURCE/TARGET?amount=...` links
-  restore the selected currencies in a new browser session.
+  restore the selected currencies in a new browser session. Short `/<TICKER>`
+  links such as `/EVER`, `/BTC` or `/AMD` redirect to the wildcard pair
+  `/#/swap/<TICKER>/ANY?from=any-<TICKER>&to=any-ANY`, where the selected asset
+  is compared against every available destination. The short link accepts the
+  usual `amount` and `lang` settings.
 - Route cards are rendered immediately for responses of up to 100 items. For
   larger snapshots, the frontend renders 100 cards per batch, waits for a
   browser paint and then 10 ms before the next batch. Progressive snapshots

@@ -9,7 +9,10 @@ refresh continue remaining combinations for unchanged selections; edits start
 a new search. Comparisons between currencies use value ratios rather than
 nominal output amounts. Instruction links use each route's resolved methods. Shared wildcard
 selections use `/#/swap/ANY/ANY?from=any-ANY&to=any-ANY`; older discovery links
-are restored inside Exchange. Arbitrage remains available through the API.
+are restored inside Exchange. A short `/<TICKER>` link redirects to the
+`<TICKER>/ANY` wildcard pair, so `/EVER` opens
+`/#/swap/EVER/ANY?from=any-EVER&to=any-ANY` and the same pattern works for
+every asset in the live catalog. Arbitrage remains available through the API.
 RUB supports the selectable SBP / СБП method in both directions. The method
 catalog includes enabled directory methods, and provider availability still
 determines whether an amount and method can produce a route.
