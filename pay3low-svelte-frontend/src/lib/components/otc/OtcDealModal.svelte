@@ -39,6 +39,7 @@
   let selectedSourceAsset = "";
   let routePickerOpen = false;
   let assetLoadError = "";
+  let copied = "";
 
   const autoMarker = "pay3flow.otc.p2p.auto.";
   const dismissMarker = "pay3flow.otc.p2p.dismissed.v1.";
@@ -176,7 +177,7 @@
     if (dialog && !dialog.open) dialog.showModal();
   }
 
-  function close() {
+  function dismiss() {
     if (selectedId) {
       dismissed.add(selectedId);
       saveDismissed(session?.actor || "");
@@ -185,6 +186,31 @@
     if (dialog?.open) dialog.close();
     selectedId = "";
     error = "";
+    copied = "";
+  }
+
+  async function copyText(value: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      copied = key;
+      setTimeout(() => { if (copied === key) copied = ""; }, 2000);
+    } catch { copied = ""; }
+  }
+
+  // The bottom "Close" ends the deal itself, not just the dialog. A deal that
+  // has not handed off its stablecoin transfer is cancelled on the server; a
+  // deal already in delivery only closes the window so its funds stay tracked.
+  async function closeDeal() {
+    const current = deal;
+    const token = session?.token;
+    if (current && token && current.state === "payment_pending" && !p2pOpenAttempt(current, "payment")) {
+      await run(async () => {
+        applyDeal(await request<P2pDeal>(`/p2p/trades/${current.id}/cancel`, token, {}), current);
+        dismiss();
+      });
+      return;
+    }
+    dismiss();
   }
 
   async function cancelDeal() {
@@ -193,7 +219,7 @@
     if (!current || !token) return;
     await run(async () => {
       applyDeal(await request<P2pDeal>(`/p2p/trades/${current.id}/cancel`, token, {}), current);
-      close();
+      dismiss();
     });
   }
 
@@ -503,8 +529,8 @@
   class="dealDialog"
   aria-label={say("P2P deal", "Сделка P2P")}
   data-testid="otc-p2p-modal"
-  on:cancel|preventDefault={close}
-  on:click={(event) => { if (event.target === dialog) close(); }}
+  on:cancel|preventDefault={dismiss}
+  on:click={(event) => { if (event.target === dialog) dismiss(); }}
 >
   {#if deal}
     <div class="dealHead">
@@ -513,10 +539,22 @@
         <span>·</span>
         <strong>{deal.terms.usdt_amount}</strong><small>{deal.terms.stablecoin || "USDT"}</small>
       </div>
-      <button type="button" class="closeButton" aria-label={say("Close window", "Закрыть окно")} on:click={close}>
+      <button type="button" class="closeButton" aria-label={say("Close window", "Закрыть окно")} on:click={dismiss}>
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
       </button>
     </div>
+
+    <div class="dealMeta" data-testid="otc-p2p-deal-id">
+      <span class="dealId"><small>{say("Deal ID", "ID сделки")}</small><code>{deal.id}</code></span>
+      <button type="button" class="copyButton" aria-label={say("Copy deal ID", "Копировать ID сделки")} on:click={() => void copyText(deal.id, "id")}>
+        {#if copied === "id"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}
+      </button>
+    </div>
+    {#if deal.expires_at && p2pActive(deal)}
+      <p class="dealDeadline" data-testid="otc-p2p-deadline">
+        {say("Open for 24 hours · closes", "Открыта 24 часа · закроется")} {new Date(deal.expires_at).toLocaleString($locale === "ru" ? "ru-RU" : "en-US")}
+      </p>
+    {/if}
 
     <div class="people">
       <div class="person self">
@@ -552,7 +590,12 @@
     </div>
     <div class="destination" data-testid="otc-stablecoin-destination">
       <span>{say(`${deal.terms.stablecoin || "USDT"} recipient · ${outputNetwork}`, `Получатель ${deal.terms.stablecoin || "USDT"} · ${outputNetwork}`)}</span>
-      <code>{deal.terms.usdt_payee}</code>
+      <div class="destinationRow">
+        <code>{deal.terms.usdt_payee}</code>
+        <button type="button" class="copyButton" aria-label={say("Copy recipient address", "Копировать адрес получателя")} on:click={() => void copyText(deal.terms.usdt_payee, "payee")}>
+          {#if copied === "payee"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}
+        </button>
+      </div>
     </div>
 
     {#if legs}
@@ -688,7 +731,7 @@
       {#if canCancel}
         <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-cancel" on:click={cancelDeal}>{say("Cancel deal", "Отменить сделку")}</button>
       {/if}
-      <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-close" on:click={close}>{say("Close", "Закрыть")}</button>
+      <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-close" on:click={() => void closeDeal()}>{say("Close deal", "Закрыть сделку")}</button>
     </div>
   {/if}
 </dialog>
@@ -702,6 +745,13 @@
   .dealAmount small { color:var(--color-text-faint); font-family:var(--font-sans,inherit); font-size:9px; font-weight:650; }
   .dealAmount span { color:var(--color-text-faint); font-size:11px; }
   .closeButton { display:grid; width:34px; height:34px; flex:0 0 auto; place-items:center; border:1px solid var(--color-border); border-radius:9px; color:var(--color-text-soft); }
+  .dealMeta { display:flex; align-items:center; gap:8px; margin:10px 26px 0; }
+  .dealId { display:flex; min-width:0; flex:1 1 auto; align-items:baseline; gap:7px; }
+  .dealId small { flex:0 0 auto; color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; }
+  .dealId code { overflow:hidden; color:var(--color-text-soft); font-family:var(--font-mono); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+  .copyButton { display:grid; min-width:30px; min-height:30px; flex:0 0 auto; place-items:center; border:1px solid var(--color-border); border-radius:7px; color:var(--color-text-soft); font-size:9px; }
+  .copyButton:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
+  .dealDeadline { margin:7px 26px 0; color:var(--color-text-faint); font-size:10px; line-height:1.45; }
   .people { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; padding:26px 26px 0; }
   .person { display:grid; min-width:0; justify-items:start; gap:8px; }
   .person.other { justify-items:end; }
@@ -725,7 +775,8 @@
   .flow.done .rail span { background:var(--color-good-ink); }
   .destination { display:grid; gap:5px; margin:14px 26px 0; padding:10px 12px; border:1px solid var(--color-border); border-radius:9px; background:var(--color-panel); }
   .destination span { color:var(--color-text-soft); font-size:10px; }
-  .destination code { overflow-wrap:anywhere; color:var(--color-text); font-family:var(--font-mono); font-size:10px; line-height:1.5; }
+  .destinationRow { display:flex; align-items:center; gap:8px; }
+  .destinationRow code { min-width:0; flex:1 1 auto; overflow-wrap:anywhere; color:var(--color-text); font-family:var(--font-mono); font-size:10px; line-height:1.5; }
   .legs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:18px 26px 0; }
   .feeBox { display:grid; gap:8px; margin:14px 26px 0; padding:12px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-panel); }
   .feeBox strong { font-size:11px; }
@@ -760,6 +811,6 @@
   .spinner { width:13px; height:13px; border:2px solid #15201655; border-top-color:#152016; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @keyframes travel { 0%,100% { transform:translate(-50%,-50%); } 50% { transform:translate(calc(-50% + 13px),-50%); } }
-  @media (max-width:420px) { .people, .flow, .legs, .action { padding-right:18px; padding-left:18px; } .dealHead { padding-right:18px; padding-left:18px; } .notice { margin-right:18px; margin-left:18px; } }
+  @media (max-width:420px) { .people, .flow, .legs, .action { padding-right:18px; padding-left:18px; } .dealHead { padding-right:18px; padding-left:18px; } .notice, .dealMeta, .dealDeadline { margin-right:18px; margin-left:18px; } }
   @media (prefers-reduced-motion:reduce) { .flow.active .rail span, .spinner { animation:none; } }
 </style>

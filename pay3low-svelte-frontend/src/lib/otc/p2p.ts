@@ -85,6 +85,8 @@ export interface P2pDeal {
   fee_accrued?: boolean;
   pay_by: string;
   payout_by: string | null;
+  /** End of the 24-hour deal lifetime; the backend closes open deals past it. */
+  expires_at?: string;
   created_at: string;
   attempts?: Attempt[];
   my_leg?: P2pLeg;
