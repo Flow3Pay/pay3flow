@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::core::error::AppError;
 use crate::core::state::AppState;
-use crate::db::DbPool;
+use crate::db::{repo, DbPool};
 use crate::route_execution::{
     CreateRouteExecution, PrepareSwapExecution, RouteExecutionError, RouteExecutionView,
     SubmitRouteExecution,
@@ -34,14 +34,7 @@ pub async fn prepare(
 
 pub async fn count_completed_last_hour(pool: &DbPool) -> anyhow::Result<i64> {
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            "SELECT COUNT(*)::BIGINT FROM route_executions \
-             WHERE status = 'completed' AND updated_at >= now() - INTERVAL '1 hour'",
-            &[],
-        )
-        .await?;
-    Ok(row.get(0))
+    repo::route_executions::count_completed_last_hour(&client).await
 }
 
 #[derive(Debug, Deserialize)]

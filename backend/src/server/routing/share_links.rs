@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::core::{error::AppError, state::AppState};
+use crate::db::repo;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -116,15 +117,18 @@ pub async fn create(
         .get()
         .await
         .context("share-link database connection")?;
-    let row = client.query_one(
-        "INSERT INTO share_links (id, target, preview) VALUES ($1, $2, $3) \
-         ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id WHERE share_links.target = EXCLUDED.target RETURNING id, target, preview",
-        &[&link_id(&input.target, &preview), &input.target, &preview],
-    ).await.context("store share settings")?;
+    let row = repo::share_links::upsert(
+        &client,
+        &link_id(&input.target, &preview),
+        &input.target,
+        preview.as_ref(),
+    )
+    .await
+    .context("store share settings")?;
     Ok(Json(ShareLink {
-        id: row.get(0),
-        target: row.get(1),
-        preview: row.get(2),
+        id: row.id,
+        target: row.target,
+        preview: row.preview,
     }))
 }
 
@@ -144,18 +148,14 @@ pub async fn get(
         .get()
         .await
         .context("share-link database connection")?;
-    let row = client
-        .query_opt(
-            "SELECT id, target, preview FROM share_links WHERE id = $1",
-            &[&id],
-        )
+    let row = repo::share_links::get(&client, &id)
         .await
         .context("read share settings")?
         .ok_or_else(|| AppError::NotFound("Share link not found".into()))?;
     Ok(Json(ShareLink {
-        id: row.get(0),
-        target: row.get(1),
-        preview: row.get(2),
+        id: row.id,
+        target: row.target,
+        preview: row.preview,
     }))
 }
 

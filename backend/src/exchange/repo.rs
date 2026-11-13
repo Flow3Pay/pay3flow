@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::db::repo::exchange;
 use crate::db::DbPool;
 use crate::exchange::control;
 use crate::exchange::ledger;
@@ -549,35 +550,16 @@ pub async fn select_quote_for_order(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
 
-    tx.execute(
-        "UPDATE exchange_quotes SET score = $2, status = $3, updated_at = now() WHERE id = $1",
-        &[&quote.id, &score, &QuoteStatus::Selected.as_str()],
+    exchange::mark_quote_scored(&tx, &quote.id, score, QuoteStatus::Selected.as_str()).await?;
+
+    let order_row = exchange::select_quote_order(
+        &tx,
+        &order.id,
+        &quote.id,
+        OrderStatus::Quoted.as_str(),
+        OrderStatus::Quoting.as_str(),
     )
     .await?;
-
-    let order_row = tx
-        .query_opt(
-            r#"
-UPDATE exchange_orders
-SET selected_quote_id = $2,
-    status = $3,
-    updated_at = now()
-WHERE id = $1 AND status = $4
-RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
-          target_amount_min_minor, target_method_type, target_method_ref,
-          funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &order.id,
-                &quote.id,
-                &OrderStatus::Quoted.as_str(),
-                &OrderStatus::Quoting.as_str(),
-            ],
-        )
-        .await?
-        .context("exchange order was not quoting at winner selection time")?;
     let order = row_to_order(order_row);
 
     tx.commit().await?;
@@ -684,89 +666,49 @@ pub async fn create_funding_instruction_for_quote(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
 
-    let instruction_row = tx
-        .query_one(
-            r#"
-INSERT INTO funding_instructions
-    (order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
-     destination_ref, expires_at, raw_payload)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
-          destination_ref, expires_at, user_confirmed_at, raw_payload, created_at, updated_at
-"#,
-            &[
-                &order.id,
-                &quote.id,
-                &quote.solver_id,
-                &FundingInstructionStatus::Created.as_str(),
-                &quote.funding_method_type,
-                &quote.source_amount_minor,
-                &quote.source_currency,
-                &format!("solver:{}:{}", quote.solver_id, quote.id),
-                &quote.expires_at,
-                &serde_json::json!({
-                    "order_id": order.id,
-                    "quote_id": quote.id,
-                    "solver_id": quote.solver_id,
-                    "display_text": "Confirm funding for the selected exchange route",
-                    "requires_user_funding": quote.requires_user_funding,
-                }),
-            ],
-        )
-        .await?;
-    let instruction = row_to_funding_instruction(instruction_row);
-
-    let instruction_row = tx
-        .query_one(
-            r#"
-UPDATE funding_instructions
-SET status = $2, updated_at = now()
-WHERE id = $1 AND status = $3
-RETURNING id, order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
-          destination_ref, expires_at, user_confirmed_at, raw_payload, created_at, updated_at
-"#,
-            &[
-                &instruction.id,
-                &FundingInstructionStatus::ShownToUser.as_str(),
-                &FundingInstructionStatus::Created.as_str(),
-            ],
-        )
-        .await?;
-    let instruction = row_to_funding_instruction(instruction_row);
-
-    tx.execute(
-        "UPDATE exchange_quotes SET status = $2, updated_at = now() WHERE id = $1",
-        &[&quote.id, &QuoteStatus::Selected.as_str()],
+    let instruction_row = exchange::insert_funding_instruction_for_quote(
+        &tx,
+        &order.id,
+        &quote.id,
+        &quote.solver_id,
+        FundingInstructionStatus::Created.as_str(),
+        &quote.funding_method_type,
+        quote.source_amount_minor,
+        &quote.source_currency,
+        &format!("solver:{}:{}", quote.solver_id, quote.id),
+        quote.expires_at,
+        &serde_json::json!({
+            "order_id": order.id,
+            "quote_id": quote.id,
+            "solver_id": quote.solver_id,
+            "display_text": "Confirm funding for the selected exchange route",
+            "requires_user_funding": quote.requires_user_funding,
+        }),
     )
     .await?;
+    let instruction = row_to_funding_instruction(instruction_row);
 
-    let order_row = tx
-        .query_opt(
-            r#"
-UPDATE exchange_orders
-SET funding_instruction_id = $2,
-    funding_status = $3,
-    selected_quote_id = $4,
-    status = $5,
-    updated_at = now()
-WHERE id = $1 AND status = $6
-RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
-          target_amount_min_minor, target_method_type, target_method_ref,
-          funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &order.id,
-                &instruction.id,
-                &FundingInstructionStatus::ShownToUser.as_str(),
-                &quote.id,
-                &OrderStatus::Locked.as_str(),
-                &OrderStatus::Quoted.as_str(),
-            ],
-        )
-        .await?
-        .context("exchange order was not quoted at confirm time")?;
+    let instruction_row = exchange::show_funding_instruction(
+        &tx,
+        &instruction.id,
+        FundingInstructionStatus::ShownToUser.as_str(),
+        FundingInstructionStatus::Created.as_str(),
+    )
+    .await?;
+    let instruction = row_to_funding_instruction(instruction_row);
+
+    exchange::mark_quote_selected(&tx, &quote.id, QuoteStatus::Selected.as_str()).await?;
+
+    let order_row = exchange::lock_order_with_instruction(
+        &tx,
+        &order.id,
+        &instruction.id,
+        FundingInstructionStatus::ShownToUser.as_str(),
+        &quote.id,
+        OrderStatus::Locked.as_str(),
+        OrderStatus::Quoted.as_str(),
+    )
+    .await?;
     let updated_order = row_to_order(order_row);
 
     tx.commit().await?;
@@ -811,39 +753,21 @@ pub async fn confirm_funding_instruction(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
 
-    let instruction_row = tx
-        .query_one(
-            r#"
-UPDATE funding_instructions
-SET status = $2, user_confirmed_at = now(), updated_at = now()
-WHERE id = $1 AND status = $3
-RETURNING id, order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
-          destination_ref, expires_at, user_confirmed_at, raw_payload, created_at, updated_at
-"#,
-            &[
-                &instruction.id,
-                &FundingInstructionStatus::UserConfirmed.as_str(),
-                &FundingInstructionStatus::ShownToUser.as_str(),
-            ],
-        )
-        .await?;
+    let instruction_row = exchange::confirm_funding_instruction(
+        &tx,
+        &instruction.id,
+        FundingInstructionStatus::UserConfirmed.as_str(),
+        FundingInstructionStatus::ShownToUser.as_str(),
+    )
+    .await?;
     let updated_instruction = row_to_funding_instruction(instruction_row);
 
-    let order_row = tx
-        .query_one(
-            r#"
-UPDATE exchange_orders
-SET funding_status = $2, updated_at = now()
-WHERE id = $1
-RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
-          target_amount_min_minor, target_method_type, target_method_ref,
-          funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[&order.id, &FundingInstructionStatus::UserConfirmed.as_str()],
-        )
-        .await?;
+    let order_row = exchange::set_order_funding_status(
+        &tx,
+        &order.id,
+        FundingInstructionStatus::UserConfirmed.as_str(),
+    )
+    .await?;
     let updated_order = row_to_order(order_row);
 
     tx.commit().await?;
@@ -874,30 +798,17 @@ pub async fn ensure_settlement_for_order(
     }
 
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            r#"
-INSERT INTO exchange_settlements
-    (order_id, quote_id, solver_id, status, token_leg_status, money_leg_status,
-     funding_status, pay3flow_wallet_ref, token_ledger_ref, money_reference)
-VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, NULL)
-ON CONFLICT (order_id) DO UPDATE SET
-    updated_at = now()
-RETURNING id, order_id, quote_id, solver_id, status, token_leg_status, money_leg_status,
-          funding_status, pay3flow_wallet_ref, token_ledger_ref, money_reference, proof_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &order.id,
-                &quote.id,
-                &quote.solver_id,
-                &SettlementStatus::FundingPending.as_str(),
-                &LegStatus::NotStarted.as_str(),
-                &LegStatus::NotStarted.as_str(),
-                &FundingInstructionStatus::ShownToUser.as_str(),
-            ],
-        )
-        .await?;
+    let row = exchange::upsert_settlement(
+        &client,
+        &order.id,
+        &quote.id,
+        &quote.solver_id,
+        SettlementStatus::FundingPending.as_str(),
+        LegStatus::NotStarted.as_str(),
+        LegStatus::NotStarted.as_str(),
+        FundingInstructionStatus::ShownToUser.as_str(),
+    )
+    .await?;
     let settlement = row_to_settlement(row);
 
     if settlement.token_ledger_ref.is_some() {
@@ -1028,75 +939,35 @@ pub async fn execute_settlement_after_user_funding(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
 
-    let instruction_row = tx
-        .query_one(
-            r#"
-UPDATE funding_instructions
-SET status = $2, updated_at = now()
-WHERE id = $1
-RETURNING id, order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
-          destination_ref, expires_at, user_confirmed_at, raw_payload, created_at, updated_at
-"#,
-            &[
-                &instruction.id,
-                &FundingInstructionStatus::SolverAcknowledged.as_str(),
-            ],
-        )
-        .await?;
+    let instruction_row = exchange::acknowledge_funding_instruction(
+        &tx,
+        &instruction.id,
+        FundingInstructionStatus::SolverAcknowledged.as_str(),
+    )
+    .await?;
     let instruction = row_to_funding_instruction(instruction_row);
 
-    let settlement_row = tx
-        .query_one(
-            r#"
-UPDATE exchange_settlements
-SET status = $2,
-    token_leg_status = $3,
-    money_leg_status = $4,
-    funding_status = $5,
-    pay3flow_wallet_ref = $6,
-    token_ledger_ref = $7,
-    money_reference = $8,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, order_id, quote_id, solver_id, status, token_leg_status, money_leg_status,
-          funding_status, pay3flow_wallet_ref, token_ledger_ref, money_reference, proof_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &settlement.id,
-                &SettlementStatus::ProofPending.as_str(),
-                &LegStatus::Done.as_str(),
-                &LegStatus::Done.as_str(),
-                &FundingInstructionStatus::SolverAcknowledged.as_str(),
-                &wallet.id.to_string(),
-                &release.id.to_string(),
-                &format!("mock-money:{}", settlement.id),
-            ],
-        )
-        .await?;
+    let settlement_row = exchange::mark_settlement_executed(
+        &tx,
+        &settlement.id,
+        SettlementStatus::ProofPending.as_str(),
+        LegStatus::Done.as_str(),
+        LegStatus::Done.as_str(),
+        FundingInstructionStatus::SolverAcknowledged.as_str(),
+        &wallet.id.to_string(),
+        &release.id.to_string(),
+        &format!("mock-money:{}", settlement.id),
+    )
+    .await?;
     let settlement = row_to_settlement(settlement_row);
 
-    let order_row = tx
-        .query_one(
-            r#"
-UPDATE exchange_orders
-SET status = $2,
-    funding_status = $3,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
-          target_amount_min_minor, target_method_type, target_method_ref,
-          funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &order.id,
-                &OrderStatus::ProofPending.as_str(),
-                &FundingInstructionStatus::SolverAcknowledged.as_str(),
-            ],
-        )
-        .await?;
+    let order_row = exchange::mark_order_executed(
+        &tx,
+        &order.id,
+        OrderStatus::ProofPending.as_str(),
+        FundingInstructionStatus::SolverAcknowledged.as_str(),
+    )
+    .await?;
     let order = row_to_order(order_row);
 
     tx.commit().await?;
@@ -1147,17 +1018,7 @@ pub async fn submit_and_verify_proof(
         false
     } else {
         let client = pool.get().await?;
-        client
-            .query_opt(
-                r#"
-SELECT 1 FROM exchange_proofs
-WHERE proof_payload->>'reference' = $1 AND verification_status = 'verified'
-LIMIT 1
-"#,
-                &[&reference],
-            )
-            .await?
-            .is_some()
+        exchange::reference_already_verified(&client, reference).await?
     };
     let valid = proof_type.trim() == "machine_receipt"
         && !reference_used
@@ -1192,75 +1053,37 @@ LIMIT 1
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
 
-    let proof_row = tx
-        .query_one(
-            r#"
-INSERT INTO exchange_proofs
-    (settlement_id, solver_id, proof_type, proof_payload, verification_status, verified_by, verified_at)
-VALUES ($1, $2, $3, $4, $5, $6, now())
-RETURNING id, settlement_id, solver_id, proof_type, proof_payload, verification_status,
-          verified_by, verified_at, created_at
-"#,
-            &[
-                &settlement.id,
-                &settlement.solver_id,
-                &proof_type.trim(),
-                &proof_payload,
-                &proof_status.as_str(),
-                &Some("mock-proof-verifier".to_string()),
-            ],
-        )
-        .await?;
+    let proof_row = exchange::insert_verified_proof(
+        &tx,
+        &settlement.id,
+        &settlement.solver_id,
+        proof_type.trim(),
+        &proof_payload,
+        proof_status.as_str(),
+        "mock-proof-verifier",
+    )
+    .await?;
     let proof = row_to_proof(proof_row);
 
-    let settlement_row = tx
-        .query_one(
-            r#"
-UPDATE exchange_settlements
-SET status = $2,
-    proof_id = $3,
-    failure_code = $4,
-    failure_message = $5,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, order_id, quote_id, solver_id, status, token_leg_status, money_leg_status,
-          funding_status, pay3flow_wallet_ref, token_ledger_ref, money_reference, proof_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &settlement.id,
-                &settlement_status.as_str(),
-                &proof.id,
-                &failure_code,
-                &failure_message,
-            ],
-        )
-        .await?;
+    let settlement_row = exchange::settle_proof(
+        &tx,
+        &settlement.id,
+        settlement_status.as_str(),
+        &proof.id,
+        &failure_code,
+        &failure_message,
+    )
+    .await?;
     let settlement = row_to_settlement(settlement_row);
 
-    let order_row = tx
-        .query_one(
-            r#"
-UPDATE exchange_orders
-SET status = $2,
-    failure_code = $3,
-    failure_message = $4,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
-          target_amount_min_minor, target_method_type, target_method_ref,
-          funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &order.id,
-                &order_status.as_str(),
-                &failure_code,
-                &failure_message,
-            ],
-        )
-        .await?;
+    let order_row = exchange::settle_order_proof(
+        &tx,
+        &order.id,
+        order_status.as_str(),
+        &failure_code,
+        &failure_message,
+    )
+    .await?;
     let order = row_to_order(order_row);
 
     if valid {
@@ -1363,27 +1186,14 @@ pub async fn update_settlement_refs(
     money_reference: Option<String>,
 ) -> Result<ExchangeSettlement> {
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            r#"
-UPDATE exchange_settlements
-SET pay3flow_wallet_ref = COALESCE($2, pay3flow_wallet_ref),
-    token_ledger_ref = COALESCE($3, token_ledger_ref),
-    money_reference = COALESCE($4, money_reference),
-    updated_at = now()
-WHERE id = $1
-RETURNING id, order_id, quote_id, solver_id, status, token_leg_status, money_leg_status,
-          funding_status, pay3flow_wallet_ref, token_ledger_ref, money_reference, proof_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                settlement_id,
-                &pay3flow_wallet_ref,
-                &token_ledger_ref,
-                &money_reference,
-            ],
-        )
-        .await?;
+    let row = exchange::update_settlement_refs(
+        &client,
+        settlement_id,
+        &pay3flow_wallet_ref,
+        &token_ledger_ref,
+        &money_reference,
+    )
+    .await?;
     Ok(row_to_settlement(row))
 }
 
@@ -1397,49 +1207,19 @@ async fn fail_settlement(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
 
-    let settlement_row = tx
-        .query_one(
-            r#"
-UPDATE exchange_settlements
-SET status = $2,
-    money_leg_status = $3,
-    failure_code = $4,
-    failure_message = $5,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, order_id, quote_id, solver_id, status, token_leg_status, money_leg_status,
-          funding_status, pay3flow_wallet_ref, token_ledger_ref, money_reference, proof_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[
-                &settlement.id,
-                &SettlementStatus::Failed.as_str(),
-                &LegStatus::Failed.as_str(),
-                &code,
-                &message,
-            ],
-        )
-        .await?;
+    let settlement_row = exchange::fail_settlement(
+        &tx,
+        &settlement.id,
+        SettlementStatus::Failed.as_str(),
+        LegStatus::Failed.as_str(),
+        code,
+        message,
+    )
+    .await?;
     let settlement = row_to_settlement(settlement_row);
 
-    let order_row = tx
-        .query_one(
-            r#"
-UPDATE exchange_orders
-SET status = $2,
-    failure_code = $3,
-    failure_message = $4,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
-          target_amount_min_minor, target_method_type, target_method_ref,
-          funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
-          failure_code, failure_message, created_at, updated_at
-"#,
-            &[&order.id, &OrderStatus::Failed.as_str(), &code, &message],
-        )
-        .await?;
+    let order_row =
+        exchange::fail_order(&tx, &order.id, OrderStatus::Failed.as_str(), code, message).await?;
     let order = row_to_order(order_row);
 
     tx.commit().await?;

@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::db::repo::exchange_control;
 use crate::db::DbPool;
 use crate::exchange::model::{ExchangeOrder, ExchangeQuote, Minor};
 use crate::exchange::repo;
@@ -43,16 +44,7 @@ pub struct ManualReview {
 
 pub async fn controls(pool: &DbPool) -> Result<ExchangeControls> {
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            r#"
-SELECT exchange_enabled, user_daily_limit_minor, solver_daily_limit_minor,
-       manual_review_threshold_minor, terms_version, updated_by, updated_at
-FROM exchange_controls WHERE singleton = TRUE
-"#,
-            &[],
-        )
-        .await?;
+    let row = exchange_control::controls(&client).await?;
     Ok(row_to_controls(row))
 }
 
@@ -85,35 +77,20 @@ pub async fn update_controls(
         .map(str::trim)
         .unwrap_or(&current.terms_version);
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            r#"
-UPDATE exchange_controls
-SET exchange_enabled = $1,
-    user_daily_limit_minor = $2,
-    solver_daily_limit_minor = $3,
-    manual_review_threshold_minor = $4,
-    terms_version = $5,
-    updated_by = $6,
-    updated_at = now()
-WHERE singleton = TRUE
-RETURNING exchange_enabled, user_daily_limit_minor, solver_daily_limit_minor,
-          manual_review_threshold_minor, terms_version, updated_by, updated_at
-"#,
-            &[
-                &patch.exchange_enabled.unwrap_or(current.exchange_enabled),
-                &patch
-                    .user_daily_limit_minor
-                    .unwrap_or(current.user_daily_limit_minor),
-                &patch
-                    .solver_daily_limit_minor
-                    .unwrap_or(current.solver_daily_limit_minor),
-                &manual_review_threshold,
-                &terms_version,
-                &actor,
-            ],
-        )
-        .await?;
+    let row = exchange_control::update_controls(
+        &client,
+        patch.exchange_enabled.unwrap_or(current.exchange_enabled),
+        patch
+            .user_daily_limit_minor
+            .unwrap_or(current.user_daily_limit_minor),
+        patch
+            .solver_daily_limit_minor
+            .unwrap_or(current.solver_daily_limit_minor),
+        &manual_review_threshold,
+        terms_version,
+        actor,
+    )
+    .await?;
     Ok(row_to_controls(row))
 }
 
@@ -131,23 +108,14 @@ pub async fn ensure_order_allowed(
 ) -> Result<ExchangeControls> {
     let settings = ensure_global_enabled(pool).await?;
     let client = pool.get().await?;
-    let enabled = client
-        .query_opt(
-            r#"
-SELECT 1 FROM exchange_corridors
-WHERE source_country = $1 AND source_currency = $2
-  AND target_country = $3 AND target_currency = $4
-  AND status = 'enabled'
-"#,
-            &[
-                &order.source_country,
-                &order.source_currency,
-                &order.target_country,
-                &order.target_currency,
-            ],
-        )
-        .await?
-        .is_some();
+    let enabled = exchange_control::enabled_corridor_exists(
+        &client,
+        &order.source_country,
+        &order.source_currency,
+        &order.target_country,
+        &order.target_currency,
+    )
+    .await?;
     if !enabled {
         bail!("exchange corridor is disabled by its kill switch");
     }
@@ -162,19 +130,7 @@ pub async fn ensure_user_daily_limit(
 ) -> Result<()> {
     let settings = ensure_global_enabled(pool).await?;
     let client = pool.get().await?;
-    let used: Minor = client
-        .query_one(
-            r#"
-SELECT COALESCE(SUM(source_amount_minor), 0)::BIGINT
-FROM exchange_orders
-WHERE user_id = $1
-  AND created_at >= date_trunc('day', now())
-  AND status NOT IN ('cancelled', 'failed', 'expired')
-"#,
-            &[user_id],
-        )
-        .await?
-        .get(0);
+    let used: Minor = exchange_control::user_daily_usage_minor(&client, user_id).await?;
     let limit = corridor_limit_minor
         .map(|corridor_limit| corridor_limit.min(settings.user_daily_limit_minor))
         .unwrap_or(settings.user_daily_limit_minor);
@@ -191,31 +147,11 @@ pub async fn ensure_solver_allowed(
 ) -> Result<()> {
     let settings = ensure_order_allowed(pool, order).await?;
     let client = pool.get().await?;
-    let solver = client
-        .query_opt(
-            "SELECT status FROM exchange_solvers WHERE id = $1",
-            &[&quote.solver_id],
-        )
-        .await?
-        .context("exchange solver not found")?;
-    let status: String = solver.get(0);
+    let status = exchange_control::solver_status(&client, &quote.solver_id).await?;
     if status != "active" {
         bail!("exchange solver is disabled or unavailable");
     }
-    let used: Minor = client
-        .query_one(
-            r#"
-SELECT COALESCE(SUM(o.source_amount_minor), 0)::BIGINT
-FROM exchange_orders o
-JOIN exchange_quotes q ON q.id = o.selected_quote_id
-WHERE q.solver_id = $1
-  AND o.created_at >= date_trunc('day', now())
-  AND o.status NOT IN ('created', 'discovering', 'quoting', 'quoted', 'cancelled', 'failed', 'expired')
-"#,
-            &[&quote.solver_id],
-        )
-        .await?
-        .get(0);
+    let used: Minor = exchange_control::solver_daily_usage_minor(&client, &quote.solver_id).await?;
     if used.saturating_add(order.source_amount_minor) > settings.solver_daily_limit_minor {
         bail!("exchange solver daily limit exceeded");
     }
@@ -234,20 +170,12 @@ pub async fn ensure_or_create_manual_review(
         return Ok(None);
     }
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            r#"
-INSERT INTO exchange_manual_reviews (order_id, status, reason)
-VALUES ($1, 'pending', $2)
-ON CONFLICT (order_id) DO UPDATE SET updated_at = exchange_manual_reviews.updated_at
-RETURNING order_id, status, reason, resolved_by, resolution_note, created_at, resolved_at, updated_at
-"#,
-            &[
-                &order.id,
-                &format!("amount reaches manual review threshold {threshold}"),
-            ],
-        )
-        .await?;
+    let row = exchange_control::insert_manual_review(
+        &client,
+        &order.id,
+        &format!("amount reaches manual review threshold {threshold}"),
+    )
+    .await?;
     Ok(Some(row_to_manual_review(row)))
 }
 
@@ -256,15 +184,7 @@ pub async fn manual_review_for_order(
     order_id: &Uuid,
 ) -> Result<Option<ManualReview>> {
     let client = pool.get().await?;
-    let row = client
-        .query_opt(
-            r#"
-SELECT order_id, status, reason, resolved_by, resolution_note, created_at, resolved_at, updated_at
-FROM exchange_manual_reviews WHERE order_id = $1
-"#,
-            &[order_id],
-        )
-        .await?;
+    let row = exchange_control::manual_review_for_order(&client, order_id).await?;
     Ok(row.map(row_to_manual_review))
 }
 
@@ -289,31 +209,15 @@ pub async fn resolve_manual_review(
 ) -> Result<ManualReview> {
     let status = if approved { "approved" } else { "rejected" };
     let client = pool.get().await?;
-    let row = client
-        .query_opt(
-            r#"
-UPDATE exchange_manual_reviews
-SET status = $2, resolved_by = $3, resolution_note = $4,
-    resolved_at = now(), updated_at = now()
-WHERE order_id = $1 AND status = 'pending'
-RETURNING order_id, status, reason, resolved_by, resolution_note, created_at, resolved_at, updated_at
-"#,
-            &[&order_id, &status, &actor, &note],
-        )
-        .await?
-        .context("pending manual review not found")?;
+    let row =
+        exchange_control::resolve_manual_review(&client, order_id, status, actor, &note).await?;
     Ok(row_to_manual_review(row))
 }
 
 pub async fn set_corridor_enabled(pool: &DbPool, corridor_id: &Uuid, enabled: bool) -> Result<()> {
     let client = pool.get().await?;
     let status = if enabled { "enabled" } else { "disabled" };
-    let changed = client
-        .execute(
-            "UPDATE exchange_corridors SET status = $2, updated_at = now() WHERE id = $1",
-            &[corridor_id, &status],
-        )
-        .await?;
+    let changed = exchange_control::set_corridor_enabled(&client, corridor_id, status).await?;
     if changed != 1 {
         bail!("exchange corridor not found");
     }
@@ -326,12 +230,7 @@ pub async fn set_solver_status(
     status: SolverStatus,
 ) -> Result<()> {
     let client = pool.get().await?;
-    let changed = client
-        .execute(
-            "UPDATE exchange_solvers SET status = $2, updated_at = now() WHERE id = $1",
-            &[solver_id, &status.as_str()],
-        )
-        .await?;
+    let changed = exchange_control::set_solver_status(&client, solver_id, status.as_str()).await?;
     if changed != 1 {
         bail!("exchange solver not found");
     }
@@ -358,31 +257,10 @@ pub async fn resolve_dispute(
     };
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
-    tx.execute(
-        r#"
-UPDATE exchange_settlements
-SET status = $2,
-    failure_code = CASE WHEN $2 = 'done' THEN NULL ELSE 'manual_resolution_failed' END,
-    failure_message = CASE WHEN $2 = 'done' THEN NULL ELSE $3 END,
-    updated_at = now()
-WHERE order_id = $1 AND status = 'disputed'
-"#,
-        &[&order.id, &settlement_status.as_str(), &note],
-    )
-    .await?;
-    let changed = tx
-        .execute(
-            r#"
-UPDATE exchange_orders
-SET status = $2,
-    failure_code = CASE WHEN $2 = 'done' THEN NULL ELSE 'manual_resolution_failed' END,
-    failure_message = CASE WHEN $2 = 'done' THEN NULL ELSE $3 END,
-    updated_at = now()
-WHERE id = $1 AND status = 'disputed'
-"#,
-            &[&order.id, &outcome.as_str(), &note],
-        )
+    exchange_control::resolve_settlement_dispute(&tx, &order.id, settlement_status.as_str(), note)
         .await?;
+    let changed =
+        exchange_control::resolve_order_dispute(&tx, &order.id, outcome.as_str(), note).await?;
     if changed != 1 {
         bail!("disputed exchange order changed during manual resolution");
     }
@@ -417,17 +295,7 @@ pub async fn record_consent(
         bail!("exchange terms version is stale; reload the funding instruction");
     }
     let client = pool.get().await?;
-    client
-        .execute(
-            r#"
-INSERT INTO exchange_consents
-    (order_id, user_id, terms_version, settlement_asset_disclosure)
-VALUES ($1, $2, $3, TRUE)
-ON CONFLICT (order_id, terms_version) DO NOTHING
-"#,
-            &[&order.id, &order.user_id, &terms_version],
-        )
-        .await?;
+    exchange_control::insert_consent(&client, &order.id, &order.user_id, terms_version).await?;
     Ok(())
 }
 

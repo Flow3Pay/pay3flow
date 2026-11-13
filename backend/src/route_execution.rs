@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::db::DbPool;
+use crate::db::{repo, DbPool};
 use crate::p2p::{P2pRoute, RouteExecutionDescriptor};
 use crate::route_engine::{
     Amount, Asset, CowRouteProvider, NearIntentsProvider, NearQuoteRequest, SymbiosisRouteProvider,
@@ -540,32 +540,23 @@ impl RouteExecutionService {
         let id = Uuid::new_v4();
         let action_json = serde_json::to_value(&action)?;
         let client = self.pool.get().await?;
-        client
-            .execute(
-                r#"
-INSERT INTO route_executions
-    (id, anonymous_id, idempotency_key, route_id, provider, status,
-     from_asset, to_asset, input_amount, source_address, recipient,
-     action, provider_reference, quote_expires_at)
-VALUES ($1, $2, $3, $4, $5, 'awaiting_signature', $6, $7, $8, $9, $10, $11, $12, $13)
-"#,
-                &[
-                    &id,
-                    &request.anonymous_id,
-                    &idempotency_key,
-                    &claims.route_id,
-                    &claims.provider,
-                    &claims.from_asset,
-                    &claims.to_asset,
-                    &input_amount,
-                    &request.source_address,
-                    &request.recipient,
-                    &action_json,
-                    &provider_reference,
-                    &quote_expires_at,
-                ],
-            )
-            .await?;
+        repo::route_executions::insert(
+            &client,
+            &id,
+            &request.anonymous_id,
+            &idempotency_key,
+            &claims.route_id,
+            &claims.provider,
+            &claims.from_asset,
+            &claims.to_asset,
+            &input_amount,
+            &request.source_address,
+            &request.recipient,
+            &action_json,
+            provider_reference.as_deref(),
+            &quote_expires_at,
+        )
+        .await?;
         self.get(id, request.anonymous_id).await
     }
 
@@ -596,16 +587,9 @@ VALUES ($1, $2, $3, $4, $5, 'awaiting_signature', $6, $7, $8, $9, $10, $11, $12,
             return Err(RouteExecutionError::InvalidSubmission);
         }
         let client = self.pool.get().await?;
-        let updated = client
-            .execute(
-                r#"
-UPDATE route_executions
-SET status = 'submitted', submitted_reference = $3, updated_at = now()
-WHERE id = $1 AND anonymous_id = $2 AND status = 'awaiting_signature'
-"#,
-                &[&id, &request.anonymous_id, &reference],
-            )
-            .await?;
+        let updated =
+            repo::route_executions::mark_submitted(&client, &id, &request.anonymous_id, reference)
+                .await?;
         if updated == 0 {
             let stored = self.get_stored(id, request.anonymous_id).await?;
             if stored.submitted_reference.as_deref() == Some(reference) {
@@ -687,15 +671,7 @@ WHERE id = $1 AND anonymous_id = $2 AND status = 'awaiting_signature'
         };
         let status = normalized_status(&view.provider, &provider_status);
         let client = self.pool.get().await?;
-        client
-            .execute(
-                r#"
-UPDATE route_executions
-SET status = $3, provider_status = $4, updated_at = now()
-WHERE id = $1 AND anonymous_id = $2
-"#,
-                &[&id, &anonymous_id, &status, &provider_status],
-            )
+        repo::route_executions::set_status(&client, &id, &anonymous_id, &status, &provider_status)
             .await?;
         view.status = status.into();
         view.provider_status = Some(provider_status);
@@ -709,14 +685,9 @@ WHERE id = $1 AND anonymous_id = $2
         key: &str,
     ) -> Result<Option<RouteExecutionView>, RouteExecutionError> {
         let client = self.pool.get().await?;
-        let row = client
-            .query_opt(
-                "SELECT id FROM route_executions WHERE anonymous_id = $1 AND idempotency_key = $2",
-                &[&anonymous_id, &key],
-            )
-            .await?;
-        match row {
-            Some(row) => Ok(Some(self.get_stored(row.get(0), anonymous_id).await?)),
+        let id = repo::route_executions::id_by_idempotency(&client, &anonymous_id, key).await?;
+        match id {
+            Some(id) => Ok(Some(self.get_stored(id, anonymous_id).await?)),
             None => Ok(None),
         }
     }
@@ -727,17 +698,7 @@ WHERE id = $1 AND anonymous_id = $2
         anonymous_id: Uuid,
     ) -> Result<RouteExecutionView, RouteExecutionError> {
         let client = self.pool.get().await?;
-        let row = client
-            .query_opt(
-                r#"
-SELECT route_id, provider, status, from_asset, to_asset, input_amount,
-       source_address, recipient, action, provider_reference,
-       submitted_reference, provider_status, quote_expires_at, updated_at
-FROM route_executions
-WHERE id = $1 AND anonymous_id = $2
-"#,
-                &[&id, &anonymous_id],
-            )
+        let row = repo::route_executions::get_stored(&client, &id, &anonymous_id)
             .await?
             .ok_or(RouteExecutionError::NotFound)?;
         let action: ExecutionAction = serde_json::from_value(row.get(8))?;

@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::core::error::AppError;
 use crate::core::state::AppState;
-use crate::db::DbPool;
+use crate::db::{repo, DbPool};
 
 const ANONYMOUS_USER_HEADER: &str = "x-anonymous-user-id";
 
@@ -51,49 +51,11 @@ pub async fn register(
 pub async fn record_request(pool: &DbPool, anonymous_id: Uuid) -> anyhow::Result<bool> {
     let mut client = pool.get().await?;
     let transaction = client.transaction().await?;
-    let is_new = transaction
-        .execute(
-            r#"
-INSERT INTO anonymous_users (id, request_count)
-VALUES ($1, 0)
-ON CONFLICT (id) DO NOTHING
-"#,
-            &[&anonymous_id],
-        )
-        .await?
-        == 1;
-    let starts_session = transaction
-        .query_one(
-            r#"
-SELECT last_session_at IS NULL
-    OR last_seen_at <= now() - INTERVAL '30 minutes'
-FROM anonymous_users
-WHERE id = $1
-FOR UPDATE
-"#,
-            &[&anonymous_id],
-        )
-        .await?
-        .get::<_, bool>(0);
-    transaction
-        .execute(
-            r#"
-UPDATE anonymous_users
-SET request_count = request_count + 1,
-    last_seen_at = now(),
-    last_session_at = CASE WHEN $2 THEN now() ELSE last_session_at END
-WHERE id = $1
-"#,
-            &[&anonymous_id, &starts_session],
-        )
-        .await?;
+    let is_new = repo::anonymous::insert_user(&transaction, &anonymous_id).await?;
+    let starts_session = repo::anonymous::lock_user(&transaction, &anonymous_id).await?;
+    repo::anonymous::bump_request(&transaction, &anonymous_id, starts_session).await?;
     if starts_session {
-        transaction
-            .execute(
-                "INSERT INTO anonymous_user_sessions (anonymous_id) VALUES ($1)",
-                &[&anonymous_id],
-            )
-            .await?;
+        repo::anonymous::insert_session(&transaction, &anonymous_id).await?;
     }
     transaction.commit().await?;
     Ok(is_new)
@@ -178,42 +140,12 @@ fn client_ip(headers: &HeaderMap) -> Option<IpAddr> {
 
 pub async fn count_users(pool: &DbPool) -> anyhow::Result<(i64, i64)> {
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            "SELECT (SELECT COUNT(*)::BIGINT FROM anonymous_users), \
-                    (SELECT COUNT(*)::BIGINT FROM users)",
-            &[],
-        )
-        .await?;
-    Ok((row.get(0), row.get(1)))
+    repo::anonymous::count_users(&client).await
 }
 
 pub async fn activity_counts(pool: &DbPool) -> anyhow::Result<(i64, i64, i64, i64)> {
     let client = pool.get().await?;
-    let row = client
-        .query_one(
-            r#"
-SELECT
-    COUNT(DISTINCT anonymous_id) FILTER (
-        WHERE started_at >= now() - INTERVAL '7 days'
-    )::BIGINT,
-    COUNT(DISTINCT anonymous_id) FILTER (
-        WHERE started_at >= now() - INTERVAL '14 days'
-          AND started_at < now() - INTERVAL '7 days'
-    )::BIGINT,
-    COUNT(*) FILTER (
-        WHERE started_at >= now() - INTERVAL '7 days'
-    )::BIGINT,
-    COUNT(*) FILTER (
-        WHERE started_at >= now() - INTERVAL '14 days'
-          AND started_at < now() - INTERVAL '7 days'
-    )::BIGINT
-FROM anonymous_user_sessions
-"#,
-            &[],
-        )
-        .await?;
-    Ok((row.get(0), row.get(1), row.get(2), row.get(3)))
+    repo::anonymous::activity_counts(&client).await
 }
 
 /// Attach usage accounting to every request carrying the anonymous ID. The

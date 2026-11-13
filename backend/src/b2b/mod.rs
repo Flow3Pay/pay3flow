@@ -28,6 +28,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::core::crypto::SecretBox;
+use crate::db::repo::b2b as repo;
 use crate::db::DbPool;
 use crate::route_engine::{Amount, AppFee, Asset, NearIntentsProvider, NearQuoteRequest};
 
@@ -205,37 +206,18 @@ impl Service {
     /// the merchant identity for now.
     async fn merchant(&self, user_id: Uuid) -> Result<Uuid> {
         let client = self.client().await?;
-        if let Some(row) = client
-            .query_opt(
-                "SELECT id FROM b2b_merchants WHERE user_id = $1 AND status <> 'suspended' \
-                 ORDER BY created_at LIMIT 1",
-                &[&user_id],
-            )
-            .await?
-        {
-            return Ok(row.get(0));
+        if let Some(merchant_id) = repo::merchant_by_user(&client, user_id).await? {
+            return Ok(merchant_id);
         }
-        let row = client
-            .query_opt(
-                "INSERT INTO b2b_merchants (user_id, name, status) VALUES ($1, $2, 'active') \
-                 ON CONFLICT (user_id) DO NOTHING RETURNING id",
-                &[&user_id, &format!("merchant-{user_id}")],
-            )
-            .await?;
-        if let Some(row) = row {
-            return Ok(row.get(0));
+        let name = format!("merchant-{user_id}");
+        if let Some(merchant_id) = repo::insert_merchant(&client, user_id, &name).await? {
+            return Ok(merchant_id);
         }
-        let row = client
-            .query_one(
-                "SELECT id, status FROM b2b_merchants WHERE user_id = $1",
-                &[&user_id],
-            )
-            .await?;
-        let status: String = row.get(1);
+        let (merchant_id, status) = repo::merchant_status(&client, user_id).await?;
         if status == "suspended" {
             return Err(Error::Unavailable("merchant account is suspended".into()));
         }
-        Ok(row.get(0))
+        Ok(merchant_id)
     }
 
     fn env_value(env: Option<&str>) -> Result<String> {
@@ -404,33 +386,22 @@ impl Service {
         prepared: &PreparedQuote,
     ) -> Result<Uuid> {
         let raw = serde_json::to_value(&prepared.raw)?;
-        let row = client
-            .query_one(
-                r#"
-INSERT INTO b2b_quotes
-    (order_id, provider, provider_quote_id, exact, input_amount, output_amount,
-     best_output, captured_bps, app_fee_bps, deposit_address, refund_address,
-     expires_at, raw)
-VALUES ($1, 'near-intents', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id
-"#,
-                &[
-                    &order_id,
-                    &prepared.provider_quote_id,
-                    &prepared.exact.as_str(),
-                    &prepared.input.value,
-                    &prepared.output.value,
-                    &prepared.best_output,
-                    &prepared.captured_bps,
-                    &prepared.app_fee_bps,
-                    &prepared.deposit_address,
-                    &prepared.refund_address,
-                    &prepared.expires_at,
-                    &raw,
-                ],
-            )
-            .await?;
-        Ok(row.get(0))
+        repo::insert_quote(
+            client,
+            order_id,
+            &prepared.provider_quote_id,
+            prepared.exact.as_str(),
+            &prepared.input.value,
+            &prepared.output.value,
+            &prepared.best_output,
+            prepared.captured_bps,
+            prepared.app_fee_bps,
+            &prepared.deposit_address,
+            &prepared.refund_address,
+            prepared.expires_at,
+            &raw,
+        )
+        .await
     }
 
     /// Create a quote (and its `quoted` order) for the caller.
@@ -463,32 +434,21 @@ RETURNING id
             "request": request,
         });
         let external_id = request.external_id.as_deref();
-        let row = client
-            .query_one(
-                r#"
-INSERT INTO b2b_orders
-    (merchant_id, env, kind, external_id, input_asset, input_network,
-     output_asset, output_network, recipient, refund_address, status,
-     metadata, idempotency_key)
-VALUES ($1, $2, 'transfer', $3, $4, $5, $6, $7, $8, $9, 'quoted', $10, $11)
-RETURNING id
-"#,
-                &[
-                    &merchant_id,
-                    &env,
-                    &external_id,
-                    &target.from.symbol,
-                    &target.from.location,
-                    &target.to.symbol,
-                    &target.to.location,
-                    &request.recipient.trim(),
-                    &request.refund_address.trim(),
-                    &metadata,
-                    &key,
-                ],
-            )
-            .await?;
-        let order_id: Uuid = row.get(0);
+        let order_id = repo::insert_quoted_order(
+            &client,
+            merchant_id,
+            &env,
+            external_id,
+            &target.from.symbol,
+            target.from.location.as_deref(),
+            &target.to.symbol,
+            target.to.location.as_deref(),
+            request.recipient.trim(),
+            request.refund_address.trim(),
+            &metadata,
+            key.as_deref(),
+        )
+        .await?;
         let quote_id = self.insert_quote(&client, order_id, &prepared).await?;
         self.load_quote(&client, quote_id, merchant_id).await
     }
@@ -501,37 +461,22 @@ RETURNING id
         request_hash: &str,
     ) -> Result<Option<QuoteView>> {
         let client = self.client().await?;
-        let Some(row) = client
-            .query_opt(
-                "SELECT id, metadata->>'request_hash', status FROM b2b_orders \
-                 WHERE merchant_id = $1 AND env = $2 AND idempotency_key = $3",
-                &[&merchant_id, &env, &key],
-            )
-            .await?
+        let Some((order_id, stored, _status)) =
+            repo::order_by_idempotency_key(&client, merchant_id, env, key).await?
         else {
             return Ok(None);
         };
-        let stored: Option<String> = row.get(1);
         if stored.as_deref() != Some(request_hash) {
             return Err(Error::Conflict(
                 "Idempotency-Key was already used with a different quote request".into(),
             ));
         }
-        let order_id: Uuid = row.get(0);
-        let Some(row) = client
-            .query_opt(
-                "SELECT id FROM b2b_quotes WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1",
-                &[&order_id],
-            )
-            .await?
-        else {
+        let Some(quote_id) = repo::latest_quote_for_order(&client, order_id).await? else {
             return Err(Error::Conflict(
                 "existing quote request has no quote".into(),
             ));
         };
-        Ok(Some(
-            self.load_quote(&client, row.get(0), merchant_id).await?,
-        ))
+        Ok(Some(self.load_quote(&client, quote_id, merchant_id).await?))
     }
 
     /// Accept a quote and move the order to `awaiting_deposit`.
@@ -549,25 +494,11 @@ RETURNING id
             ));
         }
         let client = self.client().await?;
-        let Some(row) = client
-            .query_opt(
-                r#"
-SELECT o.id, o.status, o.env, o.accepted_quote_id, o.transfer_key, q.expires_at
-FROM b2b_orders o
-JOIN b2b_quotes q ON q.order_id = o.id
-WHERE q.id = $1 AND o.merchant_id = $2
-"#,
-                &[&request.quote_id, &merchant_id],
-            )
-            .await?
+        let Some((order_id, status, env, accepted_quote, _transfer_key, expires_at)) =
+            repo::quote_owned_by_merchant(&client, request.quote_id, merchant_id).await?
         else {
             return Err(Error::NotFound);
         };
-        let order_id: Uuid = row.get(0);
-        let status: String = row.get(1);
-        let env: String = row.get(2);
-        let accepted_quote: Option<Uuid> = row.get(3);
-        let expires_at: DateTime<Utc> = row.get(5);
         if let Some(existing_env) = request.env.as_deref() {
             if Self::env_value(Some(existing_env))? != env {
                 return Err(Error::Conflict("quote belongs to a different env".into()));
@@ -584,16 +515,9 @@ WHERE q.id = $1 AND o.merchant_id = $2
         if expires_at <= Utc::now() {
             return Err(Error::Conflict("quote has expired".into()));
         }
-        if let Some(row) = client
-            .query_opt(
-                "SELECT id, accepted_quote_id FROM b2b_orders \
-                 WHERE merchant_id = $1 AND env = $2 AND transfer_key = $3",
-                &[&merchant_id, &env, &key],
-            )
-            .await?
+        if let Some((existing_order, accepted)) =
+            repo::order_by_transfer_key(&client, merchant_id, &env, key).await?
         {
-            let existing_order: Uuid = row.get(0);
-            let accepted: Option<Uuid> = row.get(1);
             if accepted == Some(request.quote_id) {
                 return self.load_transfer(merchant_id, existing_order).await;
             }
@@ -603,23 +527,15 @@ WHERE q.id = $1 AND o.merchant_id = $2
         }
         let mut client = self.client().await?;
         let tx = client.transaction().await?;
-        let updated = tx
-            .execute(
-                r#"
-UPDATE b2b_orders
-SET status = 'awaiting_deposit', accepted_quote_id = $2, transfer_key = $3,
-    external_id = COALESCE($4, external_id), updated_at = now()
-WHERE id = $1 AND merchant_id = $5 AND status = 'quoted'
-"#,
-                &[
-                    &order_id,
-                    &request.quote_id,
-                    &key,
-                    &request.external_id,
-                    &merchant_id,
-                ],
-            )
-            .await?;
+        let updated = repo::accept_quote(
+            &tx,
+            order_id,
+            request.quote_id,
+            key,
+            request.external_id.as_deref(),
+            merchant_id,
+        )
+        .await?;
         if updated == 0 {
             return Err(Error::Conflict(
                 "transfer status changed concurrently".into(),
@@ -637,27 +553,13 @@ WHERE id = $1 AND merchant_id = $5 AND status = 'quoted'
         let merchant_id = self.merchant(user_id).await?;
         let mut client = self.client().await?;
         let tx = client.transaction().await?;
-        let updated = tx
-            .execute(
-                "UPDATE b2b_orders SET status = 'cancelled', updated_at = now() \
-                 WHERE id = $1 AND merchant_id = $2 AND status IN ('quoted','awaiting_deposit')",
-                &[&order_id, &merchant_id],
-            )
-            .await?;
+        let updated = repo::cancel_transfer(&tx, order_id, merchant_id).await?;
         if updated == 0 {
-            let exists = tx
-                .query_opt(
-                    "SELECT status FROM b2b_orders WHERE id = $1 AND merchant_id = $2",
-                    &[&order_id, &merchant_id],
-                )
-                .await?;
+            let exists = repo::order_status(&tx, order_id, merchant_id).await?;
             return match exists {
-                Some(row) => {
-                    let status: String = row.get(0);
-                    Err(Error::Conflict(format!(
-                        "transfer is `{status}` and cannot be cancelled"
-                    )))
-                }
+                Some(status) => Err(Error::Conflict(format!(
+                    "transfer is `{status}` and cannot be cancelled"
+                ))),
                 None => Err(Error::NotFound),
             };
         }
@@ -676,32 +578,17 @@ WHERE id = $1 AND merchant_id = $5 AND status = 'quoted'
         let merchant_id = self.merchant(user_id).await?;
         let client = self.client().await?;
         let limit = limit.clamp(1, 100);
-        let rows = client
-            .query(
-                "SELECT id FROM b2b_orders WHERE merchant_id = $1 \
-                 ORDER BY created_at DESC LIMIT $2",
-                &[&merchant_id, &limit],
-            )
-            .await?;
-        let mut transfers = Vec::with_capacity(rows.len());
-        for row in rows {
-            transfers.push(self.load_transfer(merchant_id, row.get(0)).await?);
+        let orders = repo::merchant_order_ids(&client, merchant_id, limit).await?;
+        let mut transfers = Vec::with_capacity(orders.len());
+        for order_id in orders {
+            transfers.push(self.load_transfer(merchant_id, order_id).await?);
         }
         Ok(transfers)
     }
 
     pub async fn load_transfer(&self, merchant_id: Uuid, order_id: Uuid) -> Result<TransferView> {
         let client = self.client().await?;
-        let row = client
-            .query_opt(
-                r#"
-SELECT id, merchant_id, env, kind, external_id, status, input_asset,
-       input_network, output_asset, output_network, recipient, refund_address,
-       accepted_quote_id, created_at, updated_at
-FROM b2b_orders WHERE id = $1 AND merchant_id = $2
-"#,
-                &[&order_id, &merchant_id],
-            )
+        let row = repo::order_for_merchant(&client, order_id, merchant_id)
             .await?
             .ok_or(Error::NotFound)?;
         let quote_id: Option<Uuid> = row.get(12);
@@ -709,19 +596,14 @@ FROM b2b_orders WHERE id = $1 AND merchant_id = $2
             Some(quote_id) => Some(self.load_quote(&client, quote_id, merchant_id).await?),
             None => None,
         };
-        let events = client
-            .query(
-                "SELECT id, kind, body, created_at FROM b2b_events \
-                 WHERE order_id = $1 ORDER BY id LIMIT 200",
-                &[&order_id],
-            )
+        let events = repo::order_events(&client, order_id)
             .await?
             .into_iter()
-            .map(|event| TransferEventView {
-                id: event.get(0),
-                kind: event.get(1),
-                body: event.get(2),
-                created_at: event.get(3),
+            .map(|(id, kind, body, created_at)| TransferEventView {
+                id,
+                kind,
+                body,
+                created_at,
             })
             .collect();
         Ok(TransferView {
@@ -750,24 +632,10 @@ FROM b2b_orders WHERE id = $1 AND merchant_id = $2
         merchant_id: Uuid,
         order_id: Uuid,
     ) -> Result<Value> {
-        let row = client
-            .query_opt(
-                r#"
-SELECT id, env, kind, external_id, status, input_asset, input_network,
-       output_asset, output_network, recipient, refund_address, updated_at
-FROM b2b_orders WHERE id = $1 AND merchant_id = $2
-"#,
-                &[&order_id, &merchant_id],
-            )
+        let row = repo::order_body(client, order_id, merchant_id)
             .await?
             .ok_or(Error::NotFound)?;
-        let quote_id: Option<Uuid> = client
-            .query_opt(
-                "SELECT accepted_quote_id FROM b2b_orders WHERE id = $1",
-                &[&order_id],
-            )
-            .await?
-            .and_then(|row| row.get(0));
+        let quote_id = repo::order_accepted_quote(client, order_id).await?;
         let quote = match quote_id {
             Some(quote_id) => Some(self.load_quote(client, quote_id, merchant_id).await?),
             None => None,
@@ -795,20 +663,7 @@ FROM b2b_orders WHERE id = $1 AND merchant_id = $2
         quote_id: Uuid,
         merchant_id: Uuid,
     ) -> Result<QuoteView> {
-        let row = client
-            .query_opt(
-                r#"
-SELECT q.id, q.order_id, q.provider, q.exact, q.input_amount, q.output_amount,
-       q.best_output, q.captured_bps, q.app_fee_bps, q.deposit_address,
-       q.refund_address, q.expires_at, q.created_at, q.raw,
-       o.status, o.input_asset, o.input_network, o.output_asset, o.output_network,
-       o.recipient
-FROM b2b_quotes q
-JOIN b2b_orders o ON o.id = q.order_id
-WHERE q.id = $1 AND o.merchant_id = $2
-"#,
-                &[&quote_id, &merchant_id],
-            )
+        let row = repo::quote_for_merchant(client, quote_id, merchant_id)
             .await?
             .ok_or(Error::NotFound)?;
         let raw: Value = row.get(13);
@@ -877,48 +732,30 @@ WHERE q.id = $1 AND o.merchant_id = $2
             "success_url": request.success_url,
         });
         let tx = client.transaction().await?;
-        let row = tx
-            .query_one(
-                r#"
-INSERT INTO b2b_orders
-    (merchant_id, env, kind, external_id, input_asset, input_network,
-     output_asset, output_network, recipient, refund_address, status,
-     metadata, idempotency_key)
-VALUES ($1, $2, 'checkout', $3, $4, $5, $6, $7, $8, $9, 'awaiting_deposit', $10, $11)
-RETURNING id
-"#,
-                &[
-                    &merchant_id,
-                    &env,
-                    &request.quote.external_id,
-                    &target.from.symbol,
-                    &target.from.location,
-                    &target.to.symbol,
-                    &target.to.location,
-                    &request.quote.recipient.trim(),
-                    &request.quote.refund_address.trim(),
-                    &metadata,
-                    &key,
-                ],
-            )
-            .await?;
-        let order_id: Uuid = row.get(0);
-        let quote_id = self.insert_quote(&tx, order_id, &prepared).await?;
-        tx.execute(
-            "UPDATE b2b_orders SET accepted_quote_id = $2 WHERE id = $1",
-            &[&order_id, &quote_id],
+        let order_id = repo::insert_checkout_order(
+            &tx,
+            merchant_id,
+            &env,
+            request.quote.external_id.as_deref(),
+            &target.from.symbol,
+            target.from.location.as_deref(),
+            &target.to.symbol,
+            target.to.location.as_deref(),
+            request.quote.recipient.trim(),
+            request.quote.refund_address.trim(),
+            &metadata,
+            key.as_deref(),
         )
         .await?;
+        let quote_id = self.insert_quote(&tx, order_id, &prepared).await?;
+        repo::set_accepted_quote(&tx, order_id, quote_id).await?;
         let token = random_token();
-        tx.execute(
-            "INSERT INTO b2b_checkout_sessions (token, order_id, success_url, expires_at) \
-             VALUES ($1, $2, $3, $4)",
-            &[
-                &token,
-                &order_id,
-                &request.success_url,
-                &prepared.expires_at,
-            ],
+        repo::insert_checkout_session(
+            &tx,
+            &token,
+            order_id,
+            request.success_url.as_ref(),
+            prepared.expires_at,
         )
         .await?;
         for kind in ["order.quoted", "order.awaiting_deposit"] {
@@ -946,44 +783,28 @@ RETURNING id
         _success_url: Option<&str>,
     ) -> Result<Option<CheckoutView>> {
         let client = self.client().await?;
-        let Some(row) = client
-            .query_opt(
-                "SELECT id, metadata->>'request_hash', status FROM b2b_orders \
-                 WHERE merchant_id = $1 AND env = $2 AND idempotency_key = $3",
-                &[&merchant_id, &env, &key],
-            )
-            .await?
+        let Some((order_id, stored, stored_status)) =
+            repo::order_by_idempotency_key(&client, merchant_id, env, key).await?
         else {
             return Ok(None);
         };
-        let stored: Option<String> = row.get(1);
         if stored.as_deref() != Some(request_hash) {
             return Err(Error::Conflict(
                 "Idempotency-Key was already used with a different checkout".into(),
             ));
         }
-        let order_id: Uuid = row.get(0);
-        let stored_status: String = row.get(2);
-        let row = client
-            .query_one(
-                "SELECT token, success_url FROM b2b_checkout_sessions WHERE order_id = $1 \
-                 ORDER BY created_at DESC LIMIT 1",
-                &[&order_id],
-            )
+        let (token, stored_success_url) = repo::latest_checkout_session(&client, order_id)
             .await
-            .map_err(|_| Error::Conflict("existing checkout has no page token".into()))?;
-        let token: String = row.get(0);
-        let stored_success_url: Option<String> = row.get(1);
+            .map_err(|_| Error::Conflict("existing checkout has no page token".into()))?
+            .ok_or_else(|| Error::Conflict("existing checkout has no page token".into()))?;
         let quote = self
             .load_quote(
                 &client,
-                client
-                    .query_one(
-                        "SELECT accepted_quote_id FROM b2b_orders WHERE id = $1",
-                        &[&order_id],
-                    )
+                repo::order_accepted_quote(&client, order_id)
                     .await?
-                    .get(0),
+                    .ok_or_else(|| {
+                        Error::Internal(anyhow::anyhow!("checkout order has no accepted quote"))
+                    })?,
                 merchant_id,
             )
             .await?;
@@ -999,26 +820,16 @@ RETURNING id
 
     async fn checkout_session(&self, token: &str) -> Result<(Uuid, Option<String>)> {
         let client = self.client().await?;
-        let row = client
-            .query_opt(
-                "SELECT order_id, success_url FROM b2b_checkout_sessions WHERE token = $1",
-                &[&token],
-            )
+        repo::checkout_session(&client, token)
             .await?
-            .ok_or(Error::NotFound)?;
-        Ok((row.get(0), row.get(1)))
+            .ok_or(Error::NotFound)
     }
 
     async fn checkout_merchant(&self, order_id: Uuid) -> Result<Uuid> {
         let client = self.client().await?;
-        let row = client
-            .query_opt(
-                "SELECT merchant_id FROM b2b_orders WHERE id = $1",
-                &[&order_id],
-            )
+        repo::order_merchant(&client, order_id)
             .await?
-            .ok_or(Error::NotFound)?;
-        Ok(row.get(0))
+            .ok_or(Error::NotFound)
     }
 
     pub async fn checkout(&self, token: &str) -> Result<CheckoutStatusView> {
@@ -1041,13 +852,7 @@ RETURNING id
         let (order_id, success_url) = self.checkout_session(token).await?;
         let merchant_id = self.checkout_merchant(order_id).await?;
         let mut client = self.client().await?;
-        let order = client
-            .query_opt(
-                "SELECT status, input_asset, input_network, output_asset, output_network, \
-                        recipient, refund_address, external_id, accepted_quote_id FROM b2b_orders \
-                 WHERE id = $1 AND merchant_id = $2",
-                &[&order_id, &merchant_id],
-            )
+        let order = repo::order_for_requote(&client, order_id, merchant_id)
             .await?
             .ok_or(Error::NotFound)?;
         let status: String = order.get(0);
@@ -1057,18 +862,12 @@ RETURNING id
                 "checkout is `{status}` or already has an issued deposit address; ask the merchant for a new checkout"
             )));
         }
-        let latest = client
-            .query_one(
-                "SELECT exact, input_amount, output_amount FROM b2b_quotes \
-                 WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1",
-                &[&order_id],
-            )
-            .await?;
-        let exact: String = latest.get(0);
+        let (exact, input_value, output_value) =
+            repo::latest_quote_sides(&client, order_id).await?;
         let (input_amount, output_amount) = if exact == "input" {
-            (Some(latest.get::<_, String>(1)), None)
+            (Some(input_value), None)
         } else {
-            (None, Some(latest.get::<_, String>(2)))
+            (None, Some(output_value))
         };
         let request = QuoteRequest {
             input: model::QuoteSide {
@@ -1094,23 +893,13 @@ RETURNING id
         let prepared = self.request_provider_quote(&target).await?;
         let tx = client.transaction().await?;
         let quote_id = self.insert_quote(&tx, order_id, &prepared).await?;
-        let updated = tx
-            .execute(
-                "UPDATE b2b_orders SET status = 'awaiting_deposit', accepted_quote_id = $2, \
-             updated_at = now() WHERE id = $1 AND status = $3",
-                &[&order_id, &quote_id, &status],
-            )
-            .await?;
+        let updated = repo::reopen_checkout_order(&tx, order_id, quote_id, &status).await?;
         if updated == 0 {
             return Err(Error::Conflict(
                 "checkout changed while being re-quoted".into(),
             ));
         }
-        tx.execute(
-            "UPDATE b2b_checkout_sessions SET expires_at = $2 WHERE token = $1",
-            &[&token, &prepared.expires_at],
-        )
-        .await?;
+        repo::refresh_checkout_session(&tx, token, prepared.expires_at).await?;
         for kind in ["order.quoted", "order.awaiting_deposit"] {
             let body = self.transfer_body(&tx, merchant_id, order_id).await?;
             webhook::queue_event(&tx, order_id, kind, &body).await?;
@@ -1128,90 +917,27 @@ RETURNING id
     pub async fn analytics(&self, user_id: Uuid) -> Result<AnalyticsView> {
         let merchant_id = self.merchant(user_id).await?;
         let client = self.client().await?;
-        let totals = client
-            .query_one(
-                r#"
-SELECT COUNT(*)::BIGINT,
-       COUNT(*) FILTER (WHERE status IN ('paid','overpaid'))::BIGINT,
-       COALESCE(ROUND(AVG(captured_bps) FILTER (
-           WHERE status IN ('paid','overpaid'))), 0)::INT
-FROM b2b_orders o
-LEFT JOIN b2b_quotes q ON q.id = o.accepted_quote_id
-WHERE merchant_id = $1
-"#,
-                &[&merchant_id],
-            )
-            .await?;
-        let orders: i64 = totals.get(0);
-        let paid_orders: i64 = totals.get(1);
-        let margin_bps: i32 = totals.get(2);
-        let average_ticket = client
-            .query(
-                r#"
-SELECT input_asset, ROUND(COALESCE(AVG(input_amount::NUMERIC), 0), 8)::TEXT
-FROM b2b_orders o
-JOIN b2b_quotes q ON q.id = o.accepted_quote_id
-WHERE merchant_id = $1
-GROUP BY input_asset
-ORDER BY input_asset
-"#,
-                &[&merchant_id],
-            )
+        let (orders, paid_orders, margin_bps) =
+            repo::analytics_totals(&client, merchant_id).await?;
+        let average_ticket = repo::analytics_average_ticket(&client, merchant_id)
             .await?
             .into_iter()
-            .map(|row| AssetAmount {
-                asset: row.get(0),
-                amount: row.get(1),
-            })
+            .map(|(asset, amount)| AssetAmount { asset, amount })
             .collect();
-        let volume = client
-            .query(
-                r#"
-SELECT input_asset, COALESCE(SUM(input_amount::NUMERIC), 0)::TEXT
-FROM b2b_orders o
-JOIN b2b_quotes q ON q.id = o.accepted_quote_id
-WHERE merchant_id = $1 AND o.status IN ('paid','overpaid')
-GROUP BY input_asset
-ORDER BY input_asset
-"#,
-                &[&merchant_id],
-            )
+        let volume = repo::analytics_volume(&client, merchant_id)
             .await?
             .into_iter()
-            .map(|row| AssetAmount {
-                asset: row.get(0),
-                amount: row.get(1),
-            })
+            .map(|(asset, amount)| AssetAmount { asset, amount })
             .collect();
-        let captured = client
-            .query(
-                "SELECT asset, COALESCE(SUM(amount::NUMERIC), 0)::TEXT FROM b2b_fee_ledger \
-                 WHERE merchant_id = $1 GROUP BY asset ORDER BY asset",
-                &[&merchant_id],
-            )
+        let captured = repo::analytics_captured(&client, merchant_id)
             .await?
             .into_iter()
-            .map(|row| AssetAmount {
-                asset: row.get(0),
-                amount: row.get(1),
-            })
+            .map(|(asset, amount)| AssetAmount { asset, amount })
             .collect();
-        let failure_reasons = client
-            .query(
-                r#"
-SELECT status, COUNT(*)::BIGINT FROM b2b_orders
-WHERE merchant_id = $1
-  AND status IN ('failed','expired','underpaid','cancelled')
-GROUP BY status ORDER BY status
-"#,
-                &[&merchant_id],
-            )
+        let failure_reasons = repo::analytics_failure_reasons(&client, merchant_id)
             .await?
             .into_iter()
-            .map(|row| FailureReason {
-                reason: row.get(0),
-                orders: row.get(1),
-            })
+            .map(|(reason, orders)| FailureReason { reason, orders })
             .collect();
         Ok(AnalyticsView {
             orders,
@@ -1232,67 +958,44 @@ GROUP BY status ORDER BY status
     /// Shared by the worker: load everything needed to poll an accepted order.
     async fn accepted_orders(&self) -> Result<Vec<AcceptedOrder>> {
         let client = self.client().await?;
-        let rows = client
-            .query(
-                r#"
-WITH selected AS (
-    SELECT id FROM b2b_orders
-    WHERE accepted_quote_id IS NOT NULL
-      AND status NOT IN ('paid','overpaid','refunded')
-    ORDER BY last_polled_at ASC NULLS FIRST, created_at ASC, id ASC
-    LIMIT 50
-    FOR UPDATE SKIP LOCKED
-), polled AS (
-    UPDATE b2b_orders o SET last_polled_at = now()
-    FROM selected s WHERE o.id = s.id RETURNING o.*
-)
-SELECT o.id, o.merchant_id, o.status, o.input_network, o.output_network,
-       q.id, q.input_amount, q.output_amount, q.captured_bps, q.deposit_address,
-       q.expires_at, q.raw
-FROM polled o
-JOIN b2b_quotes q ON q.id = o.accepted_quote_id
-"#,
-                &[],
-            )
-            .await?;
-        Ok(rows
+        Ok(repo::accepted_orders(&client)
+            .await?
             .into_iter()
-            .map(|row| {
-                let raw: Value = row.get(11);
-                AcceptedOrder {
-                    order_id: row.get(0),
-                    merchant_id: row.get(1),
-                    status: row.get(2),
-                    input_network: row.get(3),
-                    output_network: row.get(4),
-                    quote_id: row.get(5),
-                    input_amount: row.get(6),
-                    output_amount: row.get(7),
-                    captured_bps: row.get(8),
-                    deposit_address: row.get(9),
-                    expires_at: row.get(10),
-                    deposit_memo: deposit_memo(&raw),
-                }
-            })
+            .map(
+                |(
+                    order_id,
+                    merchant_id,
+                    status,
+                    input_network,
+                    output_network,
+                    quote_id,
+                    input_amount,
+                    output_amount,
+                    captured_bps,
+                    deposit_address,
+                    expires_at,
+                    deposit_memo,
+                )| AcceptedOrder {
+                    order_id,
+                    merchant_id,
+                    status,
+                    input_network,
+                    output_network,
+                    quote_id,
+                    input_amount,
+                    output_amount,
+                    captured_bps,
+                    deposit_address,
+                    expires_at,
+                    deposit_memo,
+                },
+            )
             .collect())
     }
 
     async fn expire_unaccepted(&self) -> Result<()> {
         let client = self.client().await?;
-        client
-            .execute(
-                r#"
-UPDATE b2b_orders o
-SET status = 'expired', updated_at = now()
-FROM b2b_quotes q
-WHERE o.accepted_quote_id IS NULL AND o.status = 'quoted'
-  AND q.order_id = o.id AND q.expires_at < now()
-  AND q.created_at = (SELECT max(created_at) FROM b2b_quotes WHERE order_id = o.id)
-"#,
-                &[],
-            )
-            .await?;
-        Ok(())
+        repo::expire_unaccepted(&client).await
     }
 }
 
@@ -1323,7 +1026,7 @@ fn validate_http_url(url: &str) -> Result<()> {
     Ok(())
 }
 
-fn deposit_memo(raw: &Value) -> Option<String> {
+pub(crate) fn deposit_memo(raw: &Value) -> Option<String> {
     raw.get("quote")
         .and_then(|quote| quote.get("depositMemo"))
         .or_else(|| raw.get("depositMemo"))

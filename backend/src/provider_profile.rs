@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::core::{error::AppError, state::AppState};
+use crate::db::repo;
 use crate::db::DbPool;
 use crate::p2p::P2pRouteSearchResponse;
 
@@ -105,18 +106,18 @@ pub async fn record_search(pool: &DbPool, response: &P2pRouteSearchResponse) -> 
         })
         .collect();
     let client = pool.get().await?;
-    client.execute(
-        r#"
-INSERT INTO provider_search_observations (search_id, provider_slug, best_rank, response_ok, latency_ms)
-SELECT searches.id, observation.slug, observation.rank, observation.ok, observation.latency
-FROM route_searches searches
-CROSS JOIN unnest($2::text[], $3::integer[], $4::boolean[], $5::double precision[])
-    AS observation(slug, rank, ok, latency)
-WHERE searches.id = $1 AND searches.counted_for_activity AND searches.status = 'finished'
-ON CONFLICT (search_id, provider_slug) DO NOTHING
-"#,
-        &[&response.search_id, &slugs, &ranks, &successes, &latencies],
-    ).await?;
+    repo::provider_profile::record_search(
+        &client,
+        &response.search_id,
+        &slugs
+            .iter()
+            .map(|slug| slug.to_string())
+            .collect::<Vec<_>>(),
+        &ranks,
+        &successes,
+        &latencies,
+    )
+    .await?;
     Ok(())
 }
 
@@ -184,14 +185,10 @@ async fn load_statistics(
         .get()
         .await
         .map_err(|error| AppError::Internal(error.into()))?;
-    let exists = client
-        .query_opt(
-            "SELECT 1 FROM providers WHERE slug = $1 AND status = 'enabled' LIMIT 1",
-            &[&slug],
-        )
+    if !repo::provider_profile::enabled_provider(&client, slug)
         .await
-        .map_err(|error| AppError::Internal(error.into()))?;
-    if exists.is_none() {
+        .map_err(|error| AppError::Internal(error.into()))?
+    {
         return Err(AppError::NotFound("Provider not found".into()));
     }
     let days = period.days();
@@ -205,67 +202,18 @@ async fn load_statistics(
         .start()
         .await
         .map_err(|error| AppError::Internal(error.into()))?;
-    let updated_at: DateTime<Utc> = transaction
-        .query_one("SELECT now()", &[])
+    let updated_at: DateTime<Utc> = repo::provider_profile::now(&transaction)
         .await
-        .map_err(|error| AppError::Internal(error.into()))?
-        .get(0);
-    let summary = transaction.query_one(r#"
-WITH observations AS (
-    SELECT observation.*, searches.created_at
-    FROM provider_search_observations observation
-    JOIN route_searches searches ON searches.id = observation.search_id
-    WHERE observation.provider_slug = $1 AND searches.status = 'finished'
-      AND searches.counted_for_activity
-      AND searches.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - ($2::integer - 1) * interval '1 day'
-)
-SELECT count(*)::bigint,
-       count(*) FILTER (WHERE best_rank <= 10)::bigint,
-       count(*) FILTER (WHERE best_rank = 1)::bigint,
-       avg(best_rank)::double precision,
-       count(response_ok)::bigint,
-       count(*) FILTER (WHERE response_ok)::bigint,
-       avg(latency_ms)::double precision,
-       (SELECT count(*)::bigint FROM service_executions executions
-        JOIN services ON services.id = executions.service_id
-        WHERE services.slug = $1
-          AND executions.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - ($2::integer - 1) * interval '1 day'),
-       (SELECT min(searches.created_at) FROM provider_search_observations observation
-        JOIN route_searches searches ON searches.id = observation.search_id
-        WHERE observation.provider_slug = $1 AND searches.status = 'finished' AND searches.counted_for_activity)
-FROM observations
-"#, &[&slug, &days]).await.map_err(|error| AppError::Internal(error.into()))?;
-    let buckets = transaction.query(r#"
-WITH buckets AS (
-    SELECT generate_series(
-        date_trunc('day', now() AT TIME ZONE 'UTC') - ($2::integer - 1) * interval '1 day',
-        date_trunc('day', now() AT TIME ZONE 'UTC'), interval '1 day'
-    ) AT TIME ZONE 'UTC' AS started_at
-), observations AS (
-    SELECT observation.*, searches.created_at
-    FROM provider_search_observations observation
-    JOIN route_searches searches ON searches.id = observation.search_id
-    WHERE observation.provider_slug = $1 AND searches.status = 'finished' AND searches.counted_for_activity
-      AND searches.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - ($2::integer - 1) * interval '1 day'
-)
-SELECT buckets.started_at, count(observations.search_id)::bigint,
-       count(*) FILTER (WHERE observations.best_rank <= 10)::bigint,
-       count(*) FILTER (WHERE observations.best_rank = 1)::bigint
-FROM buckets LEFT JOIN observations
-    ON observations.created_at >= buckets.started_at AND observations.created_at < buckets.started_at + interval '1 day'
-GROUP BY buckets.started_at ORDER BY buckets.started_at
-"#, &[&slug, &days]).await.map_err(|error| AppError::Internal(error.into()))?;
-    let directions = transaction.query(r#"
-SELECT searches.source_currency, searches.target_currency, count(*)::bigint,
-       count(*) FILTER (WHERE observation.best_rank <= 10)::bigint, min(observation.best_rank)
-FROM provider_search_observations observation
-JOIN route_searches searches ON searches.id = observation.search_id
-WHERE observation.provider_slug = $1 AND searches.status = 'finished' AND searches.counted_for_activity
-  AND searches.source_currency IS NOT NULL AND searches.target_currency IS NOT NULL
-  AND searches.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - ($2::integer - 1) * interval '1 day'
-GROUP BY searches.source_currency, searches.target_currency
-ORDER BY count(*) DESC, searches.source_currency, searches.target_currency LIMIT 8
-"#, &[&slug, &days]).await.map_err(|error| AppError::Internal(error.into()))?;
+        .map_err(|error| AppError::Internal(error.into()))?;
+    let summary = repo::provider_profile::summary(&transaction, slug, days)
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    let buckets = repo::provider_profile::buckets(&transaction, slug, days)
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    let directions = repo::provider_profile::directions(&transaction, slug, days)
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
     transaction
         .commit()
         .await
@@ -273,33 +221,33 @@ ORDER BY count(*) DESC, searches.source_currency, searches.target_currency LIMIT
     Ok(ProviderStatistics {
         slug: slug.to_string(),
         period_days: days,
-        searches: summary.get(0),
-        top10: summary.get(1),
-        top1: summary.get(2),
-        average_rank: summary.get(3),
-        response_samples: summary.get(4),
-        successful_responses: summary.get(5),
-        average_response_ms: summary.get(6),
-        site_opens: summary.get(7),
-        first_seen: summary.get(8),
+        searches: summary.searches,
+        top10: summary.top10,
+        top1: summary.top1,
+        average_rank: summary.average_rank,
+        response_samples: summary.response_samples,
+        successful_responses: summary.successful_responses,
+        average_response_ms: summary.average_response_ms,
+        site_opens: summary.site_opens,
+        first_seen: summary.first_seen,
         updated_at,
         days: buckets
             .into_iter()
             .map(|row| ProfileDay {
-                started_at: row.get(0),
-                searches: row.get(1),
-                top10: row.get(2),
-                top1: row.get(3),
+                started_at: row.started_at,
+                searches: row.searches,
+                top10: row.top10,
+                top1: row.top1,
             })
             .collect(),
         directions: directions
             .into_iter()
             .map(|row| ProfileDirection {
-                source_currency: row.get(0),
-                target_currency: row.get(1),
-                searches: row.get(2),
-                top10: row.get(3),
-                best_rank: row.get(4),
+                source_currency: row.source_currency,
+                target_currency: row.target_currency,
+                searches: row.searches,
+                top10: row.top10,
+                best_rank: row.best_rank,
             })
             .collect(),
     })

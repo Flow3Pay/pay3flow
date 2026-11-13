@@ -1,3 +1,12 @@
+pub mod anonymous;
+pub mod b2b;
+pub mod exchange;
+pub mod exchange_control;
+pub mod external_reviews;
 pub mod p2p_fmatch;
+pub mod payments;
+pub mod provider_profile;
 pub mod reputation;
+pub mod route_executions;
+pub mod share_links;
 pub mod user;
