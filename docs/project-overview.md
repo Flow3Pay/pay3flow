@@ -138,7 +138,8 @@ with a positive quoted or estimated gain at eight decimal places.
 Cached exchange coefficients are not used for wallet cycles. The bounded
 provider search has a 60-second budget and reports `routes_exhaustive = false`.
 Disconnecting cancels pending search work; auto-refresh waits for the current
-search to finish.
+search to finish. The market bar pauses its updated-age counter and countdown
+while that search is in flight, then restarts from the new snapshot.
 
 Cycle results include ordered `cycle_legs` with providers and input/output amounts.
 `profitability_decimals = 8` specifies the scale of their profitability integers;

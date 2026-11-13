@@ -24,6 +24,7 @@
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import type { ExchangeShareState } from "$lib/exchange-share";
   import { parseExchangeHash, guideHash, guideRoutePath, sharedIdentifiers } from "$lib/guide-link";
+  import { refreshCounter } from "$lib/refresh-counter";
   import ExchangeFlowBridge from "./ExchangeFlowBridge.svelte";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
@@ -134,6 +135,7 @@
   let searching = false;
   let awaitingFirstRoute = false;
   let lastUpdatedAt: number | null = null;
+  let searchStartedAt: number | null = null;
   let clock = Date.now();
   let error: string | null = null;
   let anonymousId = "";
@@ -664,7 +666,9 @@
     target: calculateMarketUsd(displayedTargetAmount, targetMarketUsdPrice),
   };
   $: converterAmountDigits = Math.min(14, Math.max(10, displayedSourceAmount.replace(/\D/g, "").length, displayedTargetAmount.replace(/\D/g, "").length));
-  $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
+  $: refreshCounterState = refreshCounter(clock, lastUpdatedAt, refreshSeconds, searchStartedAt, searching);
+  $: refreshElapsedSeconds = refreshCounterState.elapsedSeconds;
+  $: secondsUntilRefresh = refreshCounterState.secondsUntilRefresh;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
   $: alwaysOnProviders = p2pSources.filter((source) => source.searchMode === "always_on");
@@ -743,7 +747,7 @@
   function resetResults() {
     referenceRoutes = [];
     discoveryRows = []; discoveryCursor = null; discoverySignature = ""; searchIncomplete = false;
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; selectedVenueId = null; venueListOpen = false; error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searchStartedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; selectedVenueId = null; venueListOpen = false; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) {
@@ -1017,7 +1021,7 @@
       error = "No compatible network is available for the selected cryptocurrency";
       return;
     }
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; venueListOpen = false; responseMetrics = new SearchResponseMetrics(); error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searchStartedAt = Date.now(); searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; venueListOpen = false; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet || sourceMethod.kind === "currency" ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet || targetMethod.kind === "currency" ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, maxActions: complexRoutes ? 8 : undefined, limit: 40, countActivity };
@@ -1083,7 +1087,7 @@
         }
       }
       if (!rerunForTargetAmount) {
-        applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
+        applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now(); searchStartedAt = null;
         // void searchFuturesForSwap(response); // Paused until futures are approved for SWAP.
         if (guideRequested && pendingGuide) {
           const path = pendingGuide.params.get("path");
@@ -1099,7 +1103,7 @@
       if (useDiscovery) discoveryCursor = null;
       error = cause instanceof Error ? cause.message : "Could not search live P2P markets";
     } finally {
-      if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; }
+      if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; searchStartedAt = null; }
       if (rerunForTargetAmount) window.setTimeout(() => void startSearch(false), 0);
     }
   }
@@ -1372,7 +1376,7 @@
         </div>
       </div>
       </div>
-      {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : t("Public P2P sources only · no order placement", {}, activeLocale)}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
+      {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${refreshElapsedSeconds ?? 0}s ago` : t("Public P2P sources only · no order placement", {}, activeLocale)}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
       <div class:swapActions={previewCanSwap}>
         <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || (!useDiscovery && !corridor)))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? previewCanSwap ? "SWAP" : t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}><span class="ctaContent">{#if previewRoute}{previewCanSwap ? "SWAP" : t("Go", {}, activeLocale)}{:else if searching}<span class="spinner"></span>{t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)}{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</span>{#if !searching}<span class="ctaArrow" aria-hidden="true">{" ↗"}</span>{/if}</button>
         {#if previewCanSwap}<button type="button" class="cta guideCta" data-testid="open-swap-guide" on:click={() => openInstructions(previewRoute!, false, "guide")}>SWAP guide</button>{/if}

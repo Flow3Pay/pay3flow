@@ -1780,6 +1780,51 @@ test("editing the receive amount updates the send amount", async ({ page }) => {
   await expect(receiveAmount).toHaveValue("10000");
 });
 
+test("auto-refresh pauses the update age while the next search is running", async ({ page }) => {
+  await mockBackend(page);
+  let requests = 0;
+  let releaseSecondSearch!: () => void;
+  const secondSearch = new Promise<void>(resolve => { releaseSecondSearch = () => resolve(); });
+  await page.route("**/api/p2p/routes**", async route => {
+    const params = new URL(route.request().url()).searchParams;
+    requests += 1;
+    const body = {
+      search_id: "00000000-0000-4000-8000-000000000111",
+      searched_at: new Date().toISOString(),
+      source_fiat: params.get("source_fiat"),
+      target_fiat: params.get("target_fiat"),
+      source_amount: params.get("source_amount"),
+      assets_searched: [],
+      routes_found: 0,
+      routes: [],
+      can_exchange_to_target: false,
+    };
+    if (requests === 1) return route.fulfill({ json: body });
+    await secondSearch;
+    return route.fulfill({ json: body });
+  });
+  await page.addInitScript(() => localStorage.setItem("pay3flow.exchange.refresh-seconds", "5"));
+  await page.clock.install();
+  await openApp(page, "/#/swap/AMD/RUB?amount=1000&from=am-ameriabank&to=ru-sberbank");
+
+  const updated = page.locator(".marketState > div > span");
+  const age = async () => Number((await updated.textContent())?.match(/\d+/)?.[0] ?? -1);
+  await expect.poll(() => requests).toBe(1);
+  await expect.poll(age).toBeGreaterThanOrEqual(0);
+
+  await page.clock.fastForward(5_000);
+  await expect.poll(() => requests).toBe(2);
+  const frozenAge = await age();
+  expect(frozenAge).toBeGreaterThanOrEqual(5);
+
+  await page.clock.fastForward(10_000);
+  await expect.poll(age).toBe(frozenAge);
+  await expect(page.locator(".nextRefresh")).toHaveText("0s");
+
+  releaseSecondSearch();
+  await expect.poll(age).toBeLessThanOrEqual(1);
+});
+
 test("RUB to RUB bank routes require checking the order payment method", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
