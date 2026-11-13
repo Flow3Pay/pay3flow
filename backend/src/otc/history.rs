@@ -8,23 +8,30 @@ use crate::market_prices::ExchangeCandle;
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Value};
 
-/// `(range, bucket seconds, bucket count, market interval)`.
+/// `(timeframe, bucket seconds, bucket count, market interval)`.
 ///
 /// The window is always `bucket seconds * bucket count` so the grid tiles it
 /// exactly. `market interval` is the exchange source resolution and must
 /// divide the bucket: every source candle then belongs to exactly one bucket
-/// and the chart keeps the granularity of the range the reader selected.
+/// and every candle on screen spans the timeframe the reader selected.
+/// Timeframes the provider does not publish (3m, 16h) fold the next finer
+/// series, so their candles still cover their own span.
 const WINDOWS: &[(&str, i64, i64, &str)] = &[
-    ("1h", 60, 60, "1m"),
-    ("24h", 900, 96, "15m"),
-    ("1w", 7_200, 84, "1h"),
-    ("1m", 21_600, 120, "1h"),
-    ("6m", 86_400, 183, "1d"),
-    ("1y", 604_800, 52, "1d"),
+    ("30s", 30, 300, "30s"),
+    ("1m", 60, 300, "1m"),
+    ("3m", 180, 300, "1m"),
+    ("5m", 300, 300, "5m"),
+    ("30m", 1_800, 300, "30m"),
+    ("1h", 3_600, 300, "1h"),
+    ("4h", 14_400, 300, "4h"),
+    ("8h", 28_800, 300, "8h"),
+    ("16h", 57_600, 300, "8h"),
+    ("1d", 86_400, 300, "1d"),
 ];
 
 fn interval_seconds(interval: &str) -> i64 {
     match interval {
+        "30s" => 30,
         "1m" => 60,
         "5m" => 300,
         "15m" => 900,
@@ -78,7 +85,9 @@ impl Window {
         let (name, bucket_seconds, buckets, market_interval) = *WINDOWS
             .iter()
             .find(|(candidate, ..)| *candidate == range)
-            .ok_or_else(|| super::error::invalid("range must be 1h, 24h, 1w, 1m, 6m or 1y"))?;
+            .ok_or_else(|| {
+                super::error::invalid("range must be 30s, 1m, 3m, 5m, 30m, 1h, 4h, 8h, 16h or 1d")
+            })?;
         // Align the end of the window to a bucket boundary. Both the desk
         // prints and the exchange candles are then bucketed on the same grid,
         // and the newest candle is never a partial mixture of two periods.
@@ -105,17 +114,18 @@ impl Window {
         (0..self.buckets).contains(&index).then_some(index as usize)
     }
 
-    /// The provider period, point span and bucket size for the indicative
-    /// price overlay. Short ranges use hourly points; longer ranges use the
-    /// daily series and let the chart aggregate it to the selected bucket.
+    /// The provider period, point span and point step for the indicative
+    /// price overlay. Daily candles use the daily series; every shorter
+    /// timeframe uses hourly points and lets the chart aggregate them to the
+    /// selected bucket.
     pub(crate) fn spot_layout(&self) -> (&'static str, u32, u32) {
-        match self.range {
-            "1h" => ("1h", 24, 300),
-            "24h" => ("1h", 26, 300),
-            "1w" => ("1h", 170, 300),
-            "1m" => ("1d", 32, 86_400),
-            "6m" => ("1d", 186, 86_400),
-            _ => ("1d", 372, 86_400),
+        let window_seconds = self.bucket_seconds * self.buckets;
+        if self.bucket_seconds >= 86_400 {
+            let span = (window_seconds / 86_400 + 2).clamp(2, 500);
+            ("1d", span as u32, 86_400)
+        } else {
+            let span = (window_seconds / 3_600 + 2).clamp(2, 500);
+            ("1h", span as u32, 3_600)
         }
     }
 }
@@ -294,7 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn every_supported_range_tiles_its_window_exactly() {
+    fn every_supported_timeframe_tiles_its_window_exactly() {
         let now = at(1_761_000_000);
         for (range, bucket_seconds, buckets, market_interval) in WINDOWS {
             let window = Window::parse(range, now).unwrap();
@@ -306,13 +316,15 @@ mod tests {
                 bucket_seconds * buckets
             );
         }
-        assert!(Window::parse("5m", now).is_err());
+        assert!(Window::parse("1w", now).is_err());
     }
 
     #[test]
     fn windows_end_on_a_bucket_boundary() {
         let now = at(1_761_000_123);
-        for range in ["1h", "24h", "1w", "1m", "6m", "1y"] {
+        for range in [
+            "30s", "1m", "3m", "5m", "30m", "1h", "4h", "8h", "16h", "1d",
+        ] {
             let window = Window::parse(range, now).unwrap();
             assert_eq!(window.to.timestamp().rem_euclid(window.bucket_seconds), 0);
         }
@@ -339,7 +351,7 @@ mod tests {
     #[test]
     fn market_candles_fold_into_the_selected_grid() {
         let now = at(1_761_000_000);
-        let window = Window::parse("24h", now).unwrap();
+        let window = Window::parse("1h", now).unwrap();
         let start = window.from.timestamp();
         let candles = [
             ExchangeCandle {
@@ -351,7 +363,7 @@ mod tests {
                 volume: 10.0,
             },
             ExchangeCandle {
-                t: start + 900,
+                t: start + 3_600,
                 open: 0.11,
                 high: 0.13,
                 low: 0.1,
@@ -359,7 +371,7 @@ mod tests {
                 volume: 5.0,
             },
             ExchangeCandle {
-                t: start + 3_600,
+                t: start + 7_200,
                 open: 0.2,
                 high: 0.21,
                 low: 0.19,
@@ -372,42 +384,36 @@ mod tests {
         assert_eq!(bars[0]["t"], json!(start));
         assert_eq!(bars[0]["open"], json!(0.1));
         assert_eq!(bars[0]["close"], json!(0.11));
-        assert_eq!(bars[2]["t"], json!(start + 3_600));
+        assert_eq!(bars[2]["t"], json!(start + 7_200));
     }
 
     #[test]
-    fn spot_layout_uses_hourly_points_for_short_ranges_and_daily_after() {
+    fn spot_layout_uses_hourly_points_for_short_timeframes_and_daily_after() {
         let now = at(1_761_000_000);
+        // A 30s window of 300 candles is 2.5 hours, so hourly points cover it.
+        assert_eq!(
+            Window::parse("30s", now).unwrap().spot_layout(),
+            ("1h", 4, 3_600)
+        );
         assert_eq!(
             Window::parse("1h", now).unwrap().spot_layout(),
-            ("1h", 24, 300)
+            ("1h", 302, 3_600)
         );
         assert_eq!(
-            Window::parse("24h", now).unwrap().spot_layout(),
-            ("1h", 26, 300)
+            Window::parse("1d", now).unwrap().spot_layout(),
+            ("1d", 302, 86_400)
         );
+        // Longer intraday windows stay on the hourly series, capped by the page.
         assert_eq!(
-            Window::parse("1w", now).unwrap().spot_layout(),
-            ("1h", 170, 300)
-        );
-        assert_eq!(
-            Window::parse("1m", now).unwrap().spot_layout(),
-            ("1d", 32, 86_400)
-        );
-        assert_eq!(
-            Window::parse("6m", now).unwrap().spot_layout(),
-            ("1d", 186, 86_400)
-        );
-        assert_eq!(
-            Window::parse("1y", now).unwrap().spot_layout(),
-            ("1d", 372, 86_400)
+            Window::parse("4h", now).unwrap().spot_layout(),
+            ("1h", 500, 3_600)
         );
     }
 
     #[test]
     fn trades_become_candles_and_offers_become_the_book() {
         let now = at(1_761_000_000);
-        let window = Window::parse("1h", now).unwrap();
+        let window = Window::parse("1m", now).unwrap();
         let start = window.from.timestamp();
         // One thousand EVER settling for 13 and then 15 USDT prints 0.013 and
         // 0.015; the two-sided advertisements price the book at 0.012 / 0.015.
@@ -418,7 +424,7 @@ mod tests {
             print(Side::Ask, start + 30, 2_000_000_000_000, 30_000_000),
         ];
         let (candles, levels) = aggregate(&rows, &window);
-        assert_eq!(candles.len(), 60);
+        assert_eq!(candles.len(), 300);
         let first = &candles[0];
         assert_eq!(first["open"], json!(0.013));
         assert_eq!(first["high"], json!(0.015));
@@ -429,8 +435,8 @@ mod tests {
         assert_eq!(levels[0]["bid"], json!(0.012));
         assert_eq!(levels[0]["ask"], json!(0.015));
         // Book levels carry forward until a newer advertisement replaces them.
-        assert_eq!(levels[59]["bid"], json!(0.012));
-        assert_eq!(levels[59]["ask"], json!(0.015));
+        assert_eq!(levels[299]["bid"], json!(0.012));
+        assert_eq!(levels[299]["ask"], json!(0.015));
         // Buckets with no settlement stay null so the chart draws a gap.
         assert_eq!(candles[30]["close"], Value::Null);
         assert_eq!(candles[30]["volume"], Value::Null);
@@ -439,7 +445,7 @@ mod tests {
     #[test]
     fn prints_outside_the_bucket_grid_are_dropped() {
         let now = at(1_761_000_000);
-        let window = Window::parse("24h", now).unwrap();
+        let window = Window::parse("1h", now).unwrap();
         let rows = [
             print(
                 Side::Trade,

@@ -3,7 +3,7 @@
   import { locale } from "$lib/i18n";
   import { getHistory, rate, type History, type Trade } from "$lib/otc/service";
   import { saleRate, type OfferHistoryPoint } from "$lib/otc/public-offers";
-  import { candleIntervalLabel, chartRangeLabel, chartRanges, chartWindow, chartWindows, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
+  import { candleIntervalLabel, chartRanges, chartWindow, chartWindows, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
   import { dispose, init, registerLocale, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
 
   // klinecharts ships `minute: ""`, so a 15-minute series renders as a bare "15".
@@ -18,15 +18,16 @@
 
   type Mark = { id: string; time: number; value: number };
 
-  const rangeStorageKey = "pay3flow.otc.chart-range.v1";
+  // v2: the buttons are candle timeframes now, so an old month/week choice must not be reused.
+  const rangeStorageKey = "pay3flow.otc.chart-range.v2";
   function savedRange(): ChartRange {
     try {
       const value = localStorage.getItem(rangeStorageKey);
-      return chartRanges.includes(value as ChartRange) ? value as ChartRange : "1m";
-    } catch { return "1m"; }
+      return chartRanges.includes(value as ChartRange) ? value as ChartRange : "1h";
+    } catch { return "1h"; }
   }
 
-  let range: ChartRange = "1m";
+  let range: ChartRange = "1h";
   let history: History | null = null;
   let plot: HTMLDivElement;
   let ranges: HTMLDivElement;
@@ -263,9 +264,9 @@
         <strong data-testid="otc-chart-price">{latest === null ? "—" : `${latest.toLocaleString(numbers, { maximumFractionDigits: Math.max(2, precision) })} $`}</strong>
         {#if change !== null}<em class:negative={change < 0}>{change >= 0 ? "+" : "−"}{Math.abs(change).toFixed(2)}%</em>{/if}
       </div>
-      <p class="chartRange" data-testid="otc-chart-range">{chartRangeLabel(range, $locale)} · {candleIntervalLabel(layout.window.bucketSeconds, $locale)}</p>
+      <p class="chartRange" data-testid="otc-chart-range">{say("Candles", "Свечи")} · {candleIntervalLabel(layout.window.bucketSeconds, $locale)}</p>
     </div>
-    <div class="ranges" bind:this={ranges} role="group" aria-label={say("Chart range", "Период графика")}>
+    <div class="ranges" bind:this={ranges} role="group" aria-label={say("Candle timeframe", "Таймфрейм графика")}>
       <span class="rangeThumb" class:ready={thumb.ready} style="transform: translateX({thumb.offset}px); width: {thumb.width}px" aria-hidden="true"></span>
       {#each chartRanges as item, index}<button type="button" bind:this={rangeButtons[index]} class:active={range === item} aria-pressed={range === item} on:click={() => choose(item)}>{item}</button>{/each}
     </div>
@@ -303,8 +304,10 @@
   .empty p { max-width: 320px; background: var(--exchange-card-bg); color: var(--color-text-soft); font-size: 12px; line-height: 1.6; padding: 5px; }
   @media (max-width: 640px) {
     .chartHead { padding-inline: 12px; }
-    .ranges { width: 100%; justify-content: space-between; }
-    .ranges button { min-width: 0; flex: 1; }
+    /* Ten timeframes do not fit one 320px row, so they tile five per row. */
+    .ranges { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; width: 100%; border-radius: 14px; }
+    .rangeThumb { display: none; }
+    .ranges button { min-width: 0; min-height: 32px; padding: 2px; }
     .chartPlot { height: 280px; }
   }
   @media (prefers-reduced-motion: reduce) { .ranges button, .rangeThumb, .chartPlot { transition: none; } }

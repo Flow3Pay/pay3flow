@@ -29,21 +29,12 @@ export interface QuoteObservation {
   totalUnits: bigint;
 }
 
-export const chartRanges = ["1h", "24h", "1w", "1m", "6m", "1y"] as const;
+/**
+ * Candle timeframes the chart offers, matching the exchange convention the
+ * Gate.io source uses. Each button draws candles of exactly that duration.
+ */
+export const chartRanges = ["30s", "1m", "3m", "5m", "30m", "1h", "4h", "8h", "16h", "1d"] as const;
 export type ChartRange = (typeof chartRanges)[number];
-
-/** Human-readable name of the selected range, independent of its candle size. */
-export function chartRangeLabel(range: ChartRange, locale = "en"): string {
-  const labels: Record<ChartRange, [string, string]> = {
-    "1h": ["1 hour", "1 час"],
-    "24h": ["24 hours", "24 часа"],
-    "1w": ["week", "неделя"],
-    "1m": ["month", "месяц"],
-    "6m": ["6 months", "6 месяцев"],
-    "1y": ["year", "год"],
-  };
-  return labels[range][locale === "ru" ? 1 : 0];
-}
 
 /** Candle size on the chart grid, with the unit klinecharts exposes. */
 export function candleIntervalLabel(bucketSeconds: number, locale = "en"): string {
@@ -51,18 +42,26 @@ export function candleIntervalLabel(bucketSeconds: number, locale = "en"): strin
   if (bucketSeconds < 60) return `${Math.max(1, Math.round(bucketSeconds))}${ru ? " с" : "s"}`;
   if (bucketSeconds < 3_600) return `${Math.round(bucketSeconds / 60)}${ru ? " мин" : "m"}`;
   if (bucketSeconds < 86_400) return `${Math.round(bucketSeconds / 3_600)}${ru ? " ч" : "h"}`;
-  if (bucketSeconds < 604_800) return `${Math.round(bucketSeconds / 86_400)}D`;
-  return `${Math.round(bucketSeconds / 604_800)}W`;
+  if (bucketSeconds < 604_800) return `${Math.round(bucketSeconds / 86_400)}d`;
+  return `${Math.round(bucketSeconds / 604_800)}w`;
 }
 
-/** Bucket layout used by the server for each range; the window is `buckets * bucketSeconds`. */
+/**
+ * Bucket layout used by the server for each timeframe; the window is
+ * `buckets * bucketSeconds`. Every timeframe keeps the provider's page of the
+ * most recent candles, so a candle is always one button long.
+ */
 export const chartWindows: Record<ChartRange, { bucketSeconds: number; buckets: number }> = {
-  "1h": { bucketSeconds: 60, buckets: 60 },
-  "24h": { bucketSeconds: 900, buckets: 96 },
-  "1w": { bucketSeconds: 7_200, buckets: 84 },
-  "1m": { bucketSeconds: 21_600, buckets: 120 },
-  "6m": { bucketSeconds: 86_400, buckets: 183 },
-  "1y": { bucketSeconds: 604_800, buckets: 52 },
+  "30s": { bucketSeconds: 30, buckets: 300 },
+  "1m": { bucketSeconds: 60, buckets: 300 },
+  "3m": { bucketSeconds: 180, buckets: 300 },
+  "5m": { bucketSeconds: 300, buckets: 300 },
+  "30m": { bucketSeconds: 1_800, buckets: 300 },
+  "1h": { bucketSeconds: 3_600, buckets: 300 },
+  "4h": { bucketSeconds: 14_400, buckets: 300 },
+  "8h": { bucketSeconds: 28_800, buckets: 300 },
+  "16h": { bucketSeconds: 57_600, buckets: 300 },
+  "1d": { bucketSeconds: 86_400, buckets: 300 },
 };
 
 export interface ChartWindow {
@@ -100,9 +99,10 @@ export function chartWindow(range: ChartRange, now = Date.now()): ChartWindow {
 }
 
 /**
- * Turns prints into range-scoped OHLC candles. Prints outside the window are
- * dropped and the rest are grouped on the same grid the server uses, so every
- * range keeps its own granularity instead of replaying the whole history.
+ * Turns prints into timeframe-scoped OHLC candles. Prints outside the window
+ * are dropped and the rest are grouped on the same grid the server uses, so a
+ * candle always spans the selected timeframe instead of replaying the whole
+ * history.
  */
 export function markCandles(marks: MarketMark[], window: ChartWindow): MarketCandle[] {
   const bucketMs = window.bucketSeconds * 1000;

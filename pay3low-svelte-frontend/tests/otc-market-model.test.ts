@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { candleIntervalLabel, chartRangeLabel, chartRanges, chartWindow, chartWindows, markCandles, percentChange, quoteObservations, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
+import { candleIntervalLabel, chartRanges, chartWindow, chartWindows, markCandles, percentChange, quoteObservations, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
 import type { Trade } from "../src/lib/otc/service.ts";
 
 function units(value: string, precision: number) {
@@ -37,48 +37,51 @@ test("quote observations use exact USDT and EVER legs", () => {
   assert.equal(observations[1].total, "100");
 });
 
-test("fallback candles keep the selected range window and grid", () => {
+test("fallback candles keep the selected timeframe window and grid", () => {
   const now = Date.parse("2026-11-03T12:00:00Z");
   const marks = [
-    { time: now - 2 * 3600_000, value: 0.1 },
-    { time: now - 10 * 60_000 - 40_000, value: 0.2 },
-    { time: now - 10 * 60_000 - 20_000, value: 0.3 },
+    { time: now - 4 * 3600_000, value: 0.1 },
+    { time: now - 20_000, value: 0.2 },
+    { time: now - 10_000, value: 0.3 },
   ];
+  const fine = markCandles(marks, chartWindow("30s", now));
   const hour = markCandles(marks, chartWindow("1h", now));
-  const day = markCandles(marks, chartWindow("24h", now));
-  // 1h drops the two-hour-old print and both recent prints share a one-minute bucket.
-  assert.equal(hour.length, 1);
-  assert.deepEqual({ open: hour[0].open, high: hour[0].high, low: hour[0].low, close: hour[0].close }, { open: 0.2, high: 0.3, low: 0.2, close: 0.3 });
-  // 24h keeps the older print and keeps the two recent prints in one 15-minute bucket.
-  assert.equal(day.length, 2);
-  assert.equal(day[0].open, 0.1);
-  assert.deepEqual({ open: day[1].open, close: day[1].close }, { open: 0.2, close: 0.3 });
+  // 30s drops the four-hour-old print and both recent prints share one 30s bucket.
+  assert.equal(fine.length, 1);
+  assert.deepEqual({ open: fine[0].open, high: fine[0].high, low: fine[0].low, close: fine[0].close }, { open: 0.2, high: 0.3, low: 0.2, close: 0.3 });
+  // 1h keeps the older print and keeps the two recent prints in one hour bucket.
+  assert.equal(hour.length, 2);
+  assert.equal(hour[0].open, 0.1);
+  assert.deepEqual({ open: hour[1].open, close: hour[1].close }, { open: 0.2, close: 0.3 });
 });
 
-test("each range uses its own server bucket layout", () => {
+test("each timeframe uses its own server bucket layout", () => {
   const now = Date.parse("2026-11-03T12:00:00Z");
-  assert.deepEqual(chartWindows["1h"], { bucketSeconds: 60, buckets: 60 });
-  assert.deepEqual(chartWindows["1y"], { bucketSeconds: 604_800, buckets: 52 });
-  const year = chartWindow("1y", now);
-  const bucketMs = year.bucketSeconds * 1000;
+  assert.deepEqual(chartWindows["30s"], { bucketSeconds: 30, buckets: 300 });
+  assert.deepEqual(chartWindows["1d"], { bucketSeconds: 86_400, buckets: 300 });
+  const day = chartWindow("1d", now);
+  const bucketMs = day.bucketSeconds * 1000;
   // The window ends on its bucket boundary, not at the raw wall-clock instant.
-  assert.equal(year.from + year.bucketSeconds * year.buckets * 1000, Math.floor(now / bucketMs) * bucketMs);
+  assert.equal(day.from + day.bucketSeconds * day.buckets * 1000, Math.floor(now / bucketMs) * bucketMs);
 });
 
-test("every range keeps its own grid, interval and caption", () => {
+test("every timeframe draws candles of its own size", () => {
   const now = Date.parse("2026-11-03T12:00:07.500Z");
   const expected = {
-    "1h": ["1 hour", "1m", 60, 60],
-    "24h": ["24 hours", "15m", 900, 96],
-    "1w": ["week", "2h", 7_200, 84],
-    "1m": ["month", "6h", 21_600, 120],
-    "6m": ["6 months", "1D", 86_400, 183],
-    "1y": ["year", "1W", 604_800, 52],
+    "30s": ["30s", 30, 300],
+    "1m": ["1m", 60, 300],
+    "3m": ["3m", 180, 300],
+    "5m": ["5m", 300, 300],
+    "30m": ["30m", 1_800, 300],
+    "1h": ["1h", 3_600, 300],
+    "4h": ["4h", 14_400, 300],
+    "8h": ["8h", 28_800, 300],
+    "16h": ["16h", 57_600, 300],
+    "1d": ["1d", 86_400, 300],
   } as const;
   for (const range of chartRanges) {
-    const [label, interval, bucketSeconds, buckets] = expected[range];
+    const [interval, bucketSeconds, buckets] = expected[range];
     const window = chartWindow(range, now);
-    assert.equal(chartRangeLabel(range), label);
     assert.equal(candleIntervalLabel(window.bucketSeconds), interval);
     assert.equal(window.bucketSeconds, bucketSeconds);
     assert.equal(window.buckets, buckets);
@@ -87,9 +90,8 @@ test("every range keeps its own grid, interval and caption", () => {
     assert.equal(window.from % bucketMs, 0);
     assert.equal(window.from + window.bucketSeconds * window.buckets * 1000, Math.floor(now / bucketMs) * bucketMs);
   }
-  // 24h must read as minutes, never as the bare span klinecharts defaults to.
+  // Minutes must read as minutes, never as the bare span klinecharts defaults to.
   assert.equal(candleIntervalLabel(900), "15m");
-  assert.equal(chartRangeLabel("6m", "ru"), "6 месяцев");
   assert.equal(candleIntervalLabel(900, "ru"), "15 мин");
 });
 
