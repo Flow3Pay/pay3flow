@@ -19,10 +19,13 @@
   export let quote: Trade | null = null;
   export let disabled = false, busy = false;
   export let status = "";
+  /** A booking whose outcome is unknown blocks new selections until it is reconciled. */
+  export let pendingBooking = false, pendingBookingLocked = false;
   export let onDirection: (direction: Direction) => void;
   export let onEdit: () => void;
   export let onRequest: () => void;
   export let onReview: () => void;
+  export let onReconcile: () => void = () => {};
   $: copy = otcCopy($locale);
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: sendAsset = sale ? "EVER" : direction === "buy" ? "USDT" : "EVER";
@@ -221,6 +224,7 @@
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
   {#if sale?.seller && sale.blockingReason}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
+  {#if pendingBooking}<p class="priceHint" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button type="button" class="reconcileButton" disabled={busy || pendingBookingLocked} on:click={onReconcile}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}
   <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingWallet || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
 {#if sale}<PaymentMethodPicker open={stablecoinPickerOpen} title={stablecoinPickerStage === "detail" ? say(`Choose ${sale.stablecoin} network`, `Выберите сеть для ${sale.stablecoin}`) : say("Choose token", "Выберите токен")} role="recipient" networks={stablecoinPickerNetworks} paymentMethods={stablecoinMethods} selected={selectedStablecoinMethod} selectedNetwork={selectedStablecoinNetwork} initialStage={stablecoinPickerStage} initialCurrency={sale.stablecoin} onClose={() => stablecoinPickerOpen = false} onSelect={selectStablecoin} />{/if}
@@ -229,6 +233,8 @@
   .recipientField { display:grid; gap:8px; margin:16px 0 8px; color:var(--color-text-soft); font-size:12px; }
   .recipientField input { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid var(--exchange-field-border); border-radius:8px; background:var(--exchange-field-bg); color:var(--color-text); font:inherit; }
   .walletAddress { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; font-size:12px; }
+  .reconcileButton { width:100%; min-height:44px; margin:8px 0 12px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:inherit; font-size:13px; }
+  .reconcileButton:disabled { opacity:.45; cursor:default; }
   .bridgeForm { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0 var(--otc-panel-padding, 20px) 16px; }
   .ticketHead { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-top: 2px; }
   .sideTabs { --side-buy: var(--otc-buy, var(--color-accent-strong)); --side-sell: var(--otc-sell, var(--color-danger)); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }

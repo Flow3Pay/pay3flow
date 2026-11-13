@@ -63,9 +63,17 @@ export async function request<T>(path: string, token = "", body?: unknown, key?:
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { "Content-Type": "application/json" } : {}), ...(key ? { "Idempotency-Key": key } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store"
   });
-  const result = await response.json();
-  if (!response.ok) throw new OtcRequestError(result.error || `OTC request failed (${response.status})`, response.status);
-  return result;
+  // A proxy or a gateway error can answer with an empty or HTML body; never surface
+  // the resulting JSON parse failure to the trader.
+  const text = await response.text();
+  let result: unknown = null;
+  if (text) { try { result = JSON.parse(text); } catch { result = null; } }
+  if (!response.ok) {
+    const serverError = result && typeof result === "object" && "error" in result ? (result as { error?: unknown }).error : null;
+    throw new OtcRequestError(typeof serverError === "string" && serverError ? serverError : `OTC request failed (${response.status})`, response.status);
+  }
+  if (result === null) throw new OtcRequestError("OTC service is temporarily unavailable. Try again.", response.status);
+  return result as T;
 }
 /** One server-bucketed OHLC print. Empty buckets are returned as nulls, not gaps. */
 export interface HistoryCandle {
