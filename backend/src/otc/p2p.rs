@@ -14,6 +14,11 @@ use serde_json::{json, Value};
 use tokio_postgres::Row;
 use uuid::Uuid;
 
+/// An accepted deal stays open for 24 hours from acceptance. Unpaid deals are
+/// expired and returned to the book; a deal that already started is closed
+/// once this deadline passes.
+const DEAL_LIFETIME_HOURS: i64 = 24;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DealPrepareRequest {
@@ -342,8 +347,7 @@ impl Service {
                 "offer uses the same wallet as your verified accounts".into(),
             ));
         }
-        let pay_by = (Utc::now() + Duration::seconds(i64::from(self.cfg.payment_seconds)))
-            .min(offer.get::<_, DateTime<Utc>>("expires_at"));
+        let pay_by = Utc::now() + Duration::hours(DEAL_LIFETIME_HOURS);
         let body = json!({
             "direction": direction,
             "stablecoin": stablecoin.symbol(),
@@ -1680,6 +1684,12 @@ impl Service {
             repo::p2p::reopen_offer(&client, &offer_id).await?;
             tracing::info!(trade=%id, "otc.p2p.payment_expired");
         }
+        // A deal is only valid for its lifetime. A delivery that is still open
+        // when the deadline passes is closed so it stops asking for action.
+        for id in repo::p2p::expired_delivery_trades(&client).await? {
+            repo::p2p::expire_delivery_trade(&client, &id).await?;
+            tracing::info!(trade=%id, "otc.p2p.deal_expired");
+        }
         for id in repo::p2p::overdue_trades(&client).await? {
             tracing::warn!(trade=%id, "otc.p2p.delivery_overdue");
         }
@@ -1754,9 +1764,14 @@ impl Service {
         }
         repo::p2p::verify_attempt(&tx, &attempt, &serde_json::to_value(evidence)?).await?;
         let (next, payout_by) = if kind == "payment" {
+            let deal_deadline =
+                row.get::<_, DateTime<Utc>>("created_at") + Duration::hours(DEAL_LIFETIME_HOURS);
             (
                 "delivery_pending",
-                Some(Utc::now() + Duration::seconds(i64::from(self.cfg.payout_seconds))),
+                Some(
+                    (Utc::now() + Duration::seconds(i64::from(self.cfg.payout_seconds)))
+                        .min(deal_deadline),
+                ),
             )
         } else {
             (
@@ -2161,6 +2176,7 @@ mod route_status_tests {
 fn deal(row: &Row, actor: &str) -> Value {
     let body: Value = row.get("body");
     let state: String = row.get("state");
+    let created_at: DateTime<Utc> = row.get("created_at");
     let owner_actor: String = row.get("owner_actor");
     let taker_actor: String = row.get("taker_actor");
     let is_owner = owner_actor == actor;
@@ -2233,6 +2249,7 @@ fn deal(row: &Row, actor: &str) -> Value {
         "fee_accrued": fee_accrued,
         "pay_by": row.get::<_, DateTime<Utc>>("pay_by"),
         "payout_by": row.get::<_, Option<DateTime<Utc>>>("payout_by"),
-        "created_at": row.get::<_, DateTime<Utc>>("created_at"),
+        "expires_at": created_at + Duration::hours(DEAL_LIFETIME_HOURS),
+        "created_at": created_at,
     })
 }

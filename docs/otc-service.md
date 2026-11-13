@@ -85,7 +85,14 @@ author and the taker then each sign one ordinary transfer in their own wallet
 through `POST /p2p/trades/:id/prepare` and `POST /p2p/attempts/:id/reference`:
 USDT first, EVER after that leg verifies. There is no escrow, no atomic swap and
 no rollback; each payer is responsible for their own leg, and the deal records
-which leg each side still owes.
+which leg each side still owes. An accepted deal is open for 24 hours from
+acceptance. Unpaid deals are expired at that deadline and their offer returns to
+the book; a deal already in delivery is closed as expired too, so it stops
+prompting for a transfer. Closing a deal from the UI cancels it on the server
+while no stablecoin handoff exists, even when one side has already confirmed;
+once a payment attempt is prepared the Close action only hides the window and
+the leg stays tracked. The dialog shows the deal id and the recipient address
+with copy buttons.
 
 Each P2P deal accrues a 3% service fee exactly once from the gross USDT
 leg (`otc_p2p_fees`; startup also applies `backend/migrations/otc_p2p_fees.sql`).

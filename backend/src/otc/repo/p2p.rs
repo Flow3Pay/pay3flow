@@ -59,6 +59,9 @@ const STALE_TRADES: &str = "SELECT id,offer_id FROM otc_p2p_trades WHERE state='
 const EXPIRE_TRADE: &str =
     "UPDATE otc_p2p_trades SET state='expired',updated_at=now() WHERE id=$1 AND state='payment_pending'";
 const OVERDUE_TRADES: &str = "SELECT id FROM otc_p2p_trades WHERE state='delivery_pending' AND payout_by IS NOT NULL AND payout_by<now()";
+const EXPIRED_DELIVERY_TRADES: &str = "SELECT id FROM otc_p2p_trades WHERE state='delivery_pending' AND created_at<=now()-interval '24 hours'";
+const EXPIRE_DELIVERY_TRADE: &str =
+    "UPDATE otc_p2p_trades SET state='expired',updated_at=now() WHERE id=$1 AND state='delivery_pending'";
 const LOCK_FEE_ATTEMPT: &str = "SELECT payer_actor,instructions,chain FROM otc_p2p_attempts WHERE id=$1 AND trade_id=$2 AND kind='fee' FOR UPDATE";
 const VERIFY_FEE_ATTEMPT: &str = "UPDATE otc_p2p_attempts SET state='verified',evidence=$2,updated_at=now() WHERE id=$1 AND kind='fee' AND state IN ('submitted','confirming','prepared')";
 const COLLECT_FEE: &str =
@@ -491,6 +494,22 @@ pub(crate) async fn stale_trades(
 
 pub(crate) async fn expire_trade(client: &(impl GenericClient + Sync), id: &Uuid) -> Result<()> {
     client.execute(EXPIRE_TRADE, &[id]).await?;
+    Ok(())
+}
+
+/// Returns ids of delivery deals that outlived the 24-hour deal lifetime.
+pub(crate) async fn expired_delivery_trades(
+    client: &(impl GenericClient + Sync),
+) -> Result<Vec<Uuid>> {
+    let rows = client.query(EXPIRED_DELIVERY_TRADES, &[]).await?;
+    Ok(rows.iter().map(|row| row.get(0)).collect())
+}
+
+pub(crate) async fn expire_delivery_trade(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+) -> Result<()> {
+    client.execute(EXPIRE_DELIVERY_TRADE, &[id]).await?;
     Ok(())
 }
 
