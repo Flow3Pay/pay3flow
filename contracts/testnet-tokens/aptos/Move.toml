@@ -1,0 +1,16 @@
+[package]
+name = "Pay3FlowTestStablecoins"
+version = "1.0.0"
+authors = []
+
+[addresses]
+test_tokens = "_"
+
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "aptos-node-v1.49.3"
+subdir = "aptos-move/framework/aptos-framework"
+
+[dev-dependencies]

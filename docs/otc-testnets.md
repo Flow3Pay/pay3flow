@@ -50,7 +50,37 @@ of one million tokens each. `TEST_TOKEN_SUPPLY` can change the whole-token
 supply. Keep the deployer key local; never add it to configuration committed
 to Git.
 
-## Remaining testnet work
+## Other testnet tokens
+
+These are independent test assets, not real USDT/USDC. They are not wired into
+the OTC application's settlement flow.
+
+| Network | Token | Test asset address / type | Notes |
+| --- | --- | --- | --- |
+| TRON Nile | USDT | `TF4YzV4a2c5LMrwbQ3WbpJi57yZF9uuGyi` | TRC-20, 6 decimals, public `mint(address,uint256)` |
+| TRON Nile | USDC | `TYPQgdQwj3Mi6pXaLHtbXorPtMjF3Zn3Rz` | TRC-20, 6 decimals, public `mint(address,uint256)` |
+| TON testnet | USDT | `0QA6PBa61VPXDscE_38ZNFiVYRc5l-uyD_xHQwppzNdsepGK` | Jetton minter; mint authority is held by the deployer |
+| TON testnet | USDC | `0QAWjUSL-6xviwDtM1NYA2mhApfyXRh82_XNM1s6Ghtu9w0H` | Jetton minter; mint authority is held by the deployer |
+| Aptos testnet | USDT | `0x6615ec77a988cf8f64debf9170ec3b6d5812555ead2196cbb4a64e272031eaae::usdt::USDT` | 6 decimals; public `usdt::mint(&signer, amount)` |
+| Aptos testnet | USDC | `0x6615ec77a988cf8f64debf9170ec3b6d5812555ead2196cbb4a64e272031eaae::usdc::USDC` | 6 decimals; public `usdc::mint(&signer, amount)` |
+| Sui testnet | USDC | `0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC` | Circle test asset; request it at [Circle Testnet Faucet](https://faucet.circle.com/) |
+
+The Aptos package source is in `contracts/testnet-tokens/aptos`. Its public
+mint functions accept atomic units (for example, `1000000` mints one token).
+The Aptos publish transaction is
+[0x31f7f801…](https://explorer.aptoslabs.com/txn/0x31f7f8010c5da2981800279138381f70d057e9d5d718150244c79166f41f0672?network=testnet);
+public mint was exercised for both assets ([USDT](https://explorer.aptoslabs.com/txn/0x8be09783dd899abf303f918a2bb05102c01fdd96ceeb420b7af779d895e9763a?network=testnet),
+[USDC](https://explorer.aptoslabs.com/txn/0x74a50011309611bb779af9cfbc749e4f34eed506ffa7ee9ccc24b51eabac2c4c?network=testnet)).
+Sui's Circle faucet requires a human to complete its CAPTCHA. No custom Sui
+USDT has been deployed.
+
+TON minters are admin-controlled; tokens can be transferred to a user's
+address, but the deployer's signing key must stay private. Aptos and TRON
+test tokens can be minted directly to a test wallet by calling their public
+mint functions. Test tokens have no market value and must never be treated as
+real stablecoins.
+
+## OTC testnet limitations
 
 The OTC backend still binds settlement to Everscale mainnet and Ethereum
 mainnet, and intentionally rejects testnet offers. A testnet OTC mode needs
@@ -58,9 +88,6 @@ separate wallet-login, chain-observer, fee, and Everscale testnet wiring before
 it can accept or confirm payments. This EVM token deployment helper alone
 cannot make those trades safe.
 
-The other supported wallet families do not share an ERC-20 deployment
-mechanism: TRON, Solana, NEAR, Sui, TON, Aptos, and native Everscale test
-assets need chain-specific contracts/programs, testnet RPCs, wallet network
-support, and observers. NEAR Intents testnet swap support is outside this setup;
-test tokens on independent networks do not create an executable cross-chain
-route.
+Solana, NEAR, and native Everscale test assets are not provided here. NEAR
+Intents testnet swap support is outside this setup; test tokens on independent
+networks do not create an executable cross-chain route.
