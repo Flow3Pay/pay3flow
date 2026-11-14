@@ -68,10 +68,12 @@
   function chartBounds(source: History | null, selectedRange: ChartRange, latestPrint?: number): ChartWindow {
     const layout = chartWindows[selectedRange];
     const serverFrom = source?.from ? Date.parse(source.from) : NaN;
+    const bucketSeconds = source?.bucket_seconds && source.bucket_seconds > 0 ? source.bucket_seconds : layout.bucketSeconds;
+    const buckets = source?.buckets && source.buckets > 0 ? source.buckets : layout.buckets;
     const from = Number.isFinite(serverFrom)
       ? serverFrom
       : chartWindow(selectedRange, Math.max(Date.now(), (latestPrint ?? 0) + 1)).from;
-    return { from, bucketSeconds: layout.bucketSeconds, buckets: layout.buckets };
+    return { from, bucketSeconds, buckets };
   }
 
   function serverBars(source: History | null): KLineData[] {

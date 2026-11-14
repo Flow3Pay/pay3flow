@@ -94,6 +94,7 @@ export interface History {
   market?: string;
   range?: string;
   bucket_seconds?: number;
+  buckets?: number;
   from?: string;
   to?: string;
   market_candles?: { source?: string; stale?: boolean; interval?: string; candles?: HistoryMarketCandle[] };

@@ -48,20 +48,20 @@ export function candleIntervalLabel(bucketSeconds: number, locale = "en"): strin
 
 /**
  * Bucket layout used by the server for each timeframe; the window is
- * `buckets * bucketSeconds`. Every timeframe keeps the provider's page of the
- * most recent candles, so a candle is always one button long.
+ * `buckets * bucketSeconds`. Counts are sized so the provider is asked for at
+ * most its cached paging budget, giving a trader the deepest history we keep.
  */
 export const chartWindows: Record<ChartRange, { bucketSeconds: number; buckets: number }> = {
-  "30s": { bucketSeconds: 30, buckets: 300 },
-  "1m": { bucketSeconds: 60, buckets: 300 },
-  "3m": { bucketSeconds: 180, buckets: 300 },
-  "5m": { bucketSeconds: 300, buckets: 300 },
-  "30m": { bucketSeconds: 1_800, buckets: 300 },
-  "1h": { bucketSeconds: 3_600, buckets: 300 },
-  "4h": { bucketSeconds: 14_400, buckets: 300 },
-  "8h": { bucketSeconds: 28_800, buckets: 300 },
-  "16h": { bucketSeconds: 57_600, buckets: 300 },
-  "1d": { bucketSeconds: 86_400, buckets: 300 },
+  "30s": { bucketSeconds: 30, buckets: 3_333 },
+  "1m": { bucketSeconds: 60, buckets: 10_000 },
+  "3m": { bucketSeconds: 180, buckets: 3_333 },
+  "5m": { bucketSeconds: 300, buckets: 10_000 },
+  "30m": { bucketSeconds: 1_800, buckets: 10_000 },
+  "1h": { bucketSeconds: 3_600, buckets: 10_000 },
+  "4h": { bucketSeconds: 14_400, buckets: 10_000 },
+  "8h": { bucketSeconds: 28_800, buckets: 10_000 },
+  "16h": { bucketSeconds: 57_600, buckets: 5_000 },
+  "1d": { bucketSeconds: 86_400, buckets: 10_000 },
 };
 
 export interface ChartWindow {

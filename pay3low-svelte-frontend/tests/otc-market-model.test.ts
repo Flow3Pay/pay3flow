@@ -46,9 +46,11 @@ test("fallback candles keep the selected timeframe window and grid", () => {
   ];
   const fine = markCandles(marks, chartWindow("30s", now));
   const hour = markCandles(marks, chartWindow("1h", now));
-  // 30s drops the four-hour-old print and both recent prints share one 30s bucket.
-  assert.equal(fine.length, 1);
-  assert.deepEqual({ open: fine[0].open, high: fine[0].high, low: fine[0].low, close: fine[0].close }, { open: 0.2, high: 0.3, low: 0.2, close: 0.3 });
+  // The deeper 30s window keeps the four-hour-old print, and both recent
+  // prints still share one 30s bucket.
+  assert.equal(fine.length, 2);
+  assert.deepEqual({ open: fine[0].open, high: fine[0].high, low: fine[0].low, close: fine[0].close }, { open: 0.1, high: 0.1, low: 0.1, close: 0.1 });
+  assert.deepEqual({ open: fine[1].open, high: fine[1].high, low: fine[1].low, close: fine[1].close }, { open: 0.2, high: 0.3, low: 0.2, close: 0.3 });
   // 1h keeps the older print and keeps the two recent prints in one hour bucket.
   assert.equal(hour.length, 2);
   assert.equal(hour[0].open, 0.1);
@@ -74,8 +76,8 @@ test("quiet exchange buckets keep the whole price history", () => {
 
 test("each timeframe uses its own server bucket layout", () => {
   const now = Date.parse("2026-11-03T12:00:00Z");
-  assert.deepEqual(chartWindows["30s"], { bucketSeconds: 30, buckets: 300 });
-  assert.deepEqual(chartWindows["1d"], { bucketSeconds: 86_400, buckets: 300 });
+  assert.deepEqual(chartWindows["30s"], { bucketSeconds: 30, buckets: 3_333 });
+  assert.deepEqual(chartWindows["1d"], { bucketSeconds: 86_400, buckets: 10_000 });
   const day = chartWindow("1d", now);
   const bucketMs = day.bucketSeconds * 1000;
   // The window ends on its bucket boundary, not at the raw wall-clock instant.
@@ -85,16 +87,16 @@ test("each timeframe uses its own server bucket layout", () => {
 test("every timeframe draws candles of its own size", () => {
   const now = Date.parse("2026-11-03T12:00:07.500Z");
   const expected = {
-    "30s": ["30s", 30, 300],
-    "1m": ["1m", 60, 300],
-    "3m": ["3m", 180, 300],
-    "5m": ["5m", 300, 300],
-    "30m": ["30m", 1_800, 300],
-    "1h": ["1h", 3_600, 300],
-    "4h": ["4h", 14_400, 300],
-    "8h": ["8h", 28_800, 300],
-    "16h": ["16h", 57_600, 300],
-    "1d": ["1d", 86_400, 300],
+    "30s": ["30s", 30, 3_333],
+    "1m": ["1m", 60, 10_000],
+    "3m": ["3m", 180, 3_333],
+    "5m": ["5m", 300, 10_000],
+    "30m": ["30m", 1_800, 10_000],
+    "1h": ["1h", 3_600, 10_000],
+    "4h": ["4h", 14_400, 10_000],
+    "8h": ["8h", 28_800, 10_000],
+    "16h": ["16h", 57_600, 5_000],
+    "1d": ["1d", 86_400, 10_000],
   } as const;
   for (const range of chartRanges) {
     const [interval, bucketSeconds, buckets] = expected[range];
