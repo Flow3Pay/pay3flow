@@ -4,7 +4,7 @@
 //! prints and published advertisements; the indicative price series is merged
 //! in by the route handler because it lives with the market price service.
 use super::{amount, error::Result, repo, Service};
-use crate::market_prices::ExchangeCandle;
+use crate::market_prices::{ExchangeCandle, MAX_SOURCE_CANDLES};
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Value};
 
@@ -17,17 +17,21 @@ use serde_json::{json, Value};
 /// Timeframes the provider does not publish (3m, 16h) fold the next finer
 /// series, so their candles still cover their own span. Gate has no 30s
 /// interval either, so the 30s grid folds its 10s series.
+///
+/// The bucket counts are chosen so each window asks the provider for at most
+/// [`MAX_SOURCE_CANDLES`] rows: a trader gets the deepest history a single
+/// cached series can hold, and older timeframes reach the pair's listing day.
 const WINDOWS: &[(&str, i64, i64, &str)] = &[
-    ("30s", 30, 300, "10s"),
-    ("1m", 60, 300, "1m"),
-    ("3m", 180, 300, "1m"),
-    ("5m", 300, 300, "5m"),
-    ("30m", 1_800, 300, "30m"),
-    ("1h", 3_600, 300, "1h"),
-    ("4h", 14_400, 300, "4h"),
-    ("8h", 28_800, 300, "8h"),
-    ("16h", 57_600, 300, "8h"),
-    ("1d", 86_400, 300, "1d"),
+    ("30s", 30, 3_333, "10s"),
+    ("1m", 60, 10_000, "1m"),
+    ("3m", 180, 3_333, "1m"),
+    ("5m", 300, 10_000, "5m"),
+    ("30m", 1_800, 10_000, "30m"),
+    ("1h", 3_600, 10_000, "1h"),
+    ("4h", 14_400, 10_000, "4h"),
+    ("8h", 28_800, 10_000, "8h"),
+    ("16h", 57_600, 5_000, "8h"),
+    ("1d", 86_400, 10_000, "1d"),
 ];
 
 fn interval_seconds(interval: &str) -> i64 {
@@ -105,15 +109,31 @@ impl Window {
     }
 
     /// Enough exchange candles to cover the window plus a small margin for
-    /// provider clock skew. Capped by the provider's single-page limit.
+    /// provider clock skew. Capped by the shared paging budget.
     pub(crate) fn market_limit(&self) -> u32 {
         let step = interval_seconds(self.market_interval).max(1);
-        ((self.bucket_seconds * self.buckets) / step + 3).clamp(2, 1_000) as u32
+        ((self.bucket_seconds * self.buckets) / step + 3).clamp(2, i64::from(MAX_SOURCE_CANDLES))
+            as u32
     }
     fn index(&self, at: DateTime<Utc>) -> Option<usize> {
         let offset = at.timestamp().checked_sub(self.from.timestamp())?;
         let index = offset.div_euclid(self.bucket_seconds);
         (0..self.buckets).contains(&index).then_some(index as usize)
+    }
+
+    /// The newest `buckets` of this window, ending on the same bucket boundary.
+    /// Desk prints and advertisements are sparse, so the trader's deeper
+    /// candle window does not inflate those arrays.
+    pub(crate) fn recent(&self, buckets: i64) -> Self {
+        let buckets = buckets.clamp(1, self.buckets);
+        Self {
+            range: self.range,
+            bucket_seconds: self.bucket_seconds,
+            buckets,
+            market_interval: self.market_interval,
+            from: self.to - Duration::seconds(self.bucket_seconds * buckets),
+            to: self.to,
+        }
     }
 
     /// The provider period, point span and point step for the indicative
@@ -413,30 +433,45 @@ mod tests {
     #[test]
     fn spot_layout_uses_hourly_points_for_short_timeframes_and_daily_after() {
         let now = at(1_761_000_000);
-        // A 30s window of 300 candles is 2.5 hours, so hourly points cover it.
+        // A 30s window reaches further than a day but stays well under the page.
         assert_eq!(
             Window::parse("30s", now).unwrap().spot_layout(),
-            ("1h", 4, 3_600)
+            ("1h", 29, 3_600)
         );
+        // Longer windows keep the hourly series, capped by the provider page.
         assert_eq!(
             Window::parse("1h", now).unwrap().spot_layout(),
-            ("1h", 302, 3_600)
+            ("1h", 500, 3_600)
         );
-        assert_eq!(
-            Window::parse("1d", now).unwrap().spot_layout(),
-            ("1d", 302, 86_400)
-        );
-        // Longer intraday windows stay on the hourly series, capped by the page.
         assert_eq!(
             Window::parse("4h", now).unwrap().spot_layout(),
             ("1h", 500, 3_600)
         );
+        assert_eq!(
+            Window::parse("1d", now).unwrap().spot_layout(),
+            ("1d", 500, 86_400)
+        );
+    }
+
+    #[test]
+    fn the_desk_tail_keeps_the_window_end_and_grid() {
+        let now = at(1_761_000_000);
+        let window = Window::parse("1d", now).unwrap();
+        let desk = window.recent(300);
+        assert_eq!(desk.buckets, 300);
+        assert_eq!(desk.to, window.to);
+        assert_eq!(desk.bucket_seconds, window.bucket_seconds);
+        assert_eq!(
+            (desk.to - desk.from).num_seconds(),
+            300 * window.bucket_seconds
+        );
+        assert_eq!(window.recent(50_000).buckets, window.buckets);
     }
 
     #[test]
     fn trades_become_candles_and_offers_become_the_book() {
         let now = at(1_761_000_000);
-        let window = Window::parse("1m", now).unwrap();
+        let window = Window::parse("1m", now).unwrap().recent(300);
         let start = window.from.timestamp();
         // One thousand EVER settling for 13 and then 15 USDT prints 0.013 and
         // 0.015; the two-sided advertisements price the book at 0.012 / 0.015.

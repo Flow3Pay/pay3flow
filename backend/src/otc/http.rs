@@ -189,7 +189,10 @@ async fn history(
         params.get("range").map(String::as_str).unwrap_or("1m"),
         Utc::now(),
     )?;
-    let (candles, levels) = super::history::aggregate(&state.otc.history(&window).await?, &window);
+    // Desk prints and advertisements stay on a 300-bucket tail; the chart's
+    // market series is the part that carries the trader's deep history.
+    let desk = window.recent(300);
+    let (candles, levels) = super::history::aggregate(&state.otc.history(&desk).await?, &desk);
     let (period, span, bucket_seconds) = window.spot_layout();
     let (points, stale) = state.market_prices.spot_history("EVER", period, span).await;
     let (exchange, exchange_stale) = state
@@ -201,6 +204,7 @@ async fn history(
         "market": market,
         "range": window.range,
         "bucket_seconds": window.bucket_seconds,
+        "buckets": window.buckets,
         "from": window.from,
         "to": window.to,
         "market_candles": {

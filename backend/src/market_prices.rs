@@ -7,14 +7,14 @@
 //! benchmarks come from the informational reference-rate feeds and are only
 //! shown beside amounts, never used to price executable quotes.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::MissedTickBehavior;
 
 use crate::core::error::AppError;
@@ -31,9 +31,16 @@ const GATE_ROOT: &str = "https://api.gateio.ws/api/v4/";
 const GATE_TICKERS: &str = "https://data.gateapi.io/api2/1/tickers";
 const HISTORY_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const EMPTY_TTL: Duration = Duration::from_secs(60);
-/// The OTC chart polls once a minute, so a short candle cache keeps the
-/// provider load bounded without making the newest candle visibly late.
-const CANDLE_TTL: Duration = Duration::from_secs(60);
+/// Only the forming candle can change, so the chart refreshes just that tail.
+/// Closed candles stay cached for the lifetime of the process.
+const OPEN_CANDLE_TTL: Duration = Duration::from_secs(5);
+/// Upper bound on the source candles one chart may page in, so the provider
+/// archive cannot be walked indefinitely.
+pub(crate) const MAX_SOURCE_CANDLES: u32 = 10_100;
+/// Gate returns at most 1000 rows per candlestick page.
+const GATE_PAGE: u32 = 1_000;
+/// Safety stop for catching the tail up after a long idle period.
+const MAX_TAIL_PAGES: usize = 40;
 
 // Gate pairs are listed lowercase here because the tickers feed lowercases its
 // keys; the candle endpoint gets them uppercased. The first pair with a
@@ -125,7 +132,83 @@ pub struct MarketPriceService {
     exchange_root: String,
     cache: Arc<RwLock<Option<Arc<PriceSnapshot>>>>,
     history: Arc<RwLock<HashMap<String, HistorySnapshot>>>,
-    candles: Arc<RwLock<HashMap<String, CandleSnapshot>>>,
+    candles: Arc<RwLock<HashMap<String, Arc<Mutex<CandleCache>>>>>,
+}
+
+/// Closed exchange candles for one `asset:interval`. A finished candle never
+/// changes, so only the forming one is fetched again; the rest are appended to
+/// this map once and served from memory afterwards.
+#[derive(Default)]
+struct CandleCache {
+    closed: BTreeMap<i64, ExchangeCandle>,
+    /// The forming candle. It is served but never treated as final until its
+    /// bucket ends and a fresh copy arrives from the provider.
+    open: Option<ExchangeCandle>,
+    oldest: Option<i64>,
+    newest: Option<i64>,
+    refreshed_at: Option<Instant>,
+    exhausted: bool,
+}
+
+impl CandleCache {
+    fn merge(&mut self, rows: Vec<ExchangeCandle>, open_start: i64) {
+        for row in rows {
+            self.oldest = Some(self.oldest.map_or(row.t, |oldest| oldest.min(row.t)));
+            self.newest = Some(self.newest.map_or(row.t, |newest| newest.max(row.t)));
+            if row.t < open_start {
+                // A fresh page replaces any provisional copy of the same bucket.
+                self.closed.insert(row.t, row);
+            } else {
+                self.open = Some(row);
+            }
+        }
+    }
+
+    /// Cached candles in ascending order, capped at the newest `limit` rows.
+    fn series(&self, limit: usize) -> Vec<ExchangeCandle> {
+        let mut rows: Vec<ExchangeCandle> = self.closed.values().copied().collect();
+        if let Some(open) = self.open {
+            // A closed copy is final; only append the forming candle when it is
+            // strictly newer than everything already cached.
+            if rows.last().is_none_or(|last| last.t < open.t) {
+                rows.push(open);
+            }
+        }
+        if rows.len() > limit {
+            rows.split_off(rows.len() - limit)
+        } else {
+            rows
+        }
+    }
+}
+
+/// One provider page. Gate refuses a page whose oldest point is more than
+/// 10 000 interval points away from now, which for a chart simply means the
+/// pair has no older candles to page in.
+enum CandlePage {
+    Rows(Vec<ExchangeCandle>),
+    TooOld,
+}
+
+#[derive(Debug)]
+enum CandleError {
+    Request(reqwest::Error),
+    Provider(String),
+}
+
+impl std::fmt::Display for CandleError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Request(error) => write!(formatter, "{error}"),
+            Self::Provider(message) => write!(formatter, "provider error: {message}"),
+        }
+    }
+}
+
+impl From<reqwest::Error> for CandleError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Request(error)
+    }
 }
 
 #[derive(Clone)]
@@ -139,12 +222,6 @@ struct PriceSnapshot {
 struct HistorySnapshot {
     fetched_at: Instant,
     points: Vec<SpotPoint>,
-}
-
-#[derive(Clone)]
-struct CandleSnapshot {
-    fetched_at: Instant,
-    candles: Vec<ExchangeCandle>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -195,6 +272,60 @@ fn as_number(value: &serde_json::Value) -> Option<f64> {
         serde_json::Value::Number(number) => number.as_f64(),
         _ => None,
     }
+}
+
+/// Candle duration in seconds for the intervals the chart asks for.
+fn candle_step(interval: &str) -> i64 {
+    match interval {
+        "10s" => 10,
+        "30s" => 30,
+        "1m" => 60,
+        "5m" => 300,
+        "15m" => 900,
+        "30m" => 1_800,
+        "1h" => 3_600,
+        "4h" => 14_400,
+        "8h" => 28_800,
+        "1d" => 86_400,
+        _ => 604_800,
+    }
+}
+
+fn now_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or_default()
+}
+
+/// One provider candle row: `[timestamp, quote volume, close, high, low, open,
+/// base volume, closed]`.
+fn parse_candle(row: &[serde_json::Value]) -> Option<ExchangeCandle> {
+    let t = as_number(row.first()?)? as i64;
+    let close = as_number(row.get(2)?)?;
+    let high = as_number(row.get(3)?)?;
+    let low = as_number(row.get(4)?)?;
+    let open = as_number(row.get(5)?)?;
+    let raw_volume = row.get(1).and_then(as_number).unwrap_or(0.0);
+    if t <= 0
+        || [open, high, low, close]
+            .iter()
+            .any(|value| !value.is_finite() || *value <= 0.0)
+    {
+        return None;
+    }
+    Some(ExchangeCandle {
+        t,
+        open,
+        high,
+        low,
+        close,
+        volume: if raw_volume.is_finite() && raw_volume > 0.0 {
+            raw_volume
+        } else {
+            0.0
+        },
+    })
 }
 
 #[derive(Deserialize)]
@@ -557,6 +688,11 @@ impl MarketPriceService {
     /// Real exchange OHLC candles for one listed asset. The chart uses these
     /// because they carry an exact open, high, low, close and volume for every
     /// requested interval, unlike the indicative point series.
+    ///
+    /// Closed candles are immutable, so they stay cached per `asset:interval`
+    /// for the lifetime of the process. A request only asks the provider for
+    /// the forming candle (and anything that closed since the last refresh);
+    /// older pages are walked once, on first use, up to [`MAX_SOURCE_CANDLES`].
     pub async fn exchange_candles(
         &self,
         asset: &str,
@@ -577,93 +713,170 @@ impl MarketPriceService {
             return (Vec::new(), true);
         }
         let pair = pair.to_ascii_uppercase();
-        let limit = limit.clamp(2, 1_000);
-        let key = format!("{asset}:{interval}:{limit}");
-        if let Some(cached) = self.candles.read().await.get(&key) {
-            // An empty series retries soon, exactly like the point series.
-            let ttl = if cached.candles.is_empty() {
-                EMPTY_TTL
-            } else {
-                CANDLE_TTL
-            };
-            if cached.fetched_at.elapsed() < ttl {
-                return (cached.candles.clone(), false);
+        let limit = limit.clamp(2, MAX_SOURCE_CANDLES) as usize;
+        let step = candle_step(interval).max(1);
+        let key = format!("{asset}:{interval}");
+        let cell = {
+            let mut candles = self.candles.write().await;
+            Arc::clone(
+                candles
+                    .entry(key)
+                    .or_insert_with(|| Arc::new(Mutex::new(CandleCache::default()))),
+            )
+        };
+        let mut cache = cell.lock().await;
+        let now = now_seconds();
+        let open_start = now - now.rem_euclid(step);
+        let mut stale = false;
+
+        if cache
+            .refreshed_at
+            .is_none_or(|at| at.elapsed() >= OPEN_CANDLE_TTL)
+        {
+            stale = self
+                .refresh_candle_tail(&pair, interval, step, open_start, &mut cache)
+                .await;
+            cache.refreshed_at = Some(Instant::now());
+        }
+
+        // A wider range (or first use) walks older provider pages once.
+        while cache.closed.len() < limit && !cache.exhausted {
+            let Some(oldest) = cache.oldest else { break };
+            if oldest <= 1 {
+                cache.exhausted = true;
+                break;
+            }
+            match self
+                .fetch_candles(&pair, interval, GATE_PAGE, None, Some(oldest - 1))
+                .await
+            {
+                Ok(CandlePage::Rows(rows)) => {
+                    let reached_start = rows.len() < GATE_PAGE as usize;
+                    let before = cache.oldest;
+                    cache.merge(rows, open_start);
+                    // A provider that ignores `to` must not loop forever.
+                    if reached_start || cache.oldest == before {
+                        cache.exhausted = true;
+                    }
+                }
+                Ok(CandlePage::TooOld) => {
+                    // The pair's history floor: everything older is outside
+                    // the provider's 10 000-point window.
+                    cache.exhausted = true;
+                    break;
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "exchange candle backfill failed");
+                    stale = true;
+                    break;
+                }
             }
         }
-        let url = format!(
+
+        (cache.series(limit), stale)
+    }
+
+    /// Fetch the forming candle and everything that closed since the last
+    /// refresh, then store the closed rows. Only this tail can change, which is
+    /// what keeps later chart requests cheap. Returns whether Gate failed.
+    async fn refresh_candle_tail(
+        &self,
+        pair: &str,
+        interval: &str,
+        step: i64,
+        open_start: i64,
+        cache: &mut CandleCache,
+    ) -> bool {
+        // Refetch the bucket cached as open: once it closes, this replaces its
+        // provisional values with the final ones.
+        let mut from = match cache.open {
+            Some(open) => Some(open.t),
+            None => cache.newest.map(|newest| (newest + step).min(open_start)),
+        };
+        let mut latest = from.is_none();
+        for _ in 0..MAX_TAIL_PAGES {
+            let page = if latest {
+                self.fetch_candles(pair, interval, GATE_PAGE, None, None)
+                    .await
+            } else {
+                let start = from.unwrap_or(open_start);
+                let limit = (((open_start - start) / step) + 2).clamp(2, GATE_PAGE as i64) as u32;
+                self.fetch_candles(pair, interval, limit, Some(start), None)
+                    .await
+            };
+            let rows = match page {
+                Ok(CandlePage::Rows(rows)) => rows,
+                // A long idle can leave the cursor outside the provider's
+                // window; restart from the newest page instead of stalling.
+                Ok(CandlePage::TooOld) if !latest => {
+                    latest = true;
+                    continue;
+                }
+                Ok(CandlePage::TooOld) => return false,
+                Err(error) => {
+                    tracing::warn!(%error, "exchange candle refresh failed");
+                    return true;
+                }
+            };
+            if rows.is_empty() {
+                return false;
+            }
+            let last = rows[rows.len() - 1].t;
+            cache.merge(rows, open_start);
+            if last >= open_start || cache.open.is_some_and(|open| open.t >= open_start) {
+                return false;
+            }
+            from = Some(last + step);
+        }
+        false
+    }
+
+    /// One Gate candlestick page. `from` is inclusive and returns newer rows;
+    /// `to` bounds the page and returns the newest rows ending there. Without
+    /// either, Gate answers with the latest page.
+    async fn fetch_candles(
+        &self,
+        pair: &str,
+        interval: &str,
+        limit: u32,
+        from: Option<i64>,
+        to: Option<i64>,
+    ) -> Result<CandlePage, CandleError> {
+        let mut url = format!(
             "{}spot/candlesticks?currency_pair={pair}&interval={interval}&limit={limit}",
             self.exchange_root
         );
-        let response = match self.client.get(&url).send().await {
-            Ok(response) => match response.error_for_status() {
-                Ok(response) => response,
-                Err(error) => {
-                    tracing::warn!(%error, "exchange candle refresh failed");
-                    return (self.stale_candles(&key).await, true);
+        if let Some(from) = from {
+            url.push_str(&format!("&from={from}"));
+        }
+        if let Some(to) = to {
+            url.push_str(&format!("&to={to}"));
+        }
+        let response = self.client.get(url).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+        let payload = serde_json::from_str::<serde_json::Value>(&body)
+            .map_err(|_| CandleError::Provider(format!("{status}: unexpected candlestick body")))?;
+        let rows = match payload {
+            serde_json::Value::Array(rows) => rows,
+            serde_json::Value::Object(object) => {
+                let message = object.get("message").and_then(|value| value.as_str());
+                if message.is_some_and(|message| message.contains("too long ago")) {
+                    return Ok(CandlePage::TooOld);
                 }
-            },
-            Err(error) => {
-                tracing::warn!(%error, "exchange candle refresh failed");
-                return (self.stale_candles(&key).await, true);
+                return Err(CandleError::Provider(format!("{status}: {object:?}")));
+            }
+            other => {
+                return Err(CandleError::Provider(format!("{status}: {other}")));
             }
         };
-        let mut candles: Vec<ExchangeCandle> =
-            match response.json::<Vec<Vec<serde_json::Value>>>().await {
-                Ok(payload) => payload
-                    .into_iter()
-                    .filter_map(|row| {
-                        // [timestamp, quote volume, close, high, low, open, base volume, closed]
-                        let t = as_number(row.first()?)? as i64;
-                        let close = as_number(row.get(2)?)?;
-                        let high = as_number(row.get(3)?)?;
-                        let low = as_number(row.get(4)?)?;
-                        let open = as_number(row.get(5)?)?;
-                        let raw_volume = row.get(1).and_then(as_number).unwrap_or(0.0);
-                        if t <= 0
-                            || [open, high, low, close]
-                                .iter()
-                                .any(|value| !value.is_finite() || *value <= 0.0)
-                        {
-                            return None;
-                        }
-                        Some(ExchangeCandle {
-                            t,
-                            open,
-                            high,
-                            low,
-                            close,
-                            volume: if raw_volume.is_finite() && raw_volume > 0.0 {
-                                raw_volume
-                            } else {
-                                0.0
-                            },
-                        })
-                    })
-                    .collect(),
-                Err(error) => {
-                    tracing::warn!(%error, "exchange candle response invalid");
-                    return (self.stale_candles(&key).await, true);
-                }
-            };
+        let mut candles: Vec<ExchangeCandle> = rows
+            .iter()
+            .filter_map(|row| row.as_array().and_then(|row| parse_candle(row)))
+            .collect();
         candles.sort_by_key(|candle| candle.t);
         candles.dedup_by_key(|candle| candle.t);
-        self.candles.write().await.insert(
-            key,
-            CandleSnapshot {
-                fetched_at: Instant::now(),
-                candles: candles.clone(),
-            },
-        );
-        (candles, false)
-    }
-
-    async fn stale_candles(&self, key: &str) -> Vec<ExchangeCandle> {
-        self.candles
-            .read()
-            .await
-            .get(key)
-            .map(|cached| cached.candles.clone())
-            .unwrap_or_default()
+        Ok(CandlePage::Rows(candles))
     }
 
     /// Intraday exchange series. Gate.io keeps recent candlesticks for every
@@ -893,5 +1106,193 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn closed_candles_are_cached_and_only_the_tail_is_refetched() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let hit = calls.clone();
+        let app = Router::new().route(
+            "/spot/candlesticks",
+            get(move || {
+                let hit = hit.clone();
+                async move {
+                    hit.fetch_add(1, Ordering::SeqCst);
+                    let open = now_seconds() - now_seconds().rem_euclid(60);
+                    let previous = open - 60;
+                    Json(serde_json::json!([
+                        [
+                            previous.to_string(),
+                            "1",
+                            "0.002",
+                            "0.002",
+                            "0.002",
+                            "0.002",
+                            "1",
+                            true
+                        ],
+                        [
+                            open.to_string(),
+                            "1",
+                            "0.0021",
+                            "0.0021",
+                            "0.0021",
+                            "0.0021",
+                            "1",
+                            false
+                        ]
+                    ]))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let service = MarketPriceService::with_client(
+            reqwest::Client::new(),
+            format!("http://{address}/"),
+            format!("http://{address}/"),
+        );
+
+        let (first, stale) = service.exchange_candles("EVER", "1m", 4).await;
+        assert!(!stale);
+        assert_eq!(first.len(), 2);
+        assert_eq!(first[1].t - first[0].t, 60);
+        assert_eq!(first[1].close, 0.0021);
+        let after_first = calls.load(Ordering::SeqCst);
+
+        // Closed candles are served from memory; the forming one is still fresh.
+        let (second, stale) = service.exchange_candles("EVER", "1m", 4).await;
+        assert!(!stale);
+        assert_eq!(second, first);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            after_first,
+            "a closed candle must not be fetched again"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_wide_chart_pages_back_through_older_candles() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let hit = calls.clone();
+        let app = Router::new().route(
+            "/spot/candlesticks",
+            get(
+                move |axum::extract::Query(params): axum::extract::Query<
+                    HashMap<String, String>,
+                >| {
+                    let hit = hit.clone();
+                    async move {
+                        hit.fetch_add(1, Ordering::SeqCst);
+                        let limit: usize = params
+                            .get("limit")
+                            .and_then(|value| value.parse().ok())
+                            .unwrap_or(1_000);
+                        let newest = params
+                            .get("to")
+                            .and_then(|value| value.parse::<i64>().ok())
+                            .map(|to| to - to.rem_euclid(60))
+                            .unwrap_or_else(|| now_seconds() - now_seconds().rem_euclid(60));
+                        let rows: Vec<serde_json::Value> = (0..limit)
+                            .map(|index| {
+                                let t = newest - index as i64 * 60;
+                                serde_json::json!([
+                                    t.to_string(),
+                                    "1",
+                                    "0.002",
+                                    "0.002",
+                                    "0.002",
+                                    "0.002",
+                                    "1",
+                                    false
+                                ])
+                            })
+                            .collect();
+                        Json(serde_json::Value::Array(rows))
+                    }
+                },
+            ),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let service = MarketPriceService::with_client(
+            reqwest::Client::new(),
+            format!("http://{address}/"),
+            format!("http://{address}/"),
+        );
+
+        let (candles, stale) = service.exchange_candles("EVER", "1m", 2_500).await;
+        assert!(!stale);
+        assert_eq!(candles.len(), 2_500);
+        assert!(candles.windows(2).all(|pair| pair[1].t - pair[0].t == 60));
+        assert!(calls.load(Ordering::SeqCst) >= 3);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_provider_history_floor_is_not_reported_as_stale() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let hit = calls.clone();
+        let app = Router::new().route(
+            "/spot/candlesticks",
+            get(
+                move |axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>| {
+                    let hit = hit.clone();
+                    async move {
+                        hit.fetch_add(1, Ordering::SeqCst);
+                        let open = now_seconds() - now_seconds().rem_euclid(60);
+                        let limit: usize = params
+                            .get("limit")
+                            .and_then(|value| value.parse().ok())
+                            .unwrap_or(1_000);
+                        if let Some(to) = params.get("to").and_then(|value| value.parse::<i64>().ok())
+                        {
+                            if to < open - 1_999 * 60 {
+                                return Json(serde_json::json!({
+                                    "label": "INVALID_PARAM_VALUE",
+                                    "message": "Candlestick too long ago. Maximum 10000 points ago are allowed"
+                                }));
+                            }
+                        }
+                        let newest = params
+                            .get("to")
+                            .and_then(|value| value.parse::<i64>().ok())
+                            .map(|to| to - to.rem_euclid(60))
+                            .unwrap_or(open);
+                        let rows: Vec<serde_json::Value> = (0..limit)
+                            .map(|index| {
+                                let t = newest - index as i64 * 60;
+                                serde_json::json!([
+                                    t.to_string(),
+                                    "1",
+                                    "0.002",
+                                    "0.002",
+                                    "0.002",
+                                    "0.002",
+                                    "1",
+                                    false
+                                ])
+                            })
+                            .collect();
+                        Json(serde_json::Value::Array(rows))
+                    }
+                },
+            ),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let service = MarketPriceService::with_client(
+            reqwest::Client::new(),
+            format!("http://{address}/"),
+            format!("http://{address}/"),
+        );
+
+        // The mock refuses pages older than the floor Gate enforces. Reaching
+        // it must end the backfill, not mark the whole series stale.
+        let (candles, stale) = service.exchange_candles("EVER", "1m", 5_000).await;
+        assert!(!stale);
+        assert_eq!(candles.len(), 2_000);
     }
 }
