@@ -6,6 +6,10 @@ contracts, charges no service fee, and never sends EVER. A successful test deal
 is reported as `testnet_completed` with `ever_delivery: "skipped_testnet"`; it
 must not be treated as a completed production trade.
 
+The database migration adds `testnet_completed` to the P2P trade states and
+associates the `testnet_ever_skipped` event with its P2P trade. Without this
+migration, payment verification cannot persist the testnet completion.
+
 `TestStablecoin` is an unrestricted-mint ERC-20 with configurable decimals.
 Deploy it only to testnets: anybody can mint arbitrary balances, and the token
 has no value or issuer relationship to USDT or USDC.

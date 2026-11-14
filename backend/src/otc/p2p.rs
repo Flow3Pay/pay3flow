@@ -1827,10 +1827,9 @@ impl Service {
         };
         repo::p2p::advance_trade(&tx, &id, next, &payout_by).await?;
         if skip_ever {
-            repo::event(
+            repo::p2p::event(
                 &tx,
-                Some(id),
-                None,
+                &id,
                 "testnet_ever_skipped",
                 &json!({"ever_delivery":"skipped_testnet","reason":"testnet_mode"}),
             )

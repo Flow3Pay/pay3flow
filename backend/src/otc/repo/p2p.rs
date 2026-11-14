@@ -73,6 +73,7 @@ const ADVANCE_TRADE: &str =
 const INSERT_FEE: &str = "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,basis_asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,$5,6,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9::text::numeric,$10,'accrued',$11) ON CONFLICT (trade_id) DO NOTHING";
 const SETTLE_OFFER: &str =
     "UPDATE otc_public_offers SET state='settled' WHERE id=$1 AND state='taken'";
+const INSERT_P2P_EVENT: &str = "INSERT INTO otc_events(p2p_trade_id,kind,body) VALUES($1,$2,$3)";
 
 /// Advisory lock keyed on an offer; format the key at the call site.
 pub(crate) async fn lock_offer(client: &(impl GenericClient + Sync), key: &str) -> Result<()> {
@@ -516,6 +517,16 @@ pub(crate) async fn expire_delivery_trade(
 pub(crate) async fn overdue_trades(client: &(impl GenericClient + Sync)) -> Result<Vec<Uuid>> {
     let rows = client.query(OVERDUE_TRADES, &[]).await?;
     Ok(rows.iter().map(|row| row.get(0)).collect())
+}
+
+pub(crate) async fn event(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+    kind: &str,
+    body: &Value,
+) -> Result<()> {
+    client.execute(INSERT_P2P_EVENT, &[id, &kind, body]).await?;
+    Ok(())
 }
 
 /// Returns `(payer_actor, instructions, chain)`.

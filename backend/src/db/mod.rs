@@ -86,6 +86,10 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .await
         .context("apply OTC P2P UI migration")?;
     client
+        .batch_execute(include_str!("../../migrations/otc_p2p_testnet.sql"))
+        .await
+        .context("apply OTC P2P testnet migration")?;
+    client
         .batch_execute(include_str!("../../migrations/otc_history.sql"))
         .await?;
     client

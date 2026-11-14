@@ -313,7 +313,7 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
@@ -323,7 +323,8 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
             include_str!("../../migrations/otc_p2p_fee_collection.sql"),
             include_str!("../../migrations/otc_p2p_near_intents.sql"),
-            include_str!("../../migrations/otc_p2p_ui.sql")
+            include_str!("../../migrations/otc_p2p_ui.sql"),
+            include_str!("../../migrations/otc_p2p_testnet.sql")
         ))
         .await
         .unwrap();
@@ -1025,7 +1026,7 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
@@ -1035,7 +1036,8 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
             include_str!("../../migrations/otc_p2p_fee_collection.sql"),
             include_str!("../../migrations/otc_p2p_near_intents.sql"),
-            include_str!("../../migrations/otc_p2p_ui.sql")
+            include_str!("../../migrations/otc_p2p_ui.sql"),
+            include_str!("../../migrations/otc_p2p_testnet.sql")
         ))
         .await
         .unwrap();
@@ -1324,6 +1326,62 @@ async fn p2p_prepare_builds_the_payment_handoff_and_blocks_duplicates() {
     ));
     let visible = service.p2p_trades(&taker).await.unwrap();
     assert_eq!(visible["deals"][0]["attempts"].as_array().unwrap().len(), 1);
+    cleanup(service, task).await;
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_testnet_completion_persists_state_and_skip_event() {
+    let (mut service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let deal = service
+        .accept_offer(&taker, offer_id, "accept", acceptance())
+        .await
+        .unwrap();
+    let id = deal_id(&deal).await;
+    let prepared = service
+        .p2p_prepare(&taker, id, "pay-testnet", "payment")
+        .await
+        .unwrap();
+    let attempt = Uuid::parse_str(prepared["attempt"]["id"].as_str().unwrap()).unwrap();
+    let leg: super::model::Leg =
+        serde_json::from_value(prepared["attempt"]["instructions"]["leg"].clone()).unwrap();
+    let mut cfg = (*service.cfg).clone();
+    cfg.testnet_mode = true;
+    cfg.testnet_skip_ever = true;
+    service.cfg = Arc::new(cfg);
+
+    service
+        .credit_p2p(
+            attempt,
+            id,
+            "payment",
+            &Evidence {
+                chain: "ethereum".into(),
+                identity: format!("0x{}", "e".repeat(64)),
+                leg,
+                included_at: Utc::now(),
+                canonical: true,
+                finalized: true,
+                successful: true,
+                raw: json!({}),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(trade_state(&service, id).await, "testnet_completed");
+    let client = service.pool.get().await.unwrap();
+    let event = client
+        .query_one(
+            "SELECT kind,body FROM otc_events WHERE p2p_trade_id=$1",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(event.get::<_, String>(0), "testnet_ever_skipped");
+    assert_eq!(event.get::<_, Value>(1)["ever_delivery"], "skipped_testnet");
+    drop(client);
     cleanup(service, task).await;
 }
 
