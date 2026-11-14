@@ -162,6 +162,17 @@ impl CandleCache {
                 self.open = Some(row);
             }
         }
+        // A long-lived process keeps appending closed candles. The chart can
+        // never ask for more than the paging budget, so drop the oldest tail
+        // instead of letting the map grow without bound.
+        if self.closed.len() > MAX_SOURCE_CANDLES as usize {
+            while self.closed.len() > MAX_SOURCE_CANDLES as usize {
+                self.closed.pop_first();
+            }
+            if let Some((oldest, _)) = self.closed.first_key_value() {
+                self.oldest = Some(*oldest);
+            }
+        }
     }
 
     /// Cached candles in ascending order, capped at the newest `limit` rows.
@@ -1228,6 +1239,23 @@ mod tests {
         assert_eq!(candles.len(), 2_500);
         assert!(candles.windows(2).all(|pair| pair[1].t - pair[0].t == 60));
         assert!(calls.load(Ordering::SeqCst) >= 3);
+
+        // Asking for the whole paging budget must not let the cache grow past
+        // it; a long-lived process trims the oldest closed candles.
+        let (candles, stale) = service
+            .exchange_candles("EVER", "1m", MAX_SOURCE_CANDLES)
+            .await;
+        assert!(!stale);
+        assert_eq!(candles.len(), MAX_SOURCE_CANDLES as usize);
+        let cell = service
+            .candles
+            .read()
+            .await
+            .get("EVER:1m")
+            .cloned()
+            .unwrap();
+        let cache = cell.lock().await;
+        assert_eq!(cache.closed.len(), MAX_SOURCE_CANDLES as usize);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
