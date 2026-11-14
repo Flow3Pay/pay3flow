@@ -79,6 +79,35 @@ impl Service {
         }
         Ok(values.remove(0))
     }
+    pub(crate) async fn evm_agree_by(
+        &self,
+        net: &EvmNet,
+        method: &str,
+        params: Value,
+        project: fn(&Value) -> Result<Value>,
+    ) -> Result<Value> {
+        if net.rpcs.len() < 2 {
+            return Err(invalid("two independent Ethereum RPCs required"));
+        }
+        let mut values = Vec::new();
+        for url in net.rpcs.iter().take(2) {
+            values.push(self.evm_read(url, method, params.clone()).await?);
+        }
+        let first = if values[0].is_null() {
+            Value::Null
+        } else {
+            project(&values[0])?
+        };
+        let second = if values[1].is_null() {
+            Value::Null
+        } else {
+            project(&values[1])?
+        };
+        if first != second {
+            return Err(invalid("independent Ethereum RPC readings disagree"));
+        }
+        Ok(values.remove(0))
+    }
     pub(crate) async fn evm_chain_matches(&self, net: &EvmNet) -> Result<()> {
         if number(&self.evm_agree(net, "eth_chainId", json!([])).await?)?
             != u128::from(net.chain_id)

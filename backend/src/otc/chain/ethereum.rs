@@ -7,8 +7,162 @@ use super::{
     number, EvmNet,
 };
 use chrono::{TimeZone, Utc};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 const TRANSFER: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+fn normalize_rpc_value(value: &Value) -> Value {
+    match value {
+        Value::String(value) if value.starts_with("0x") => {
+            Value::String(value.to_ascii_lowercase())
+        }
+        Value::Array(values) => Value::Array(values.iter().map(normalize_rpc_value).collect()),
+        _ => value.clone(),
+    }
+}
+
+fn project_fields(value: &Value, fields: &[&str]) -> Result<Value> {
+    let value = value
+        .as_object()
+        .ok_or_else(|| invalid("Ethereum RPC observation is malformed"))?;
+    let mut projected = Map::new();
+    for field in fields {
+        let field_value = value
+            .get(*field)
+            .ok_or_else(|| invalid("Ethereum RPC observation is incomplete"))?;
+        projected.insert((*field).to_string(), normalize_rpc_value(field_value));
+    }
+    Ok(Value::Object(projected))
+}
+
+fn receipt_projection(receipt: &Value) -> Result<Value> {
+    let mut projected = project_fields(
+        receipt,
+        &["status", "transactionHash", "blockHash", "blockNumber"],
+    )?;
+    let logs = receipt["logs"]
+        .as_array()
+        .ok_or_else(|| invalid("Ethereum receipt logs are missing"))?
+        .iter()
+        .map(|log| {
+            let mut projected = project_fields(log, &["address", "topics", "data", "logIndex"])?;
+            projected
+                .as_object_mut()
+                .ok_or_else(|| invalid("Ethereum receipt log is malformed"))?
+                .insert(
+                    "removed".into(),
+                    Value::Bool(log["removed"].as_bool() == Some(true)),
+                );
+            Ok(projected)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    projected
+        .as_object_mut()
+        .ok_or_else(|| invalid("Ethereum receipt is malformed"))?
+        .insert("logs".into(), Value::Array(logs));
+    Ok(projected)
+}
+
+fn transaction_projection(transaction: &Value) -> Result<Value> {
+    project_fields(
+        transaction,
+        &["hash", "from", "to", "input", "nonce", "value"],
+    )
+}
+
+fn block_projection(block: &Value) -> Result<Value> {
+    project_fields(block, &["hash", "number", "timestamp"])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn receipt_projection_ignores_provider_specific_fields() {
+        let first = json!({
+            "status":"0x1",
+            "transactionHash":"0xAB",
+            "blockHash":"0xCD",
+            "blockNumber":"0x10",
+            "blobGasUsed":"0x0",
+            "logs":[{
+                "address":"0xAB",
+                "topics":["0xCD"],
+                "data":"0xEF",
+                "logIndex":"0x0",
+                "removed":false,
+                "transactionIndex":"0x1"
+            }]
+        });
+        let second = json!({
+            "status":"0x1",
+            "transactionHash":"0xab",
+            "blockHash":"0xcd",
+            "blockNumber":"0x10",
+            "logs":[{
+                "address":"0xab",
+                "topics":["0xcd"],
+                "data":"0xef",
+                "logIndex":"0x0"
+            }]
+        });
+
+        assert_eq!(
+            receipt_projection(&first).unwrap(),
+            receipt_projection(&second).unwrap()
+        );
+    }
+
+    #[test]
+    fn transaction_projection_ignores_provider_timestamp_but_keeps_transfer_fields() {
+        let first = json!({
+            "hash":"0xAB",
+            "from":"0xCD",
+            "to":"0xEF",
+            "input":"0x1234",
+            "nonce":"0x0",
+            "value":"0x0",
+            "blockTimestamp":"2026-01-01T00:00:00Z"
+        });
+        let second = json!({
+            "hash":"0xab",
+            "from":"0xcd",
+            "to":"0xef",
+            "input":"0x1234",
+            "nonce":"0x0",
+            "value":"0x0"
+        });
+
+        assert_eq!(
+            transaction_projection(&first).unwrap(),
+            transaction_projection(&second).unwrap()
+        );
+    }
+
+    #[test]
+    fn receipt_projection_keeps_transfer_logs_in_agreement() {
+        let first = json!({
+            "status":"0x1",
+            "transactionHash":"0xAB",
+            "blockHash":"0xCD",
+            "blockNumber":"0x10",
+            "logs":[{
+                "address":"0xAB",
+                "topics":["0xCD"],
+                "data":"0xEF",
+                "logIndex":"0x0"
+            }]
+        });
+        let mut second = first.clone();
+        second["logs"][0]["data"] = json!("0x00");
+
+        assert_ne!(
+            receipt_projection(&first).unwrap(),
+            receipt_projection(&second).unwrap()
+        );
+    }
+}
+
 pub(crate) fn transfer_data(leg: &Leg) -> Result<String> {
     let amount = super::super::amount::integer(&leg.amount)?;
     Ok(format!(
@@ -103,19 +257,30 @@ impl Service {
         }
         self.evm_chain_matches(net).await?;
         let observed = self
-            .evm_agree(net, "eth_getTransactionReceipt", json!([reference]))
+            .evm_agree_by(
+                net,
+                "eth_getTransactionReceipt",
+                json!([reference]),
+                receipt_projection,
+            )
             .await?;
         if observed.is_null() {
             return Ok(None);
         }
         let transaction = self
-            .evm_agree(net, "eth_getTransactionByHash", json!([reference]))
+            .evm_agree_by(
+                net,
+                "eth_getTransactionByHash",
+                json!([reference]),
+                transaction_projection,
+            )
             .await?;
         let block = self
-            .evm_agree(
+            .evm_agree_by(
                 net,
                 "eth_getBlockByNumber",
                 json!([observed["blockNumber"], false]),
+                block_projection,
             )
             .await?;
         let finalized = self.evm_finalized_height(net).await?;
@@ -234,6 +399,7 @@ impl Service {
                 Err(error) => last = Some(error),
             }
         }
+
         Err(last.unwrap_or_else(|| invalid("no EVM endpoint configured for balance reads")))
     }
     pub(crate) async fn locate_ethereum(
