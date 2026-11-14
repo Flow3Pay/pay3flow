@@ -123,6 +123,41 @@ export function markCandles(marks: MarketMark[], window: ChartWindow): MarketCan
   return candles;
 }
 
+/** A real exchange candle already folded onto the selected range's grid. */
+export interface ExchangeBar {
+  t: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
+
+/**
+ * Real exchange OHLC as chart bars. The provider answers every interval even
+ * when nothing traded, carrying the previous close forward; those zero-volume
+ * rows are kept so the price line spans the whole window instead of collapsing
+ * to the handful of buckets that happened to trade.
+ */
+export function marketCandles(candles: ExchangeBar[] | null | undefined): MarketCandle[] {
+  return (candles ?? []).flatMap(candle => {
+    const values = [candle.open, candle.high, candle.low, candle.close];
+    if (!values.every(value => Number.isFinite(value) && value > 0)) return [];
+    const volume = Number.isFinite(candle.volume) && (candle.volume ?? 0) > 0 ? candle.volume! : 0;
+    return [{ timestamp: candle.t * 1000, open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume }];
+  });
+}
+
+/**
+ * A series where most buckets had no trade reads better as one continuous
+ * price line; candle bodies would collapse into a dashed row of flat bars.
+ */
+export function sparseSeries(bars: { volume?: number }[]): boolean {
+  if (!bars.length) return false;
+  const traded = bars.filter(bar => (bar.volume ?? 0) > 0).length;
+  return traded * 2 < bars.length;
+}
+
 /** Price observations are the participant's own server-confirmed quotes. */
 export function quoteObservations(trades: Trade[]): QuoteObservation[] {
   return trades

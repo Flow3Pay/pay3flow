@@ -3,7 +3,7 @@
   import { locale } from "$lib/i18n";
   import { getHistory, rate, type History, type Trade } from "$lib/otc/service";
   import { saleRate, type OfferHistoryPoint } from "$lib/otc/public-offers";
-  import { candleIntervalLabel, chartRanges, chartWindow, chartWindows, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
+  import { candleIntervalLabel, chartRanges, chartWindow, chartWindows, markCandles, marketCandles, sparseSeries, type ChartRange, type ChartWindow } from "$lib/otc/market";
   import { dispose, init, registerLocale, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
 
   // klinecharts ships `minute: ""`, so a 15-minute series renders as a bare "15".
@@ -37,6 +37,7 @@
   let swapping = false;
   let chart: Chart | null = null;
   let signature = "";
+  let candleType: "candle_solid" | "area" = "candle_solid";
 
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: numbers = $locale === "ru" ? "ru-RU" : "en-US";
@@ -86,18 +87,14 @@
 
   /** Real exchange OHLC already folded onto the selected range's grid. */
   function marketBars(source: History | null): KLineData[] {
-    return (source?.market_candles?.candles ?? []).flatMap(candle => {
-      const values = [candle.open, candle.high, candle.low, candle.close];
-      if (!values.every(value => Number.isFinite(value) && value > 0)) return [];
-      return [{
-        timestamp: candle.t * 1000,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: Number.isFinite(candle.volume) && candle.volume > 0 ? candle.volume : 0,
-      }];
-    });
+    return marketCandles(source?.market_candles?.candles).map(bar => ({
+      timestamp: bar.timestamp,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume,
+    }));
   }
 
   function spotMarks(source: History | null): Mark[] {
@@ -111,12 +108,13 @@
 
   /**
    * Exchange candles are the primary series when they carry real traded OHLC.
-   * Flat zero-volume Gate buckets (common on short ranges) are rejected so the
-   * denser spot series can draw instead of white stripes. Desk prints come
-   * next, then spot, then publications — all on the selected range's grid.
+   * Quiet buckets are kept as their carried-forward price, so the series still
+   * covers the whole window rather than only the buckets that traded. Desk
+   * prints come next, then spot, then publications — all on the selected
+   * range's grid.
    */
   function buildLayout(source: History | null, prints: Mark[], window: ChartWindow): { bars: KLineData[]; window: ChartWindow } {
-    const market = marketBars(source).filter(bar => (bar.volume ?? 0) > 0);
+    const market = marketBars(source);
     if (market.length >= 2) return { bars: market, window };
     const server = serverBars(source);
     if (server.length >= 4) return { bars: server, window };
@@ -140,6 +138,12 @@
     const next = `${data.length}|${head?.timestamp ?? 0}|${head?.open ?? 0}|${tail?.timestamp ?? 0}|${tail?.close ?? 0}|${pricePrecision}|${window.from}|${window.bucketSeconds}|${window.buckets}`;
     if (next === signature) return;
     signature = next;
+    // A mostly quiet market is one price line, not a row of flat candle bodies.
+    const type = sparseSeries(data) ? "area" : "candle_solid";
+    if (type !== candleType) {
+      candleType = type;
+      chart.setStyles({ candle: { type } });
+    }
     chart.setSymbol({ ticker: "EVER/USDT", pricePrecision, volumePrecision: 2 });
     chart.setPeriod(periodFor(window.bucketSeconds));
     chart.resetData();
@@ -184,6 +188,15 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
 
+  /** Canvas gradients need a concrete colour, so expand a hex token. */
+  function fade(color: string, alpha: number): string {
+    const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (!match) return color;
+    const hex = match[1].length === 3 ? [...match[1]].map(digit => digit + digit).join("") : match[1];
+    const [r, g, b] = [0, 2, 4].map(index => parseInt(hex.slice(index, index + 2), 16));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   function buildStyles(): DeepPartial<Styles> {
     const good = css("--color-good", "#8dcb00");
     const danger = css("--color-danger", "var(--otc-sell, #d43d35)");
@@ -197,12 +210,23 @@
     return {
       grid: { show: true, horizontal: { show: true, color: border, size: 1, style: "dashed", dashedValue: [2, 4] }, vertical: { show: false } },
       candle: {
-        type: "candle_solid",
+        type: candleType,
         bar: {
           compareRule: "current_open",
           upColor: good, downColor: danger, noChangeColor: soft,
           upBorderColor: good, downBorderColor: danger, noChangeBorderColor: soft,
           upWickColor: good, downWickColor: danger, noChangeWickColor: soft,
+        },
+        area: {
+          lineSize: 2,
+          lineColor: good,
+          smooth: false,
+          value: "close",
+          backgroundColor: [
+            { offset: 0, color: fade(good, 0) },
+            { offset: 1, color: fade(good, 0.18) },
+          ],
+          point: { show: false },
         },
         priceMark: {
           show: true,

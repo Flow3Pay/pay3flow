@@ -15,9 +15,10 @@ use serde_json::{json, Value};
 /// divide the bucket: every source candle then belongs to exactly one bucket
 /// and every candle on screen spans the timeframe the reader selected.
 /// Timeframes the provider does not publish (3m, 16h) fold the next finer
-/// series, so their candles still cover their own span.
+/// series, so their candles still cover their own span. Gate has no 30s
+/// interval either, so the 30s grid folds its 10s series.
 const WINDOWS: &[(&str, i64, i64, &str)] = &[
-    ("30s", 30, 300, "30s"),
+    ("30s", 30, 300, "10s"),
     ("1m", 60, 300, "1m"),
     ("3m", 180, 300, "1m"),
     ("5m", 300, 300, "5m"),
@@ -31,6 +32,7 @@ const WINDOWS: &[(&str, i64, i64, &str)] = &[
 
 fn interval_seconds(interval: &str) -> i64 {
     match interval {
+        "10s" => 10,
         "30s" => 30,
         "1m" => 60,
         "5m" => 300,
@@ -209,9 +211,11 @@ struct MarketBucket {
     volume: f64,
 }
 
-/// Folds exchange candles into the exact window grid. Only buckets that the
-/// provider actually covered are returned, so a quiet market draws a gap
-/// instead of a fabricated flat candle.
+/// Folds exchange candles into the exact window grid. The provider returns a
+/// row for every interval, carrying the last traded price through quiet
+/// buckets; those rows are kept so the series spans the whole window instead
+/// of collapsing to the few buckets that happened to trade. Only buckets the
+/// provider did not cover at all stay absent.
 pub(crate) fn aggregate_market(candles: &[ExchangeCandle], window: &Window) -> Vec<Value> {
     let mut buckets = vec![MarketBucket::default(); window.buckets as usize];
     for candle in candles {
@@ -238,9 +242,6 @@ pub(crate) fn aggregate_market(candles: &[ExchangeCandle], window: &Window) -> V
             let (Some(open), Some(close)) = (bucket.open, bucket.close) else {
                 return None;
             };
-            if bucket.volume <= 0.0 {
-                return None;
-            }
             Some(json!({
                 "t": window.from.timestamp() + index as i64 * window.bucket_seconds,
                 "open": round(open, 8),
@@ -385,6 +386,28 @@ mod tests {
         assert_eq!(bars[0]["open"], json!(0.1));
         assert_eq!(bars[0]["close"], json!(0.11));
         assert_eq!(bars[2]["t"], json!(start + 7_200));
+    }
+
+    #[test]
+    fn quiet_provider_buckets_keep_the_series_continuous() {
+        let now = at(1_761_000_000);
+        let window = Window::parse("1h", now).unwrap();
+        let start = window.from.timestamp();
+        // Gate answers every interval with a carried-forward price even when
+        // nothing traded; dropping those rows would leave only a few candles.
+        let quiet = |t| ExchangeCandle {
+            t,
+            open: 0.1,
+            high: 0.1,
+            low: 0.1,
+            close: 0.1,
+            volume: 0.0,
+        };
+        let candles = [quiet(start), quiet(start + 3_600), quiet(start + 7_200)];
+        let bars = aggregate_market(&candles, &window);
+        assert_eq!(bars.len(), 3);
+        assert_eq!(bars[1]["volume"], json!(0.0));
+        assert_eq!(bars[1]["close"], json!(0.1));
     }
 
     #[test]

@@ -572,7 +572,7 @@ impl MarketPriceService {
         };
         if !matches!(
             interval,
-            "30s" | "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "8h" | "1d" | "7d"
+            "10s" | "30s" | "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "8h" | "1d" | "7d"
         ) {
             return (Vec::new(), true);
         }

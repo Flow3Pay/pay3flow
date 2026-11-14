@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { candleIntervalLabel, chartRanges, chartWindow, chartWindows, markCandles, percentChange, quoteObservations, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
+import { candleIntervalLabel, chartRanges, chartWindow, chartWindows, markCandles, marketCandles, percentChange, quoteObservations, sparseSeries, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
 import type { Trade } from "../src/lib/otc/service.ts";
 
 function units(value: string, precision: number) {
@@ -53,6 +53,23 @@ test("fallback candles keep the selected timeframe window and grid", () => {
   assert.equal(hour.length, 2);
   assert.equal(hour[0].open, 0.1);
   assert.deepEqual({ open: hour[1].open, close: hour[1].close }, { open: 0.2, close: 0.3 });
+});
+
+test("quiet exchange buckets keep the whole price history", () => {
+  const bars = marketCandles([
+    { t: 1_790_000_000, open: 0.1, high: 0.11, low: 0.09, close: 0.1, volume: 12 },
+    { t: 1_790_003_600, open: 0.1, high: 0.1, low: 0.1, close: 0.1, volume: 0 },
+    { t: 1_790_007_200, open: 0.1, high: 0.1, low: 0.1, close: 0.1, volume: 0 },
+  ]);
+  // The carried-forward provider rows stay, so the chart is not reduced to one candle.
+  assert.equal(bars.length, 3);
+  assert.equal(bars[1].volume, 0);
+  assert.equal(bars[2].close, 0.1);
+  // Most buckets without a trade read as one continuous price line.
+  assert.equal(sparseSeries(bars), true);
+  assert.equal(sparseSeries(bars.map(bar => ({ ...bar, volume: 1 }))), false);
+  // A malformed provider row is still dropped.
+  assert.equal(marketCandles([{ t: 1, open: 0, high: 0, low: 0, close: 0, volume: 0 }]).length, 0);
 });
 
 test("each timeframe uses its own server bucket layout", () => {
