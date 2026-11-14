@@ -18,6 +18,7 @@
   export let onBusyChange: (value: boolean) => void = () => {};
   export let onActiveCount: (count: number) => void = () => {};
   export let onActiveDeals: (deals: P2pDeal[]) => void = () => {};
+  export let onTestnetHistory: (deals: P2pDeal[]) => void = () => {};
 
   let dialog: HTMLDialogElement | undefined;
   let deals: P2pDeal[] = [];
@@ -32,6 +33,7 @@
   let autoTried = new Set<string>();
   let reportedActive = -1;
   let reportedActiveIds = "";
+  let reportedTestnetIds = "";
   type RouteAsset = { asset: string; symbol: "USDT" | "USDC"; network: string; asset_id: string; decimals: number; contract_address: string | null; destination_asset_ids: string[] };
   type DestinationAsset = Omit<RouteAsset, "destination_asset_ids">;
   let sourceAssets: RouteAsset[] = [];
@@ -74,6 +76,8 @@
   $: actionKind = deal ? p2pKind(deal) : null;
   $: actionAsset = actionKind ? p2pLegAsset(actionKind, deal?.terms.stablecoin) : "";
   $: outputNetwork = deal?.terms.stablecoin_network || "ethereum";
+  $: displayOutputNetwork = config?.testnet_mode && outputNetwork === "ethereum" ? "Sepolia testnet" : outputNetwork;
+  $: testnetCompleted = deal?.state === "testnet_completed";
   $: outputAsset = `${deal?.terms.stablecoin || "USDT"}@${outputNetwork}`;
   $: outputAssetId = deal?.terms.stablecoin_asset_id
     || destinationAssets.find(item => item.asset === outputAsset)?.asset_id
@@ -118,6 +122,12 @@
     if (ids !== reportedActiveIds) {
       reportedActiveIds = ids;
       onActiveDeals(active);
+    }
+    const testnetDeals = deals.filter(item => item.state === "testnet_completed");
+    const testnetIds = testnetDeals.map(item => item.id).join(",");
+    if (testnetIds !== reportedTestnetIds) {
+      reportedTestnetIds = testnetIds;
+      onTestnetHistory(testnetDeals);
     }
   }
   $: selfWallet = session?.wallets.find(wallet => wallet.chain === "everscale") || null;
@@ -262,7 +272,8 @@
       if (revision !== current || session?.token !== owner.token) return;
       deals = page.deals || [];
       const active = deals.filter(p2pActive);
-      if (selectedId && !active.some(item => item.id === selectedId)) {
+      const selectedDeal = deals.find(item => item.id === selectedId);
+      if (selectedId && !active.some(item => item.id === selectedId) && selectedDeal?.state !== "testnet_completed") {
         if (dialog?.open) dialog.close();
         selectedId = "";
         autoOpen = false;
@@ -555,6 +566,11 @@
         {say("Open for 24 hours · closes", "Открыта 24 часа · закроется")} {new Date(deal.expires_at).toLocaleString($locale === "ru" ? "ru-RU" : "en-US")}
       </p>
     {/if}
+    {#if testnetCompleted}
+      <p class="testnetResult" role="status" data-testid="otc-testnet-result">
+        {say("Sepolia test payment confirmed on-chain. No EVER was sent; the deal is complete for test purposes only.", "Тестовый платёж в Sepolia подтверждён в блокчейне. EVER не отправлялся; сделка завершена только в рамках теста.")}
+      </p>
+    {/if}
 
     <div class="people">
       <div class="person self">
@@ -585,11 +601,11 @@
       <span class="rail" aria-hidden="true"><span></span></span>
       <span class="token ever" class:done={payoutDone} class:active={p2pLegActive(deal, "payout")} class:failed={p2pLegFailed(deal, "payout")}>
         <img src="/icons/assets/ever.svg" alt="" width="24" height="24" />
-        <b>{deal.terms.ever_amount}</b>
+        <b>{testnetCompleted ? say("Skipped", "Пропущен") : deal.terms.ever_amount}</b>
       </span>
     </div>
     <div class="destination" data-testid="otc-stablecoin-destination">
-      <span>{say(`${deal.terms.stablecoin || "USDT"} recipient · ${outputNetwork}`, `Получатель ${deal.terms.stablecoin || "USDT"} · ${outputNetwork}`)}</span>
+      <span>{say(`${deal.terms.stablecoin || "USDT"} recipient · ${displayOutputNetwork}`, `Получатель ${deal.terms.stablecoin || "USDT"} · ${displayOutputNetwork}`)}</span>
       <div class="destinationRow">
         <code>{deal.terms.usdt_payee}</code>
         <button type="button" class="copyButton" aria-label={say("Copy recipient address", "Копировать адрес получателя")} on:click={() => void copyText(deal.terms.usdt_payee, "payee")}>
@@ -605,8 +621,8 @@
           <b>{legs.send.amount} {legs.send.asset}</b>
         </span>
         <span class="leg">
-          <small>{say("You receive", "Вы получаете")}</small>
-          <b>{legs.receive.amount} {legs.receive.asset}</b>
+          <small>{testnetCompleted ? say("EVER delivery", "Перевод EVER") : say("You receive", "Вы получаете")}</small>
+          <b>{testnetCompleted ? say("Not sent in test mode", "Не отправлялся в тестовом режиме") : `${legs.receive.amount} ${legs.receive.asset}`}</b>
         </span>
       </div>
     {/if}
@@ -658,7 +674,7 @@
         <label>{say("Pay with", "Оплатить активом")}
           <select bind:value={selectedSourceAsset} disabled={busy || locked}>
             {#each compatibleSourceAssets as source}
-              <option value={source.asset}>{source.symbol} · {source.network}</option>
+              <option value={source.asset}>{source.symbol} · {config?.testnet_mode && source.network === "ethereum" ? "Sepolia testnet" : source.network}</option>
             {/each}
           </select>
         </label>
@@ -667,7 +683,7 @@
         {:else if selectedSource}
           <p class="routeNote">{say(`The quote delivers ${netAmount} ${deal?.terms.stablecoin || "USDT"} to the seller; ${feeAmount} USDT is routed separately to the service-fee address on ${outputNetwork}.`, `Котировка доставит продавцу ${netAmount} ${deal?.terms.stablecoin || "USDT"}; ${feeAmount} USDT отдельно переводится на адрес комиссии в сети ${outputNetwork}.`)}</p>
         {:else}
-          <p class="routeNote">{assetLoadError || say("No compatible production payment networks are available.", "Нет доступных production-сетей для оплаты.")}</p>
+          <p class="routeNote">{assetLoadError || (config?.testnet_mode ? say("No compatible Sepolia test assets are available.", "Нет совместимых тестовых токенов Sepolia.") : say("No compatible production payment networks are available.", "Нет доступных production-сетей для оплаты."))}</p>
         {/if}
         <div class="routeActions">
           <button type="button" class="confirmButton" disabled={busy || locked || !selectedSource || (selectedSource.asset === outputAsset && !directPaymentAvailable)} on:click={() => void preparePayment()}>
@@ -787,6 +803,7 @@
   .leg small { color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; }
   .leg b { overflow:hidden; font-family:var(--font-mono); font-size:11px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
   .notice { margin:12px 26px 0; color:var(--color-text-soft); font-size:11px; line-height:1.45; text-align:center; }
+  .testnetResult { margin:12px 26px 0; padding:10px 12px; border:1px solid var(--color-warn); border-radius:9px; color:var(--color-text); font-size:11px; line-height:1.5; text-align:center; }
   .error { margin:14px 26px 0; color:var(--color-danger); font-size:11px; line-height:1.45; text-align:center; }
   .action { padding:22px 26px 26px; }
   .routePicker,.routeQuote { display:grid; gap:10px; margin:18px 26px 0; padding:13px; border:1px solid var(--color-border); border-radius:12px; background:var(--color-panel); }

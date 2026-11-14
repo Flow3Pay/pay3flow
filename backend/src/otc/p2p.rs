@@ -143,7 +143,12 @@ impl Service {
     /// stays unresolved instead of confirming a transfer on another network.
     fn p2p_net(&self, body: &Value) -> Result<super::chain::EvmNet> {
         let network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
-        let chain_id = super::config::evm_chain_id(network)
+        let configured_chain = if network == "ethereum" && self.cfg.testnet_mode {
+            Some(self.cfg.p2p_chain())
+        } else {
+            super::config::evm_chain_id(network)
+        };
+        let chain_id = configured_chain
             .filter(|expected| {
                 body["stablecoin_chain_id"]
                     .as_u64()
@@ -240,10 +245,12 @@ impl Service {
             .filter(|policy| policy.is_object())
             .cloned()
             .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis, stablecoin.symbol()));
-        fee_policy["version"] = json!(super::public_offers::P2P_FEE_VERSION);
-        fee_policy["asset"] = json!("USDT");
-        fee_policy["payer"] = json!("stablecoin_sender");
-        fee_policy["withheld"] = json!(true);
+        if !self.cfg.testnet_mode {
+            fee_policy["version"] = json!(super::public_offers::P2P_FEE_VERSION);
+            fee_policy["asset"] = json!("USDT");
+            fee_policy["payer"] = json!("stablecoin_sender");
+            fee_policy["withheld"] = json!(true);
+        }
         let direction: Direction = serde_json::from_value(terms["direction"].clone())?;
         let fee_payer_actor = if direction == Direction::Sell {
             actor
@@ -251,9 +258,19 @@ impl Service {
             owner.as_str()
         };
         let offer_network = terms["stablecoin_network"].as_str().unwrap_or("ethereum");
-        if self.cfg.p2p_chain() != 1
-            || terms["ethereum_chain_id"] != json!(1)
-            || (offer_network == "ethereum" && token_contract != stablecoin.contract())
+        let expected_chain = if self.cfg.testnet_mode {
+            self.cfg.p2p_chain()
+        } else {
+            1
+        };
+        if self.cfg.p2p_chain() != expected_chain
+            || terms["ethereum_chain_id"].as_u64() != Some(expected_chain)
+            || (offer_network == "ethereum" && token_contract != stablecoin.contract(&self.cfg))
+            || (self.cfg.testnet_mode
+                && (offer_network != "ethereum"
+                    || terms["stablecoin_chain_id"].as_u64() != Some(expected_chain)
+                    || terms["ever_delivery"] != json!("skipped_testnet")
+                    || terms["fee_policy"]["fee_units"] != json!("0")))
         {
             return Err(Error::Conflict(
                 "offer was published for a different payment network".into(),
@@ -265,6 +282,19 @@ impl Service {
         };
         let (output_network, output_asset_id, usdt_payee) =
             accepted_destination(direction, &terms, &default_usdt_payee, destination)?;
+        if self.cfg.testnet_mode
+            && (output_network != "ethereum"
+                || output_asset_id.as_deref()
+                    != Some(
+                        self.cfg
+                            .p2p_stablecoin_asset_id(stablecoin.symbol())
+                            .as_str(),
+                    ))
+        {
+            return Err(Error::Conflict(
+                "testnet deals must use the configured Sepolia token directly".into(),
+            ));
+        }
         let (payer_network, payer_asset_id) = if direction == Direction::Buy {
             (
                 offer_network.to_string(),
@@ -274,14 +304,18 @@ impl Service {
             ("ethereum".to_string(), None)
         };
         let mut output_contract = token_contract.to_string();
-        let mut fee_usdt_contract = if output_network == "ethereum" {
+        let mut fee_usdt_contract = if output_network == "ethereum" && !self.cfg.testnet_mode {
             Some(self.cfg.p2p_usdt().to_string())
         } else {
             None
         };
         let mut fee_usdt_asset_id = None;
-        let output_chain_id = super::config::evm_chain_id(&output_network);
-        if output_network != "ethereum" || output_asset_id.is_some() {
+        let output_chain_id = if self.cfg.testnet_mode {
+            Some(self.cfg.p2p_chain())
+        } else {
+            super::config::evm_chain_id(&output_network)
+        };
+        if !self.cfg.testnet_mode && (output_network != "ethereum" || output_asset_id.is_some()) {
             let provider = self.near_intents.as_ref().ok_or(Error::RouteUnavailable)?;
             let output_asset = Asset::new(stablecoin.symbol(), Some(&output_network))
                 .map_err(|_| invalid("unsupported stablecoin receiving network"))?;
@@ -294,10 +328,9 @@ impl Service {
             if !token.symbol.eq_ignore_ascii_case(stablecoin.symbol())
                 || token.decimals != Some(6)
                 || (output_network == "ethereum"
-                    && token
-                        .contract_address
-                        .as_deref()
-                        .is_none_or(|address| !address.eq_ignore_ascii_case(stablecoin.contract())))
+                    && token.contract_address.as_deref().is_none_or(|address| {
+                        !address.eq_ignore_ascii_case(stablecoin.contract(&self.cfg))
+                    }))
             {
                 return Err(invalid("selected network token does not match the deal"));
             }
@@ -335,7 +368,9 @@ impl Service {
                     || source_token
                         .contract_address
                         .as_deref()
-                        .is_none_or(|address| !address.eq_ignore_ascii_case(stablecoin.contract()))
+                        .is_none_or(|address| {
+                            !address.eq_ignore_ascii_case(stablecoin.contract(&self.cfg))
+                        })
                     || !provider.route_available(&source_asset, &output_asset).await
                 {
                     return Err(Error::RouteUnavailable);
@@ -364,8 +399,9 @@ impl Service {
             "fee_usdt_contract": fee_usdt_contract,
             "fee_usdt_asset_id": fee_usdt_asset_id,
             "stablecoin_chain_id": output_chain_id,
-            "ethereum_chain_id": 1,
-            "ever_network_id": 42,
+            "ethereum_chain_id": self.cfg.p2p_chain(),
+            "ever_network_id": self.cfg.everscale_global_id,
+            "ever_delivery": if self.cfg.testnet_mode { "skipped_testnet" } else { "onchain" },
             "fee_policy": fee_policy,
         });
         let id = Uuid::new_v4();
@@ -492,6 +528,11 @@ impl Service {
         request: impl Into<DealPrepareRequest>,
     ) -> Result<Value> {
         let request = request.into();
+        if self.cfg.testnet_mode && request.kind != "payment" {
+            return Err(Error::Conflict(
+                "testnet mode only accepts stablecoin payment transfers; EVER is skipped".into(),
+            ));
+        }
         let _ = request.source_amount.as_deref();
         if request.kind == "near-intents-fee" {
             return self.p2p_prepare_near_intents_fee(actor, id, key).await;
@@ -744,7 +785,7 @@ impl Service {
             }
             None => Value::Null,
         };
-        let fee_preflight = if kind == "payment" {
+        let fee_preflight = if kind == "payment" && !self.cfg.testnet_mode {
             let source_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
             let source_symbol = body["stablecoin"].as_str().unwrap_or("USDT");
             let source_asset = Asset::new(source_symbol, Some(source_network))?;
@@ -981,7 +1022,9 @@ impl Service {
                 && destination_token
                     .contract_address
                     .as_deref()
-                    .is_none_or(|address| !address.eq_ignore_ascii_case(stablecoin.contract())))
+                    .is_none_or(|address| {
+                        !address.eq_ignore_ascii_case(stablecoin.contract(&self.cfg))
+                    }))
         {
             return Err(invalid("destination token precision is unsupported"));
         }
@@ -1763,7 +1806,10 @@ impl Service {
             return Ok(());
         }
         repo::p2p::verify_attempt(&tx, &attempt, &serde_json::to_value(evidence)?).await?;
-        let (next, payout_by) = if kind == "payment" {
+        let skip_ever = kind == "payment" && self.cfg.testnet_mode && self.cfg.testnet_skip_ever;
+        let (next, payout_by) = if kind == "payment" && skip_ever {
+            ("testnet_completed", None)
+        } else if kind == "payment" {
             let deal_deadline =
                 row.get::<_, DateTime<Utc>>("created_at") + Duration::hours(DEAL_LIFETIME_HOURS);
             (
@@ -1780,7 +1826,17 @@ impl Service {
             )
         };
         repo::p2p::advance_trade(&tx, &id, next, &payout_by).await?;
-        if kind == "payment" {
+        if skip_ever {
+            repo::event(
+                &tx,
+                Some(id),
+                None,
+                "testnet_ever_skipped",
+                &json!({"ever_delivery":"skipped_testnet","reason":"testnet_mode"}),
+            )
+            .await?;
+        }
+        if kind == "payment" && !skip_ever {
             // Accrue the fee once payment is verified, before the seller can
             // release EVER. This lets the fee be collected before payout.
             let basis = amount::integer(
@@ -1833,7 +1889,7 @@ impl Service {
             )
             .await?;
         }
-        if next == "completed" {
+        if matches!(next, "completed" | "testnet_completed") {
             repo::p2p::settle_offer(&tx, &offer_id).await?;
         }
         tracing::info!(trade=%id, kind, state=next, "otc.p2p.leg_verified");

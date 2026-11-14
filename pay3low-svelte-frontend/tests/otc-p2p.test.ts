@@ -112,7 +112,7 @@ test("an unresolved attempt blocks another signature and a failed one retries", 
 });
 
 test("terminal deals do not render as active", () => {
-  for (const state of ["completed", "expired", "cancelled"]) {
+  for (const state of ["completed", "testnet_completed", "expired", "cancelled"]) {
     assert.equal(p2pActive(deal({ state })), false);
     assert.equal(p2pAction(deal({ state })), null);
   }
@@ -134,6 +134,11 @@ test("leg visuals only mark the leg that is actually open", () => {
   const completed = deal({ ...both, state: "completed" });
   assert.equal(p2pLegDone(completed, "payment"), true);
   assert.equal(p2pLegDone(completed, "payout"), true);
+
+  const testnetCompleted = deal({ ...both, state: "testnet_completed" });
+  assert.equal(p2pLegDone(testnetCompleted, "payment"), true);
+  assert.equal(p2pLegDone(testnetCompleted, "payout"), false);
+  assert.equal(p2pAction(testnetCompleted), null);
 });
 
 test("the modal names the exact token each viewer sends and receives", () => {

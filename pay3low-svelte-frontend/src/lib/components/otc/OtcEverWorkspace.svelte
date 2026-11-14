@@ -38,6 +38,7 @@
   let tab: "trades" | "orders" | "history" = "trades", now = Date.now();
   let offersBusy = false;
   let p2pActiveDeals: P2pDeal[] = [];
+  let p2pTestnetDeals: P2pDeal[] = [];
   $: p2pActiveCount = p2pActiveDeals.length;
   let offerBook: OtcDeskBook;
   let dealModal: OtcDealModal | null = null;
@@ -299,6 +300,9 @@
 <OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { tab = "trades"; }} let:ticket let:offers let:mine let:history={offerHistory} let:offerError let:onCancel>
 <section class="otcWorkspace" data-testid="otc-workspace" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>
   <div class="pageIntro" class:localeLong={$locale !== "en"}><ScrambleHeadline phrases={copy.heroPhrases} active={introCompleted} /></div>
+  {#if config?.testnet_mode}
+    <p class="testnetNotice" role="status" data-testid="otc-testnet-warning">{say("TEST NETWORK · Sepolia USDT/USDC transfers are verified on-chain. No EVER is sent and no production funds are involved.", "ТЕСТОВАЯ СЕТЬ · Переводы USDT/USDC в Sepolia проверяются в блокчейне. EVER не отправляется, реальные средства не используются.")}</p>
+  {/if}
   <OtcTerminal chartPanel={false} bookPanel={false} bookWide selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} {bookTitle} stats={[
     {label:say("Desk","Деск"),value:config?.desk_name || "—"},
     {label:config?.public_offers_available ? say("Open offers","Открытые офферы") : say("Desk offers","Предложения деска"),value:String(listings.length + offers.length),secondary:true},
@@ -315,6 +319,17 @@
           {#if tab === "trades"}
             <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
           {:else}
+            {#if tab === "history" && p2pTestnetDeals.length}
+              <section class="testnetHistory" aria-label={say("Sepolia test history", "История тестов Sepolia")} data-testid="otc-testnet-history">
+                <h3>{say("Sepolia test payments", "Тестовые платежи Sepolia")}</h3>
+                {#each p2pTestnetDeals as item (item.id)}
+                  <button type="button" on:click={() => dealModal?.openDeal(item.id)}>
+                    <span>{item.terms.usdt_amount} {item.terms.stablecoin || "USDT"} · {say("payment confirmed", "платёж подтверждён")}</span>
+                    <strong>{say("EVER skipped", "EVER пропущен")}</strong>
+                  </button>
+                {/each}
+              </section>
+            {/if}
             {#if tab === "orders" && p2pActiveCount}
               <div class="activeDealRow">
                 {#if p2pActiveCount === 1}
@@ -350,8 +365,8 @@
       </section>
     </svelte:fragment>
   </OtcTerminal>
-  <OtcDealModal bind:this={dealModal} {config} {session} locked={busy || offersBusy} onError={message => error = message} onBusyChange={value => busy = value} onActiveDeals={deals => p2pActiveDeals = deals} />
-  <p class="risk">{config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
+  <OtcDealModal bind:this={dealModal} {config} {session} locked={busy || offersBusy} onError={message => error = message} onBusyChange={value => busy = value} onActiveDeals={deals => p2pActiveDeals = deals} onTestnetHistory={deals => p2pTestnetDeals = deals} />
+  <p class="risk">{config?.testnet_mode ? say("Sepolia-only test mode: stablecoin payments are checked on-chain, there is no service fee, and no EVER payment or payout is made. Do not use this mode for production.", "Тестовый режим только для Sepolia: платежи стейблкоинами проверяются в блокчейне, комиссии нет, EVER не переводится. Не используйте этот режим в production.") : config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
   {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
 <OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} onSelect={() => {}} busy={busy || offersBusy} {config} />
@@ -375,6 +390,11 @@
   .titleAccent { position: relative; z-index: 0; display: inline-block; margin-inline-start: .06em; }
   .titleAccent::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg); }
   .risk { margin: 16px 0 0; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
+  .testnetNotice { margin: -16px 0 20px; padding: 10px 14px; border: 1px solid var(--color-warn); border-radius: 10px; color: var(--color-text); font-size: 12px; line-height: 1.5; text-align: center; }
+  .testnetHistory { display:grid; gap:8px; padding:12px var(--otc-panel-padding); border-bottom:1px solid var(--color-border); }
+  .testnetHistory h3 { margin:0; color:var(--color-text-soft); font-size:12px; }
+  .testnetHistory button { display:flex; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--color-border); border-radius:9px; background:var(--color-panel); color:var(--color-text); font:inherit; text-align:left; cursor:pointer; }
+  .testnetHistory strong { color:var(--color-warn); font-size:11px; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
   .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 15px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
   .activityTabs { position: relative; display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; margin: 16px var(--otc-panel-padding) 8px; padding: 4px; border-radius: 10px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-border); }

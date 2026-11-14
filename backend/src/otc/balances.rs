@@ -64,7 +64,11 @@ impl Service {
                 self.balance(
                     "wallet",
                     &read.symbol,
-                    network_label(&read.network),
+                    if self.cfg.testnet_mode && read.network == "ethereum" {
+                        "Sepolia testnet"
+                    } else {
+                        network_label(&read.network)
+                    },
                     STABLECOIN_DECIMALS,
                     read.units,
                 )
@@ -78,6 +82,9 @@ impl Service {
     /// chain readers cover. A pair with no reader is still listed so the user
     /// sees a labelled gap instead of a wrong zero.
     async fn stablecoin_reads(&self, actor: &str) -> Vec<Read> {
+        if self.cfg.testnet_mode {
+            return self.legacy_reads(actor).await;
+        }
         let Some(provider) = self.near_intents.as_ref() else {
             return self.legacy_reads(actor).await;
         };
@@ -104,14 +111,7 @@ impl Service {
         let mut reads = Vec::with_capacity(pairs.len());
         for (network, symbol) in pairs {
             let contract = if network == "ethereum" {
-                Some(
-                    if symbol == "USDC" {
-                        super::config::USDC
-                    } else {
-                        super::config::USDT
-                    }
-                    .to_string(),
-                )
+                Some(self.cfg.p2p_stablecoin_contract(&symbol).to_string())
             } else {
                 provider
                     .unique_token_for_asset(&Asset {
@@ -147,12 +147,7 @@ impl Service {
     async fn legacy_reads(&self, actor: &str) -> Vec<Read> {
         let mut reads = Vec::with_capacity(STABLECOINS.len());
         for symbol in STABLECOINS {
-            let contract = if symbol == "USDC" {
-                super::config::USDC
-            } else {
-                self.cfg.p2p_usdt()
-            }
-            .to_string();
+            let contract = self.cfg.p2p_stablecoin_contract(symbol).to_string();
             let service = self.clone();
             let holder_actor = actor.to_string();
             let units = async move {

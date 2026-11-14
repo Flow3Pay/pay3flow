@@ -6,6 +6,7 @@ export interface OtcEvmNetwork {
 
 const EVM_NETWORKS: Record<number, { name: string; label: string }> = {
   1: { name: "ethereum", label: "Ethereum mainnet" },
+  11155111: { name: "ethereum-sepolia", label: "Sepolia testnet" },
   10: { name: "optimism", label: "Optimism" },
   56: { name: "bnb-smart-chain", label: "BNB Smart Chain" },
   100: { name: "gnosis", label: "Gnosis" },

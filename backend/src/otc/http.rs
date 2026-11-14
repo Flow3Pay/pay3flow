@@ -112,7 +112,7 @@ async fn config(State(state): State<AppState>) -> Json<Value> {
     .flatten()
     .collect();
     Json(
-        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"p2p_available":state.otc.p2p_available(),"ethereum_chain_id":cfg.ethereum_chain_id,"usdt_contract":cfg.usdt_contract,"usdc_contract":super::config::USDC,"everscale_multisig_available":state.otc.multisig_available(),"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"wallet_verification_days":super::repo::WALLET_VERIFICATION_DAYS,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","p2p_ethereum_chain_id":cfg.p2p_chain(),"p2p_usdt_contract":cfg.p2p_usdt(),"p2p_usdc_contract":super::config::USDC,"p2p_usdt_network":"Ethereum","profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The payer of each leg is responsible for it; there is no atomic swap or automatic rollback."}}),
+        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"p2p_available":state.otc.p2p_available(),"testnet_mode":cfg.testnet_mode,"testnet_skip_ever":cfg.testnet_skip_ever,"ethereum_chain_id":cfg.ethereum_chain_id,"usdt_contract":cfg.usdt_contract,"usdc_contract":cfg.p2p_usdc(),"everscale_multisig_available":state.otc.multisig_available(),"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"wallet_verification_days":super::repo::WALLET_VERIFICATION_DAYS,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":if cfg.testnet_mode {"Sepolia"} else {"Ethereum"},"p2p_ethereum_chain_id":cfg.p2p_chain(),"p2p_usdt_contract":cfg.p2p_usdt(),"p2p_usdc_contract":cfg.p2p_usdc(),"p2p_usdt_network":if cfg.testnet_mode {"Sepolia"} else {"Ethereum"},"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.testnet_mode{"Sepolia test mode: stablecoin payment is verified on-chain; EVER is skipped and is not sent."}else if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The payer of each leg is responsible for it; there is no atomic swap or automatic rollback."}}),
     )
 }
 async fn link(
@@ -271,6 +271,38 @@ async fn p2p_trades(State(state): State<AppState>, headers: HeaderMap) -> Result
     Ok(Json(state.otc.p2p_trades(&actor).await?))
 }
 async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
+    if state.otc.cfg.testnet_mode {
+        let mut assets = Vec::new();
+        let mut destination_assets = Vec::new();
+        let mut buy_destination_assets = Vec::new();
+        for symbol in ["USDT", "USDC"] {
+            let asset_id = state.otc.cfg.p2p_stablecoin_asset_id(symbol);
+            let destination = json!({
+                "asset": format!("{symbol}@ethereum"),
+                "symbol": symbol,
+                "network": "ethereum",
+                "asset_id": asset_id,
+                "decimals": 6,
+                "contract_address": state.otc.cfg.p2p_stablecoin_contract(symbol),
+            });
+            assets.push(json!({
+                "asset": format!("{symbol}@ethereum"),
+                "symbol": symbol,
+                "network": "ethereum",
+                "asset_id": asset_id,
+                "decimals": 6,
+                "contract_address": state.otc.cfg.p2p_stablecoin_contract(symbol),
+                "destination_asset_ids": [asset_id],
+            }));
+            destination_assets.push(destination.clone());
+            buy_destination_assets.push(destination);
+        }
+        return Json(json!({
+            "assets": assets,
+            "destination_assets": destination_assets,
+            "buy_destination_assets": buy_destination_assets,
+        }));
+    }
     let Some(provider) = state.otc.near_intents.as_ref() else {
         return Json(json!({"assets":[],"destination_assets":[],"buy_destination_assets":[]}));
     };

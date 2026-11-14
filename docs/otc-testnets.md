@@ -1,8 +1,10 @@
-# OTC testnet token preparation
+# OTC testnet settlement
 
-This branch adds an EVM-only faucet token and a deployment helper for isolated
-EVM testnets. It does **not** enable testnets in the OTC backend and does not
-make the current production OTC flow safe to use with test assets.
+This branch has an isolated Sepolia-only P2P mode for testing actual USDT/USDC
+ERC-20 sends and on-chain receipt verification. It never uses mainnet stablecoin
+contracts, charges no service fee, and never sends EVER. A successful test deal
+is reported as `testnet_completed` with `ever_delivery: "skipped_testnet"`; it
+must not be treated as a completed production trade.
 
 `TestStablecoin` is an unrestricted-mint ERC-20 with configurable decimals.
 Deploy it only to testnets: anybody can mint arbitrary balances, and the token
@@ -80,13 +82,43 @@ test tokens can be minted directly to a test wallet by calling their public
 mint functions. Test tokens have no market value and must never be treated as
 real stablecoins.
 
-## OTC testnet limitations
+## Enabling isolated Sepolia P2P mode
 
-The OTC backend still binds settlement to Everscale mainnet and Ethereum
-mainnet, and intentionally rejects testnet offers. A testnet OTC mode needs
-separate wallet-login, chain-observer, fee, and Everscale testnet wiring before
-it can accept or confirm payments. This EVM token deployment helper alone
-cannot make those trades safe.
+Use only a test deployment and a test database. Set `testnet_mode` and
+`testnet_skip_ever` to `true`, leave standard OTC `enabled` false, and configure
+both `ethereum_rpc` and `p2p_ethereum_rpc` with two independent HTTPS Sepolia
+RPC URLs. Enable `public_offers_enabled` and `p2p_enabled` only on that test
+deployment. The backend rejects any non-Sepolia chain ID or token contract and
+does not expose other direct-payment assets in this mode.
+
+The relevant `OTC_CONFIG_FILE` values are:
+
+```json
+{
+  "enabled": false,
+  "public_offers_enabled": true,
+  "p2p_enabled": true,
+  "testnet_mode": true,
+  "testnet_skip_ever": true,
+  "ethereum_chain_id": 11155111,
+  "usdt_contract": "0xf9c9730cb703512a754a4dd8bffa640a3aa670e2",
+  "p2p_ethereum_chain_id": 11155111,
+  "p2p_usdt_contract": "0xf9c9730cb703512a754a4dd8bffa640a3aa670e2",
+  "p2p_usdc_contract": "0x2b11dbbb6c8dab48588cc13e8b20ab4d431f5e9e",
+  "ethereum_rpc": ["https://sepolia-rpc-a.example", "https://sepolia-rpc-b.example"],
+  "p2p_ethereum_rpc": ["https://sepolia-rpc-a.example", "https://sepolia-rpc-b.example"]
+}
+```
+
+Keep the existing identity/relay settings needed for wallet login and offers.
+The wallet doing the payment must be connected to Sepolia and funded with
+testnet ETH for gas. The OTC service validates the actual ERC-20 transfer on
+Sepolia. Test mode does not exercise NEAR Intents, does not reserve or transfer
+EVER, and is not safe to expose as a production OTC market.
+
+The standard OTC quote path remains disabled in this mode. This feature is
+limited to Sepolia P2P offers; it does not enable the separately deployed
+TRON/TON/Aptos/Sui tokens for OTC settlement.
 
 Solana, NEAR, and native Everscale test assets are not provided here. NEAR
 Intents testnet swap support is outside this setup; test tokens on independent

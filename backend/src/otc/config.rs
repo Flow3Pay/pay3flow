@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 
 pub(crate) const USDT: &str = "0xdac17f958d2ee523a2206206994597c13d831ec7";
 pub(crate) const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+pub(crate) const SEPOLIA_CHAIN_ID: u64 = 11155111;
+pub(crate) const SEPOLIA_USDT: &str = "0xf9c9730cb703512a754a4dd8bffa640a3aa670e2";
+pub(crate) const SEPOLIA_USDC: &str = "0x2b11dbbb6c8dab48588cc13e8b20ab4d431f5e9e";
 pub(crate) const PROFILE: &str = "pay3flow-otc-fep0837-v1";
 fn default_evm_chain() -> u64 {
     1
@@ -21,6 +24,10 @@ pub(crate) struct Config {
     pub public_offers_enabled: bool,
     #[serde(default)]
     pub p2p_enabled: bool,
+    #[serde(default)]
+    pub testnet_mode: bool,
+    #[serde(default)]
+    pub testnet_skip_ever: bool,
     pub demo: bool,
     #[serde(default = "default_evm_chain")]
     pub ethereum_chain_id: u64,
@@ -33,6 +40,8 @@ pub(crate) struct Config {
     pub p2p_ethereum_chain_id: Option<u64>,
     #[serde(default)]
     pub p2p_usdt_contract: Option<String>,
+    #[serde(default)]
+    pub p2p_usdc_contract: Option<String>,
     #[serde(default)]
     pub p2p_ethereum_rpc: Vec<String>,
     #[serde(default)]
@@ -85,12 +94,15 @@ impl Default for Config {
             enabled: false,
             public_offers_enabled: false,
             p2p_enabled: false,
+            testnet_mode: false,
+            testnet_skip_ever: false,
             demo: false,
             ethereum_chain_id: default_evm_chain(),
             usdt_contract: default_usdt_contract(),
             p2p_ever_fee_reserve: default_ever_fee_reserve(),
             p2p_ethereum_chain_id: None,
             p2p_usdt_contract: None,
+            p2p_usdc_contract: None,
             p2p_ethereum_rpc: Vec::new(),
             p2p_evm_rpcs: BTreeMap::new(),
             p2p_chain_rpcs: BTreeMap::new(),
@@ -148,6 +160,7 @@ impl Config {
         };
         cfg.usdt_contract = cfg.usdt_contract.to_ascii_lowercase();
         cfg.p2p_usdt_contract = cfg.p2p_usdt_contract.map(|c| c.to_ascii_lowercase());
+        cfg.p2p_usdc_contract = cfg.p2p_usdc_contract.map(|c| c.to_ascii_lowercase());
         // A view-only offers deployment must keep booting with whatever network
         // material it already has; only the flags that move funds are enforced.
         if cfg.enabled || cfg.p2p_enabled {
@@ -159,8 +172,46 @@ impl Config {
         Ok(cfg)
     }
     pub fn validate_network(&self) -> Result<()> {
-        self.check_evm_network(self.ethereum_chain_id, &self.usdt_contract)?;
-        self.check_evm_network(self.p2p_chain(), self.p2p_usdt())?;
+        if self.testnet_mode {
+            if self.enabled
+                || !self.testnet_skip_ever
+                || self.ethereum_chain_id != SEPOLIA_CHAIN_ID
+                || self.p2p_chain() != SEPOLIA_CHAIN_ID
+                || self.usdt_contract != SEPOLIA_USDT
+                || self.p2p_usdt() != SEPOLIA_USDT
+                || self.p2p_usdc() != SEPOLIA_USDC
+                || !self.p2p_evm_rpcs.is_empty()
+                || !self.p2p_chain_rpcs.is_empty()
+                || self.ethereum_rpc.len() < 2
+                || self.ethereum_rpc[0] == self.ethereum_rpc[1]
+                || self
+                    .ethereum_rpc
+                    .iter()
+                    .any(|url| !url.starts_with("https://"))
+            {
+                return Err(invalid("invalid isolated Sepolia OTC test configuration"));
+            }
+            let rpcs = self.p2p_rpc();
+            if rpcs.len() < 2
+                || rpcs[0] == rpcs[1]
+                || rpcs.iter().any(|url| !url.starts_with("https://"))
+            {
+                return Err(invalid(
+                    "testnet OTC requires two independent HTTPS Sepolia RPC endpoints",
+                ));
+            }
+        } else {
+            if self.testnet_skip_ever {
+                return Err(invalid("EVER can only be skipped in OTC testnet mode"));
+            }
+            self.check_evm_network(self.ethereum_chain_id, &self.usdt_contract)?;
+            self.check_evm_network(self.p2p_chain(), self.p2p_usdt())?;
+            if self.p2p_usdc() != USDC {
+                return Err(invalid(
+                    "Ethereum mainnet must use the canonical USDC contract",
+                ));
+            }
+        }
         super::amount::units(&self.p2p_ever_fee_reserve, 9)?;
         for (network, endpoints) in &self.p2p_evm_rpcs {
             if evm_chain_id(network).is_none()
@@ -203,8 +254,37 @@ impl Config {
             .as_deref()
             .unwrap_or(&self.usdt_contract)
     }
+    pub fn p2p_usdc(&self) -> &str {
+        self.p2p_usdc_contract.as_deref().unwrap_or(USDC)
+    }
+    pub fn p2p_stablecoin_contract(&self, symbol: &str) -> &str {
+        match symbol {
+            "USDC" => self.p2p_usdc(),
+            _ => self.p2p_usdt(),
+        }
+    }
+    pub fn p2p_stablecoin_asset_id(&self, symbol: &str) -> String {
+        format!(
+            "eip155:{}/erc20:{}",
+            self.p2p_chain(),
+            self.p2p_stablecoin_contract(symbol)
+        )
+    }
     pub fn p2p_offers_mainnet(&self) -> bool {
-        self.p2p_chain() == 1 && self.p2p_usdt() == USDT
+        !self.testnet_mode
+            && self.p2p_chain() == 1
+            && self.p2p_usdt() == USDT
+            && self.p2p_usdc() == USDC
+    }
+    pub fn p2p_offers_supported(&self) -> bool {
+        if self.testnet_mode {
+            self.testnet_skip_ever
+                && self.p2p_chain() == SEPOLIA_CHAIN_ID
+                && self.p2p_usdt() == SEPOLIA_USDT
+                && self.p2p_usdc() == SEPOLIA_USDC
+        } else {
+            self.p2p_offers_mainnet()
+        }
     }
     pub fn p2p_rpc(&self) -> &[String] {
         if self.p2p_ethereum_rpc.is_empty() {
@@ -323,6 +403,11 @@ fn valid_fee_recipient(network: &str, address: &str) -> bool {
 
 impl Config {
     pub fn validate(&self) -> Result<()> {
+        if self.testnet_mode {
+            return Err(invalid(
+                "standard OTC settlement is disabled in testnet mode",
+            ));
+        }
         if let Some(policy) = &self.escrow {
             policy.validate()?;
         }
@@ -434,7 +519,10 @@ impl Config {
 
 #[cfg(test)]
 mod config_tests {
-    use super::{evm_chain_id, parse_fee_recipients, Config, USDT};
+    use super::{
+        evm_chain_id, parse_fee_recipients, Config, SEPOLIA_CHAIN_ID, SEPOLIA_USDC, SEPOLIA_USDT,
+        USDC, USDT,
+    };
 
     #[test]
     fn parses_all_operator_fee_recipients() {
@@ -502,6 +590,44 @@ mod config_tests {
 
         cfg.p2p_usdt_contract = Some(USDT.into());
         cfg.p2p_ethereum_chain_id = Some(8453);
+        assert!(cfg.validate_network().is_err());
+    }
+
+    #[test]
+    fn testnet_mode_only_accepts_the_allowlisted_sepolia_tokens_and_rpcs() {
+        let rpc = vec![
+            "https://sepolia-a.example".into(),
+            "https://sepolia-b.example".into(),
+        ];
+        let mut cfg = Config {
+            testnet_mode: true,
+            testnet_skip_ever: true,
+            ethereum_chain_id: SEPOLIA_CHAIN_ID,
+            usdt_contract: SEPOLIA_USDT.into(),
+            p2p_ethereum_chain_id: Some(SEPOLIA_CHAIN_ID),
+            p2p_usdt_contract: Some(SEPOLIA_USDT.into()),
+            p2p_usdc_contract: Some(SEPOLIA_USDC.into()),
+            ethereum_rpc: rpc.clone(),
+            p2p_ethereum_rpc: rpc.clone(),
+            ..Config::default()
+        };
+        assert!(cfg.validate_network().is_ok());
+        assert_eq!(
+            cfg.p2p_stablecoin_asset_id("USDC"),
+            format!("eip155:{SEPOLIA_CHAIN_ID}/erc20:{SEPOLIA_USDC}")
+        );
+        assert!(cfg.validate().is_err());
+
+        cfg.p2p_usdc_contract = Some(USDC.into());
+        assert!(cfg.validate_network().is_err());
+        cfg.p2p_usdc_contract = Some(SEPOLIA_USDC.into());
+        cfg.testnet_skip_ever = false;
+        assert!(cfg.validate_network().is_err());
+        cfg.testnet_skip_ever = true;
+        cfg.p2p_ethereum_rpc[1] = "http://sepolia-b.example".into();
+        assert!(cfg.validate_network().is_err());
+        cfg.p2p_ethereum_rpc = rpc;
+        cfg.ethereum_rpc[1] = "http://sepolia-b.example".into();
         assert!(cfg.validate_network().is_err());
     }
 

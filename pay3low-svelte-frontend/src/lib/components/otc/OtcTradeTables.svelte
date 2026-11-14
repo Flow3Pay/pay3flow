@@ -53,11 +53,12 @@
   const labels: Record<string, string> = {
     open: "Open", quoted: "Open", booking_pending: "Booking pending", accepted: "Accepted", funded: "Funded",
     payment_confirming: "Confirming", payout_pending: "Payout pending", review: "Review",
-    completed: "Filled", refunded: "Refunded", rejected: "Rejected", expired: "Expired", cancelled: "Cancelled",
+    completed: "Filled", testnet_completed: "Test payment · EVER skipped", refunded: "Refunded", rejected: "Rejected", expired: "Expired", cancelled: "Cancelled",
   };
   function statusLabel(state: string) { return labels[state] ?? state.replaceAll("_", " "); }
   function statusClass(state: string) {
     if (state === "completed") return "filled";
+    if (state === "testnet_completed") return "closed";
     if (["refunded", "rejected", "expired", "cancelled"].includes(state)) return "closed";
     if (state === "review") return "review";
     return terminalStates.has(state) ? "closed" : "open";

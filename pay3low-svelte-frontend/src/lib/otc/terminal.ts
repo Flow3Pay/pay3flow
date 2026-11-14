@@ -18,7 +18,7 @@ export function exactInput(value: string, direction: Direction): string | null {
   const tail = fraction.replace(/0+$/, "");
   return `${BigInt(whole)}${tail ? `.${tail}` : ""}`;
 }
-export const terminalStates = new Set(["completed", "refunded", "rejected", "expired"]);
+export const terminalStates = new Set(["completed", "testnet_completed", "refunded", "rejected", "expired"]);
 export function completedVolume(trades: Trade[]): string {
   return trades.filter(trade => trade.state === "completed").reduce((sum, trade) => sum + BigInt(trade.terms.fee_policy.basis_units), 0n).toString();
 }

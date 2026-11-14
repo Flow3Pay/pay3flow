@@ -2,7 +2,7 @@ import { env } from "$env/dynamic/public";
 import type { RouteExecution, RouteExecutionAction } from "$lib/exchange";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import type { EIP1193Provider } from "viem";
-import { sei } from "viem/chains";
+import { sei, sepolia as viemSepolia } from "viem/chains";
 import { decimalToAtomic, atomicToDecimal, sameWalletAddress } from "./wallet-amount";
 import { TRON_CHAIN_ID, connectTronProvider, ensureTronMainnet, tronProvider, tronAddress, broadcastTron, type TronProvider } from "./tron-wallet";
 import { connectEverscale, restoreEverscale, observeEverscale, isEverscaleAddress, type EverscaleConnection } from "./everscale-wallet";
@@ -93,6 +93,7 @@ export interface PreparedWalletAction {
 
 const CHAIN_NAMES: Record<string, number> = {
   ethereum: 1,
+  "ethereum-sepolia": 11155111,
   gnosis: 100,
   "arbitrum-one": 42161,
   base: 8453,
@@ -105,6 +106,11 @@ const CHAIN_NAMES: Record<string, number> = {
   ink: 57073,
   sei: 1329,
 };
+const sepolia = {
+  ...viemSepolia,
+  chainNamespace: "eip155",
+  caipNetworkId: "eip155:11155111",
+} as const;
 
 const erc20Abi = [
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ name: "decimals", type: "uint8" }] },
@@ -250,7 +256,7 @@ async function appKit() {
       import("@reown/appkit-adapter-wagmi"),
       import("@reown/appkit/networks"),
     ]);
-    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei];
+    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, sepolia, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei];
     const adapter = new WagmiAdapter({ projectId, networks: supported });
     const modal = createAppKit({
       adapters: [adapter],
@@ -300,7 +306,7 @@ async function injectedApp() {
           import("wagmi/connectors"),
           import("@reown/appkit/networks"),
         ]);
-        const supported = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei] as const;
+        const supported = [networks.mainnet, sepolia, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei] as const;
         const connector = injected({ target: injectedWalletTarget });
         const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
         const config = createConfig({

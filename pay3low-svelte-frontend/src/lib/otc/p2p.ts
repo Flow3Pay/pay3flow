@@ -58,6 +58,7 @@ export interface P2pDealTerms {
   stablecoin?: "USDT" | "USDC";
   stablecoin_network?: string;
   stablecoin_asset_id?: string | null;
+  ever_delivery?: string;
   ever_amount: string;
   usdt_amount: string;
   ever_units: string;
@@ -151,6 +152,7 @@ export function p2pAction(deal: P2pDeal): "confirm" | "send" | "retry" | null {
 export function p2pLegDone(deal: P2pDeal, kind: P2pLeg): boolean {
   if (kind === "payment") {
     return deal.state === "delivery_pending" || deal.state === "completed"
+      || deal.state === "testnet_completed"
       || (deal.attempts || []).some(attempt => attempt.kind === kind && attempt.state === "verified");
   }
   return deal.state === "completed"

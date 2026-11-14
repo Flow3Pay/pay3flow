@@ -5,9 +5,9 @@ use serde_json::Value;
 use uuid::Uuid;
 
 const OFFERS_BY_ACTOR: &str =
-    "SELECT * FROM otc_public_offers WHERE actor=$1 ORDER BY created_at DESC LIMIT 100";
-const OPEN_OFFERS: &str = "SELECT * FROM otc_public_offers WHERE state='open' AND expires_at>now() AND body->>'ethereum_chain_id'='1' AND COALESCE(body->>'stablecoin','USDT') IN ('USDT','USDC') ORDER BY created_at DESC LIMIT 100";
-const OFFER_HISTORY: &str = "SELECT id, body, created_at FROM (\n                   SELECT id, body, created_at FROM otc_public_offers\n                   ORDER BY created_at DESC LIMIT $1\n                 ) recent ORDER BY created_at ASC";
+    "SELECT * FROM otc_public_offers WHERE actor=$1 AND body->>'ethereum_chain_id'=$2::text ORDER BY created_at DESC LIMIT 100";
+const OPEN_OFFERS: &str = "SELECT * FROM otc_public_offers WHERE state='open' AND expires_at>now() AND body->>'ethereum_chain_id'=$1::text AND COALESCE(body->>'stablecoin','USDT') IN ('USDT','USDC') ORDER BY created_at DESC LIMIT 100";
+const OFFER_HISTORY: &str = "SELECT id, body, created_at FROM (\n                   SELECT id, body, created_at FROM otc_public_offers\n                   WHERE body->>'ethereum_chain_id'=$1::text\n                   ORDER BY created_at DESC LIMIT $2\n                 ) recent ORDER BY created_at ASC";
 const LOCK_ACCOUNT: &str = "SELECT pg_advisory_xact_lock(hashtextextended($1,0))";
 const OFFER_BY_KEY: &str = "SELECT * FROM otc_public_offers WHERE actor=$1 AND idempotency_key=$2";
 const INSERT_OFFER: &str = "INSERT INTO otc_public_offers(id,actor,seller_ever,body,idempotency_key) VALUES($1,$2,$3,$4,$5) RETURNING *";
@@ -20,8 +20,10 @@ pub(crate) type OfferRow = (Uuid, String, Value, String, DateTime<Utc>, DateTime
 pub(crate) async fn offers_by_actor(
     client: &(impl GenericClient + Sync),
     actor: &str,
+    chain_id: u64,
 ) -> Result<Vec<OfferRow>> {
-    let rows = client.query(OFFERS_BY_ACTOR, &[&actor]).await?;
+    let chain_id = chain_id.to_string();
+    let rows = client.query(OFFERS_BY_ACTOR, &[&actor, &chain_id]).await?;
     Ok(rows
         .iter()
         .map(|row| {
@@ -38,8 +40,12 @@ pub(crate) async fn offers_by_actor(
 }
 
 /// Returns one [`OfferRow`] per open offer.
-pub(crate) async fn open_offers(client: &(impl GenericClient + Sync)) -> Result<Vec<OfferRow>> {
-    let rows = client.query(OPEN_OFFERS, &[]).await?;
+pub(crate) async fn open_offers(
+    client: &(impl GenericClient + Sync),
+    chain_id: u64,
+) -> Result<Vec<OfferRow>> {
+    let chain_id = chain_id.to_string();
+    let rows = client.query(OPEN_OFFERS, &[&chain_id]).await?;
     Ok(rows
         .iter()
         .map(|row| {
@@ -59,8 +65,10 @@ pub(crate) async fn open_offers(client: &(impl GenericClient + Sync)) -> Result<
 pub(crate) async fn offer_history(
     client: &(impl GenericClient + Sync),
     limit: i64,
+    chain_id: u64,
 ) -> Result<Vec<(Uuid, Value, DateTime<Utc>)>> {
-    let rows = client.query(OFFER_HISTORY, &[&limit]).await?;
+    let chain_id = chain_id.to_string();
+    let rows = client.query(OFFER_HISTORY, &[&chain_id, &limit]).await?;
     Ok(rows
         .iter()
         .map(|row| (row.get("id"), row.get("body"), row.get("created_at")))

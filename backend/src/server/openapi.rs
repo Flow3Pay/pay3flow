@@ -34,6 +34,7 @@ fn api_document(b2b_enabled: bool) -> Value {
             { "name": "Solver", "description": "Solver-facing order and quote endpoints." },
             { "name": "Catalogs", "description": "Public banks, networks, providers and exchange-pair catalogs." },
             { "name": "HEX", "description": "Read-only GNK/USDT market, account and simulation data. Wallets publish trading intents directly." },
+            { "name": "OTC", "description": "OTC configuration and direct P2P stablecoin settlement. Sepolia test mode skips EVER and is not production settlement." },
             { "name": "Routing", "description": "P2P search, route execution and route reputation." },
             { "name": "B2B", "description": "Crypto routing for businesses: executable quotes, transfers, hosted checkout pages, webhooks and a fee ledger. V1 authenticates with the user bearer token; merchant API keys arrive in phase 1.1." },
             { "name": "Administration", "description": "Protected operational controls. These endpoints require the configured admin bearer token." },
@@ -574,6 +575,8 @@ type Operation = (
 );
 
 const OPERATIONS: &[Operation] = &[
+    ("/api/otc/config", "get", "OTC configuration", "Reports OTC availability and configured settlement networks. In test mode, only the allowlisted Sepolia test USDT/USDC contracts are enabled; EVER is skipped, never reported as sent.", "OTC", false, false),
+    ("/api/otc/p2p/assets", "get", "OTC payment assets", "Returns compatible stablecoin assets. Sepolia test mode returns only its configured USDT and USDC contracts.", "OTC", false, false),
     ("/api/hex/config", "get", "HEX market configuration", "Fixed GNK/USDT token identities, precision and execution availability.", "HEX", false, false),
     ("/api/hex/snapshot", "get", "HEX order book", "Mainnet GNK/USDT bids, asks, protocol fees and observation time. Cached for two seconds.", "HEX", false, false),
     ("/api/hex/account", "get", "HEX account balances and orders", "Public chain balances, claimable balances and owned resting orders. Integer quantities and large timestamps are strings.", "HEX", false, false),
@@ -1533,6 +1536,28 @@ fn request_schema(path: &str, method: &str) -> Value {
 
 fn response_schema(path: &str, method: &str) -> Value {
     match (path, method) {
+        ("/api/otc/config", "get") => json!({
+            "type": "object",
+            "required": ["available", "p2p_available", "testnet_mode", "testnet_skip_ever", "p2p_ethereum_chain_id", "p2p_usdt_contract", "p2p_usdc_contract"],
+            "properties": {
+                "available": { "type": "boolean", "description": "Standard OTC quote availability; false in testnet mode." },
+                "p2p_available": { "type": "boolean" },
+                "testnet_mode": { "type": "boolean", "description": "True only for isolated Sepolia stablecoin tests." },
+                "testnet_skip_ever": { "type": "boolean", "description": "When true, EVER is not sent; completed test deals use testnet_completed." },
+                "p2p_ethereum_chain_id": { "type": "integer", "example": 11155111 },
+                "p2p_usdt_contract": { "type": "string" },
+                "p2p_usdc_contract": { "type": "string" }
+            }
+        }),
+        ("/api/otc/p2p/assets", "get") => json!({
+            "type": "object",
+            "required": ["assets", "destination_assets", "buy_destination_assets"],
+            "properties": {
+                "assets": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+                "destination_assets": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+                "buy_destination_assets": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } }
+            }
+        }),
         ("/api/auth/register", "post")
         | ("/api/auth/login", "post")
         | ("/api/auth/oauth/{provider}", "post") => schema_ref("AuthToken"),
@@ -1758,6 +1783,25 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::api_document;
+
+    #[test]
+    fn documents_isolated_otc_testnet_configuration_and_assets() {
+        let document = api_document(true);
+        let config = &document["paths"]["/api/otc/config"]["get"];
+        assert_eq!(
+            config["responses"]["200"]["content"]["application/json"]["schema"]["properties"]
+                ["testnet_mode"]["type"],
+            "boolean"
+        );
+        assert!(config["description"]
+            .as_str()
+            .is_some_and(|description| description.contains("EVER is skipped")));
+        let assets = &document["paths"]["/api/otc/p2p/assets"]["get"];
+        assert_eq!(
+            assets["responses"]["200"]["content"]["application/json"]["schema"]["required"][0],
+            "assets"
+        );
+    }
 
     #[test]
     fn documents_auth_and_real_request_schemas() {
