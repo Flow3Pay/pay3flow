@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node scripts/foundry.mjs forge build",
     "test": "node scripts/foundry.mjs forge test --no-match-contract UsdtForkTest",
+    "deploy:test-stablecoins": "node scripts/deploy-test-stablecoins.mjs",
     "test:fork": "node scripts/foundry.mjs forge test --match-contract UsdtForkTest --fork-url $ETHEREUM_FORK_RPC",
     "export": "node scripts/export-abi.mjs",
     "test:integration": "node scripts/integration.mjs"
