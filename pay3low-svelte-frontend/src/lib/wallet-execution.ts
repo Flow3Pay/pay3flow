@@ -49,13 +49,18 @@ export interface TronConnection {
 
 let nearApp: Promise<NearConnection["selector"]> | null = null;
 let evmApp: Promise<{ modal: import("@reown/appkit").AppKit; config: unknown }> | null = null;
-let injectedEvmApp: Promise<{ config: unknown; connector: unknown }> | null = null;
+let injectedEvmApp: Promise<{ config: unknown }> | null = null;
+
+const LEGACY_EVM_CONNECTOR_ID = "pay3flow-injected";
+const EVM_CONNECTOR_KEY = "pay3flow.evm-connector";
 
 function injectedWalletTarget() {
   const provider = (window as Window & { ethereum?: EIP1193Provider & {
     off?: EIP1193Provider["removeListener"];
   } }).ethereum;
-  if (!provider) throw new Error("No injected EVM wallet was found in this browser");
+  // Returning `undefined` lets wagmi fall back to its own detection instead of
+  // failing configuration when a browser only exposes EIP-6963 wallets.
+  if (!provider) return undefined;
 
   // Some wallet extensions expose an EIP-1193 proxy whose `removeListener`
   // getter returns a newly-bound function. That violates the Proxy invariant
@@ -63,7 +68,7 @@ function injectedWalletTarget() {
   // throw while inspecting the provider. Give wagmi a plain adapter instead;
   // keep request/event methods bound to the extension's original provider.
   return {
-    id: "pay3flow-injected",
+    id: LEGACY_EVM_CONNECTOR_ID,
     name: "Browser wallet",
     provider: {
       request: provider.request.bind(provider),
@@ -313,24 +318,94 @@ async function waitForEvmAddress(modal: import("@reown/appkit").AppKit): Promise
 
 async function injectedApp() {
   if (!injectedEvmApp) {
-      injectedEvmApp = (async () => {
-        const [{ createConfig, http }, { injected }, networks] = await Promise.all([
-          import("wagmi"),
-          import("wagmi/connectors"),
-          import("@reown/appkit/networks"),
-        ]);
-        const supported = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei] as const;
-        const connector = injected({ target: injectedWalletTarget });
-        const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
-        const config = createConfig({
-          chains: supported,
-          connectors: [connector],
-          transports,
-        });
-        return { config, connector };
-      })();
+    injectedEvmApp = (async () => {
+      const [{ createConfig, http }, { injected }, networks] = await Promise.all([
+        import("wagmi"),
+        import("wagmi/connectors"),
+        import("@reown/appkit/networks"),
+      ]);
+      const supported = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei] as const;
+      // `injected()` without an explicit target enables EIP-6963 discovery, so
+      // every installed extension gets its own connector instead of sharing the
+      // aggregated `window.ethereum` proxy (which hangs for some wallets).
+      // `shimDisconnect: false` skips the extra `wallet_requestPermissions`
+      // round-trip that stalls Rainbow and similar providers.
+      const connector = injected({ target: injectedWalletTarget, shimDisconnect: false });
+      const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
+      const config = createConfig({
+        chains: supported,
+        connectors: [connector],
+        transports,
+      });
+      return { config };
+    })().catch(error => {
+      injectedEvmApp = null;
+      throw error;
+    });
+  }
+  return injectedEvmApp;
+}
+
+interface EvmConnectorLike {
+  id?: string;
+  name?: string;
+}
+
+function evmConnectorOrder(config: unknown): EvmConnectorLike[] {
+  const connectors = (config as { connectors?: EvmConnectorLike[] }).connectors;
+  if (!Array.isArray(connectors)) return [];
+  const announced = connectors.filter(connector => connector.id !== LEGACY_EVM_CONNECTOR_ID);
+  const legacy = connectors.filter(connector => connector.id === LEGACY_EVM_CONNECTOR_ID);
+  const order = [...announced, ...legacy];
+  let preferred: string | null = null;
+  try { preferred = localStorage.getItem(EVM_CONNECTOR_KEY); } catch { /* Storage is optional. */ }
+  const index = preferred ? order.findIndex(connector => connector.id === preferred) : -1;
+  if (index > 0) order.unshift(...order.splice(index, 1));
+  return order;
+}
+
+function isUserRejection(error: unknown): boolean {
+  const value = error as { code?: number; name?: string } | null;
+  return value?.code === 4001 || value?.name === "UserRejectedRequestError";
+}
+
+async function connectInjectedEvm(config: unknown, chainId: number): Promise<EvmConnection> {
+  const { connect, getAccount } = await import("@wagmi/core");
+  const account = getAccount(config as Parameters<typeof getAccount>[0]);
+  if (account.isConnected && account.address) {
+    if (account.chainId !== chainId) await switchEvmChain(config, chainId);
+    const active = getAccount(config as Parameters<typeof getAccount>[0]);
+    if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
+    return { family: "evm", address: active.address, chainId, config };
+  }
+  const connectors = evmConnectorOrder(config);
+  if (!connectors.length) throw new Error("No injected EVM wallet was found in this browser");
+  let failure: unknown = null;
+  for (const connector of connectors) {
+    let timeout: number | undefined;
+    try {
+      const connected = await Promise.race([
+        connect(config as Parameters<typeof connect>[0], { connector: connector as Parameters<typeof connect>[1]["connector"] }),
+        new Promise<never>((_, reject) => {
+          timeout = window.setTimeout(() => reject(new Error(`${connector.name ?? "Wallet"} did not respond. Check the wallet window and try again.`)), 30_000);
+        }),
+      ]);
+      if (!connected.accounts[0]) throw new Error("Injected wallet did not return an account");
+      try { localStorage.setItem(EVM_CONNECTOR_KEY, connector.id ?? ""); } catch { /* Storage is optional. */ }
+      if (connected.chainId !== chainId) await switchEvmChain(config, chainId);
+      const active = getAccount(config as Parameters<typeof getAccount>[0]);
+      if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
+      return { family: "evm", address: active.address, chainId, config };
+    } catch (error) {
+      // A rejection means the trader declined this wallet: stop instead of
+      // opening every other installed extension.
+      if (isUserRejection(error)) throw error;
+      failure = error;
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
     }
-  return injectedEvmApp!;
+  }
+  throw failure instanceof Error ? failure : new Error("No injected EVM wallet was found in this browser");
 }
 
 export async function connectEvm(network: string): Promise<EvmConnection> {
@@ -345,28 +420,8 @@ export async function connectEvm(network: string): Promise<EvmConnection> {
     if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
     return { family: "evm", address: active.address, chainId, config };
   }
-  const { config, connector } = await injectedApp();
-  const { connect, getAccount } = await import("@wagmi/core");
-  const account = getAccount(config as Parameters<typeof getAccount>[0]);
-  const connectRequest = account.isConnected ? Promise.resolve({ accounts: account.addresses ?? [], chainId: account.chainId })
-    : connect(config as Parameters<typeof connect>[0], { connector: connector as Parameters<typeof connect>[1]["connector"] });
-  let timeout: number | undefined;
-  let connected: Awaited<typeof connectRequest>;
-  try {
-    connected = await Promise.race([
-      connectRequest,
-      new Promise<never>((_, reject) => {
-        timeout = window.setTimeout(() => reject(new Error("Wallet connection timed out. Check the wallet and try again.")), 120_000);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) window.clearTimeout(timeout);
-  }
-  if (!connected.accounts[0]) throw new Error("Injected wallet did not return an account");
-  if (connected.chainId !== chainId) await switchEvmChain(config, chainId);
-  const active = getAccount(config as Parameters<typeof getAccount>[0]);
-  if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
-  return { family: "evm", address: active.address, chainId, config };
+  const { config } = await injectedApp();
+  return connectInjectedEvm(config, chainId);
 }
 
 async function nearSelector() {
