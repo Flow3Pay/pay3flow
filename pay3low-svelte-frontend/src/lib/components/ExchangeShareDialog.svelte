@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { locale, t } from '$lib/i18n';
   import { lockPageScroll } from '$lib/page-scroll-lock';
   import { exchangeShareImage, type ExchangeShareState } from '$lib/exchange-share';
@@ -17,6 +17,15 @@
   $: previewImage = imageUrl ?? (state ? exchangeShareImage(new URL(url).origin, state.source, state.target, new URL(url).searchParams) : "");
   let copied = false;
   let copyFailed = false;
+  const resetOnReturn = () => { if (document.visibilityState === 'visible') onClose(); };
+  onMount(() => {
+    window.addEventListener('pagehide', onClose);
+    document.addEventListener('visibilitychange', resetOnReturn);
+    return () => {
+      window.removeEventListener('pagehide', onClose);
+      document.removeEventListener('visibilitychange', resetOnReturn);
+    };
+  });
 
   function portal(node: HTMLElement) {
     const previousFocus = document.activeElement as HTMLElement | null;

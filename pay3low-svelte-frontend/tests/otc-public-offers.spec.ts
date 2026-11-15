@@ -543,6 +543,14 @@ test("a shortfall on the funded leg warns beside the amount and still publishes"
   expect(f.calls.filter(call => call.path === "/offers" && call.method === "POST")).toHaveLength(0);
 });
 
+test("selling EVER does not report a USDT shortfall", async ({ page }) => {
+  await setup(page, { signedIn: true, balances: { ever: "1000", usdt: "0" } });
+  await fill(page);
+  await expect(page.getByTestId("otc-shortfall-warning")).toHaveCount(0);
+  await expect(page.locator("#otc-input")).not.toHaveClass(/shortfall/);
+  await expect(page.locator("#otc-receive")).not.toHaveClass(/shortfall/);
+});
+
 test("a buy offer warns on the USDT total and only for the verified paying wallet", async ({ page }) => {
   await setup(page, { signedIn: true, verifiedEthereum: true, balances: { ever: "1000", usdt: "2" } });
   await page.locator(".sideTabs").getByRole("button", { name: "Buy EVER", exact: true }).click();

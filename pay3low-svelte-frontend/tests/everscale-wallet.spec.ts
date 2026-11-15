@@ -93,6 +93,20 @@ test("wallet dialog has avatars, contains keyboard focus and closes from every p
   await expect(dialog).toHaveCount(0);
 });
 
+test("wallet dialog releases the page after returning from another tab", async ({ page }) => {
+  await setup(page, "missing");
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator("#wallet-connections")).toHaveCount(0);
+  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+  await page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Wallet connections", exact: true })).toBeVisible();
+});
+
 test("wallet bottom sheet returns after a short drag and closes after a downward swipe", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page, "missing");

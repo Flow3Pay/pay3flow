@@ -1,6 +1,7 @@
 <script lang="ts">
   import "@near-wallet-selector/modal-ui/styles.css";
   import { onMount, tick } from "svelte";
+  import { get } from "svelte/store";
   import { fade, fly } from "svelte/transition";
   import { env } from "$env/dynamic/public";
   import { lockPageScroll } from "$lib/page-scroll-lock";
@@ -63,10 +64,22 @@
   onMount(() => {
     anonymousUserId = getAnonymousUserId() ?? "";
     void restoreWallets();
+    const resetWalletDialog = () => {
+      if (get(walletDialogMode) === null) return;
+      busy = null; providerHandoff = false; activeChain = null;
+      closeWalletDialog();
+    };
+    const resetOnReturn = () => { if (document.visibilityState === "visible") resetWalletDialog(); };
+    window.addEventListener("pagehide", resetWalletDialog);
+    document.addEventListener("visibilitychange", resetOnReturn);
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const updateMotion = () => motionDuration = media.matches ? 0 : 160;
     updateMotion(); media.addEventListener("change", updateMotion);
-    return () => media.removeEventListener("change", updateMotion);
+    return () => {
+      media.removeEventListener("change", updateMotion);
+      window.removeEventListener("pagehide", resetWalletDialog);
+      document.removeEventListener("visibilitychange", resetOnReturn);
+    };
   });
 
   function portal(node: HTMLDivElement) {

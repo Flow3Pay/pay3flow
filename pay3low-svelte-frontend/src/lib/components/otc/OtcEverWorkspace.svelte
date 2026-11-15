@@ -259,7 +259,7 @@
     if (failed?.status === "rejected") throw failed.reason;
   }
   function openIdentity(forQuote = false) { requestingQuote = forQuote; openWalletDialog("otc"); }
-  function closeIdentity() { requestingQuote = false; accountVersion++; }
+  function closeIdentity() { requestingQuote = false; accountVersion++; busy = false; accountLocked = false; walletProgress = ""; }
   function setTab(next: typeof tab) { tab = next; }
   function navigateTab(event: KeyboardEvent) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const tabs = ["trades", "orders", "history"] as const;

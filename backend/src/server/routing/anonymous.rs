@@ -122,20 +122,28 @@ async fn resolve_region(ip: Option<IpAddr>) -> String {
     }
 }
 
-/// Trust the first hop of `X-Forwarded-For`, which Caddy fills with the real
-/// client address, and fall back to `X-Real-IP`.
+/// Prefer headers commonly set to the original client address by a trusted
+/// edge proxy; use the first forwarded hop only as a fallback.
 fn client_ip(headers: &HeaderMap) -> Option<IpAddr> {
-    headers
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(',').next())
-        .and_then(|value| value.trim().parse::<IpAddr>().ok())
-        .or_else(|| {
-            headers
-                .get("x-real-ip")
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.trim().parse::<IpAddr>().ok())
-        })
+    for name in [
+        "cf-connecting-ip",
+        "true-client-ip",
+        "x-real-ip",
+        "x-forwarded-for",
+    ] {
+        let Some(value) = headers.get(name).and_then(|value| value.to_str().ok()) else {
+            continue;
+        };
+        let Some(ip) = value
+            .split(',')
+            .next()
+            .and_then(|value| value.trim().parse::<IpAddr>().ok())
+        else {
+            continue;
+        };
+        return Some(ip);
+    }
+    None
 }
 
 pub async fn count_users(pool: &DbPool) -> anyhow::Result<(i64, i64)> {
@@ -204,10 +212,18 @@ mod tests {
     }
 
     #[test]
-    fn client_ip_uses_first_forwarded_hop_then_real_ip() {
+    fn client_ip_prefers_origin_headers_over_forwarded_proxy_hops() {
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", "203.0.113.7, 10.0.0.1".parse().unwrap());
         headers.insert("x-real-ip", "198.51.100.9".parse().unwrap());
+        assert_eq!(client_ip(&headers).unwrap().to_string(), "198.51.100.9");
+
+        headers.insert("true-client-ip", "192.0.2.10".parse().unwrap());
+        headers.insert("cf-connecting-ip", "192.0.2.20".parse().unwrap());
+        assert_eq!(client_ip(&headers).unwrap().to_string(), "192.0.2.20");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "203.0.113.7, 10.0.0.1".parse().unwrap());
         assert_eq!(client_ip(&headers).unwrap().to_string(), "203.0.113.7");
 
         let mut headers = HeaderMap::new();
