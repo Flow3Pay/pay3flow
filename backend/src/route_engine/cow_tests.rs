@@ -63,6 +63,7 @@ async fn fixture(reject_usdt_bridge: bool, reject_all_bridges: bool) -> Fixture 
         ]})) }))
         .route("/supplemental.json", get(|| async { Json(json!([
             {"chainId":1, "symbol":"EVER", "address":"0x1ffEFD8036409Cb6d652bd610DE465933b226917", "decimals":9},
+            {"chainId":1, "symbol":"WEVER", "address":"0x2ffEFD8036409Cb6d652bd610DE465933b226918", "decimals":9},
             {"chainId":1, "symbol":"USDC", "address":USDC, "decimals":18},
             {"chainId":1, "symbol":"BROKEN", "address":"", "decimals":18},
             {"chainId":1, "symbol":"AMBIGUOUS", "address":DYNAMIC, "decimals":18},
@@ -137,7 +138,7 @@ async fn fixture(reject_usdt_bridge: bool, reject_all_bridges: bool) -> Fixture 
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn supplementary_catalog_adds_wrapped_ever_with_nine_decimals() {
+async fn supplementary_catalog_never_enables_ever_outside_everscale() {
     let fixture = fixture(false, false).await;
     // The curated list has priority over supplementary metadata for USDC.
     let base = fixture
@@ -149,34 +150,23 @@ async fn supplementary_catalog_adds_wrapped_ever_with_nine_decimals() {
         .with_token_catalog(&fixture.supplemental_url)
         .with_token_catalog(format!("{base}/tokens.json"));
     let assets = cow.supported_assets().await;
-    assert!(assets.contains(&asset("EVER@ethereum")));
+    assert!(!assets.contains(&asset("EVER@ethereum")));
+    assert!(!assets.contains(&asset("WEVER@ethereum")));
     assert!(!assets.contains(&asset("EVER@everscale")));
     assert!(!assets.contains(&asset("BROKEN@ethereum")));
     assert!(!assets.contains(&asset("AMBIGUOUS@ethereum")));
     assert!(assets.contains(&asset("GRAM@ethereum")));
     assert!(!assets.contains(&asset("TON@ethereum")));
     let from = asset("USDT@ethereum");
-    let quote = cow
+    assert!(cow
         .quote(
             from.clone(),
             asset("EVER@ethereum"),
             Amount::new("100", from).unwrap(),
         )
         .await
-        .unwrap();
-    assert_eq!(quote.output.value.parse::<f64>().unwrap(), 0.09875);
-    let from = asset("USDC@ethereum");
-    cow.quote(
-        from.clone(),
-        asset("EVER@ethereum"),
-        Amount::new("100", from).unwrap(),
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        fixture.requests.bodies.lock().unwrap().last().unwrap()["sellAmountBeforeFee"],
-        "100000000"
-    );
+        .is_err());
+    assert!(fixture.requests.bodies.lock().unwrap().is_empty());
 }
 
 fn asset(value: &str) -> Asset {

@@ -24,6 +24,11 @@ struct CowToken {
     decimals: u8,
 }
 
+fn supported_asset(asset: &Asset) -> bool {
+    !matches!(asset.symbol.to_ascii_uppercase().as_str(), "EVER" | "WEVER")
+        || asset.location.as_deref() == Some("everscale")
+}
+
 struct CowChain {
     network: &'static str,
     id: u64,
@@ -306,6 +311,9 @@ impl CowRouteProvider {
                                     }
                                     let asset =
                                         Asset::new(token.symbol, Some(network.network)).ok()?;
+                                    if !supported_asset(&asset) {
+                                        return None;
+                                    }
                                     Some((
                                         asset,
                                         CowToken {
@@ -390,6 +398,7 @@ impl CowRouteProvider {
                     });
             }
         }
+        tokens.retain(|asset, _| supported_asset(asset));
         tokens
     }
 
