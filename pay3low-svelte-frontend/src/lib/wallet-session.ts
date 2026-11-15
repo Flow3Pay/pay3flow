@@ -7,7 +7,18 @@ const subscriptions = new Map<WalletFamily, () => void>();
 const pending = new Map<WalletFamily, Promise<ConnectedWallet>>();
 const generations = new Map<WalletFamily, number>();
 const STORAGE_KEY = "pay3flow.wallet-families";
+const CONNECT_TIMEOUT_MS = 90_000;
 let restoration: Promise<void> | null = null;
+
+// Every wallet family has its own handshake, and a wallet whose extension
+// backend is unreachable never answers. Cap the wait so the dialog reports an
+// error instead of spinning forever.
+function withConnectTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("Wallet connection timed out. Check the wallet window or extension and try again.")), CONNECT_TIMEOUT_MS);
+    promise.then(value => { window.clearTimeout(timer); resolve(value); }, error => { window.clearTimeout(timer); reject(error); });
+  });
+}
 
 function remember() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.keys(get(wallets)))); } catch { /* Optional persistence. */ }
@@ -44,7 +55,7 @@ export async function connectWallet(network: string): Promise<ConnectedWallet> {
   const generation = (generations.get(family) ?? 0) + 1;
   generations.set(family, generation);
   const promise = (async () => {
-    const wallet = await connectForNetwork(network);
+    const wallet = await withConnectTimeout(connectForNetwork(network));
     if (generations.get(family) !== generation) throw new Error("Wallet connection was cancelled");
     await retain(wallet, generation);
     return wallet;
