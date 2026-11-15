@@ -91,7 +91,17 @@ the book; a deal already in delivery is closed as expired too, so it stops
 prompting for a transfer. Closing a deal from the UI cancels it on the server
 while no stablecoin handoff exists, even when one side has already confirmed;
 once a payment attempt is prepared the Close action only hides the window and
-the leg stays tracked. The dialog shows the deal id and the recipient address
+the leg stays tracked. Accepting from the book shows the offer details first:
+the stablecoin wallet is labelled with the network the offer is actually
+published for, the supported receiving networks are offered as a picker instead
+of a raw option list, and where the verified EVM address is valid on the chosen
+network it is prefilled and remains editable; other formats must be entered by
+hand and are validated before the button enables. When the leg the taker has to
+send is larger than the balance the server reads for that wallet, a warning
+appears beside the button and blocks the booking, so no deal is created that
+cannot be paid. A rejected acceptance is reported on the page instead of closing
+silently, and a successful one opens the deal window for the new deal even when
+the trades list refresh is still in flight. The dialog shows the deal id and the recipient address
 with copy buttons. While the deal window is open, both participants can open a
 chat panel beside the deal details within the same modal; it is available only
 to the trade's two authenticated participants and closes with that modal. Chat messages are

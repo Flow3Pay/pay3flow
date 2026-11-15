@@ -4,7 +4,7 @@
   import { otcCopy } from "$lib/otc/copy";
   import type { OtcPreview } from "$lib/share-links";
   import { parseOtcHash } from "$lib/otc/link";
-  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
+  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, setOtcNetwork, getBalances, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction, type WalletBalance } from "$lib/otc/service";
   import type { PublicOffer } from "$lib/otc/public-offers";
   import { p2pShortAddress, type P2pDeal } from "$lib/otc/p2p";
   import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
@@ -37,6 +37,7 @@
   let selectionVersion = 0, accountVersion = 0, walletProgress = "", accountLocked = false;
   let tab: "trades" | "orders" | "history" = "trades", now = Date.now();
   let offersBusy = false;
+  let balances: WalletBalance[] = [], balanceToken = "", balanceGeneration = 0;
   let p2pActiveDeals: P2pDeal[] = [];
   $: p2pActiveCount = p2pActiveDeals.length;
   let offerBook: OtcDeskBook;
@@ -72,6 +73,7 @@
     onDisconnect: () => disconnect().catch(e => { error = e instanceof Error ? e.message : "Disconnect failed"; }),
     onRequest: () => { closeWalletDialog(); void run(rfq); },
   });
+  $: evmWalletAddress = session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "";
   $: activeTrades = trades.filter(t => !terminalStates.has(t.state));
   $: history = trades.filter(t => terminalStates.has(t.state));
   function activityIndicator(node: HTMLDivElement, _key: string) {
@@ -88,6 +90,21 @@
     measure();
     return { update: () => { void tick().then(measure); }, destroy: () => observer.disconnect() };
   }
+  /** Display-only wallet reads: a gap or a dead RPC leaves nothing to warn about. */
+  async function refreshBalances() {
+    const owner = session, revision = ++balanceGeneration;
+    if (!owner) { balances = []; return; }
+    try {
+      const list = await getBalances(owner.token);
+      if (!mounted || revision !== balanceGeneration || session?.token !== owner.token) return;
+      balances = list;
+    } catch (reason) {
+      if (revision !== balanceGeneration) return;
+      balances = [];
+      console.warn("OTC wallet balances unavailable", reason);
+    }
+  }
+  $: if (mounted && (session?.token || "") !== balanceToken) { balanceToken = session?.token || ""; void refreshBalances(); }
   function syncLink() {
     // Only the public pair/direction are shared; participant terms never enter previews or URLs.
     const hash = `#/otc?market=EVER-USDT&side=${direction}`;
@@ -159,12 +176,15 @@
   ) {
     const owner = session;
     tab = "orders";
+    notice = "";
     if (!owner) { error = say("Connect your wallet to accept an offer.", "Подключите кошелёк, чтобы принять оффер."); return; }
     await run(async () => {
       const accepted = await request<P2pDeal>(`/offers/${id}/accept`, owner.token, destination || {}, crypto.randomUUID());
       await tick();
       await dealModal?.openDeal(accepted.id);
+      notice = say("Offer accepted. Confirm the deal terms and send your leg.", "Оффер принят. Подтвердите условия сделки и отправьте свою часть.");
     });
+    void refreshBalances();
     await refresh();
   }
   function retainSession(current: Session) {
@@ -291,14 +311,16 @@
       }
       await refresh(); const id = sessionStorage.getItem("pay3flow.otc.selected"); if (id && session) { tab = "orders"; await selectTrade(id, true); } }, false);
     const timer = setInterval(async () => { if (stopped || busy || polling) return; polling = true; try { await refresh(); } finally { polling = false; } }, 5000);
+    const balanceTimer = setInterval(() => { if (!stopped && session && !busy) void refreshBalances(); }, 20_000);
     const clock = setInterval(() => now = Date.now(), 1000);
     window.addEventListener("hashchange", restoreDirection); window.addEventListener("popstate", restoreDirection);
-    return () => { closeWalletDialog(); otcWalletDialog.set(null); stopped = true; mounted = false; accountVersion++; clearInterval(timer); clearInterval(clock); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
+    return () => { closeWalletDialog(); otcWalletDialog.set(null); stopped = true; mounted = false; accountVersion++; clearInterval(timer); clearInterval(balanceTimer); clearInterval(clock); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
   });
 </script>
 <OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { tab = "trades"; }} let:ticket let:offers let:mine let:history={offerHistory} let:offerError let:onCancel>
 <section class="otcWorkspace" data-testid="otc-workspace" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>
   <div class="pageIntro" class:localeLong={$locale !== "en"}><ScrambleHeadline phrases={copy.heroPhrases} active={introCompleted} /></div>
+  {#if error}<p class="otcError" role="alert" data-testid="otc-error">{error}</p>{/if}
   <OtcTerminal chartPanel={false} bookPanel={false} bookWide selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} {bookTitle} stats={[
     {label:say("Desk","Деск"),value:config?.desk_name || "—"},
     {label:config?.public_offers_available ? say("Open offers","Открытые офферы") : say("Desk offers","Предложения деска"),value:String(listings.length + offers.length),secondary:true},
@@ -313,7 +335,7 @@
         <OtcActivityContent activeKey={tab} duration={motionDuration}>
         <div class="activityContent" role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
           {#if tab === "trades"}
-            <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
+            <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {balances} evmAddress={evmWalletAddress} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
           {:else}
             {#if tab === "orders" && p2pActiveCount}
               <div class="activeDealRow">
@@ -354,7 +376,7 @@
   <p class="risk">{config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
   {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
-<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} onSelect={() => {}} busy={busy || offersBusy} {config} />
+<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} onSelect={() => {}} busy={busy || offersBusy} {config} {balances} evmAddress={evmWalletAddress} />
 </OtcOffers>
 
 {#if transferReview}<OtcTransferReview trade={transferReview.trade} kind={transferReview.kind} instructions={transferReview.attempt.instructions} disabled={busy || !!config?.demo || transferReview.trade.terms.demo || (transferReview.attempt.instructions.escrow && now >= Date.parse(transferReview.attempt.instructions.expires_at!) - 1800000) || (!transferReview.trade.terms.escrow && transferReview.kind === "payment" && now > Date.parse(transferReview.trade.terms.pay_by))} onClose={() => transferReview = null} onConfirm={() => run(confirmTransfer)} />{/if}
@@ -375,6 +397,7 @@
   .titleAccent { position: relative; z-index: 0; display: inline-block; margin-inline-start: .06em; }
   .titleAccent::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg); }
   .risk { margin: 16px 0 0; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
+  .otcError { margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--color-danger); border-radius: 10px; background: var(--color-panel); color: var(--color-danger); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
   .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 15px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
   .activityTabs { position: relative; display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; margin: 16px var(--otc-panel-padding) 8px; padding: 4px; border-radius: 10px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-border); }

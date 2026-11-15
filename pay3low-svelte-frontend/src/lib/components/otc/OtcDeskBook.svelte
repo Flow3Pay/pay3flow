@@ -2,9 +2,11 @@
   import { onMount, tick } from "svelte";
   import { locale } from "$lib/i18n";
   import { proposalDirection } from "$lib/otc/terminal";
-  import { request, type Config, type Direction, type Proposal } from "$lib/otc/service";
-  import { saleRate, compareOfferRates, offerDirection, offerOwner, offerStablecoin, p2pFeeSplit, type PublicOffer } from "$lib/otc/public-offers";
+  import { request, type Config, type Direction, type Proposal, type WalletBalance } from "$lib/otc/service";
+  import { saleRate, compareOfferRates, offerDirection, offerOwner, offerStablecoin, p2pFeeSplit, balanceUnits, offerShortfall, type PublicOffer } from "$lib/otc/public-offers";
   import { identiconDataUri } from "$lib/otc/identicon";
+  import { isValidWalletAddress } from "$lib/wallet-address";
+  import { networkIcon } from "$lib/icons";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
   export let onAccept: (id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string }) => void = () => {};
@@ -12,6 +14,10 @@
   export let dialogOnly = false;
   export let testId = "otc-public-offer";
   export let config: Config | null;
+  /** Display-only balance reads for the signed-in trader; a gap simply warns nothing. */
+  export let balances: WalletBalance[] = [];
+  /** The trader's verified EVM address, offered as the default stablecoin recipient. */
+  export let evmAddress = "";
   export let listings: Proposal[] = [];
   export let selectedId = "";
   export let onSelect: (proposal: Proposal, direction: Direction) => void;
@@ -29,6 +35,28 @@
   $: destinationNetwork = selectedBuyDestination?.network || "ethereum";
   let destinationAddress = "";
   let destinationAssetsError = "";
+  // The taker always pays one leg from their own wallet. The stablecoin fee is
+  // withheld from that transfer, so only the net amount has to be spendable.
+  const balanceNetworkLabels: Record<string, string> = { ethereum: "Ethereum", sei: "Sei", "bnb-smart-chain": "BNB Smart Chain", "polygon-pos": "Polygon", "avalanche-c": "Avalanche", "arbitrum-one": "Arbitrum One", base: "Base", optimism: "Optimism", gnosis: "Gnosis", tron: "TRON", solana: "Solana", ton: "TON", near: "NEAR", sui: "Sui", aptos: "Aptos" };
+  $: takerSide = selectedOffer ? offerDirection(selectedOffer) : "sell";
+  $: takerFee = selectedOffer ? p2pFeeSplit(selectedOffer.terms.usdt_amount) : null;
+  $: takerPaysToken = takerSide === "sell";
+  $: takerSymbol = selectedOffer && takerPaysToken ? offerStablecoin(selectedOffer) : "EVER";
+  $: takerAmount = selectedOffer ? (takerPaysToken ? takerFee?.net ?? selectedOffer.terms.usdt_amount : selectedOffer.terms.ever_amount) : "";
+  $: takerPrecision = takerPaysToken ? 6 : 9;
+  $: takerNetwork = takerPaysToken ? "Ethereum" : "Everscale";
+  $: takerAvailable = balances.find(balance => balance.symbol === takerSymbol && balance.state === "ok" && balance.network === takerNetwork)?.amount ?? null;
+  $: takerShort = !!selectedOffer && offerShortfall(balanceUnits(takerAmount, takerPrecision), balanceUnits(takerAvailable, takerPrecision));
+  const networkLabel = (network: string) => balanceNetworkLabels[network] ?? network;
+  const evmNetwork = (network: string) => ["ethereum", "gnosis", "arbitrum-one", "base", "polygon-pos", "avalanche-c", "bnb-smart-chain", "optimism", "sei"].includes(network);
+  // Every lib can only pay its own address format, so a verified EVM address is
+  // offered only where it is valid and typed by hand everywhere else.
+  const defaultDestinationAddress = (network: string) => evmNetwork(network) ? evmAddress : "";
+  $: destinationValid = !!selectedBuyDestination && isValidWalletAddress(destinationNetwork, destinationAddress.trim());
+  function chooseDestination(assetId: string, network: string) {
+    destinationAssetId = assetId;
+    destinationAddress = defaultDestinationAddress(network);
+  }
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: offers = listings.map(proposal => ({ proposal, direction: proposalDirection(proposal, config) })).filter(item => item.direction);
   $: sortedOffers = compact ? publicOffers : [...publicOffers].sort((a,b) => {
@@ -70,10 +98,11 @@
   async function showOffer(offer: PublicOffer) {
     selectedOffer = offer;
     copied = "";
-    destinationAssetId = buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer) && asset.network === "ethereum")?.asset_id
-      || buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer))?.asset_id
-      || "";
-    destinationAddress = "";
+    const initialDestination = buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer) && asset.network === "ethereum")
+      || buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer))
+      || null;
+    destinationAssetId = initialDestination?.asset_id || "";
+    destinationAddress = initialDestination ? defaultDestinationAddress(initialDestination.network) : "";
     await tick();
     if (dialog && !dialog.open) dialog.showModal();
   }
@@ -91,9 +120,10 @@
       .then(result => {
         buyDestinationAssets = result.buy_destination_assets || [];
         if (selectedOffer && !destinationAssetId) {
-          destinationAssetId = buyDestinationAssets.find(asset => asset.symbol === offerToken && asset.network === "ethereum")?.asset_id
-            || buyDestinationAssets.find(asset => asset.symbol === offerToken)?.asset_id
-            || "";
+          const fallback = buyDestinationAssets.find(asset => asset.symbol === offerToken && asset.network === "ethereum")
+            || buyDestinationAssets.find(asset => asset.symbol === offerToken);
+          destinationAssetId = fallback?.asset_id || "";
+          if (fallback && !destinationAddress) destinationAddress = defaultDestinationAddress(fallback.network);
         }
       })
       .catch(() => { destinationAssetsError = say("Receiving networks are temporarily unavailable.", "Сети получения временно недоступны."); });
@@ -196,6 +226,7 @@
   {@const fee = p2pFeeSplit(selected.terms.usdt_amount)}
   {@const isOwn = ownIds.includes(selected.id)}
   {@const offerChain = selected.terms.ethereum_chain_id ?? 1}
+  {@const stablecoinNetwork = balanceNetworkLabels[selected.terms.stablecoin_network || "ethereum"] ?? selected.terms.stablecoin_network ?? "Ethereum"}
   {@const wrongNetwork = !!config?.p2p_usdt_contract && offerChain !== (config.p2p_ethereum_chain_id ?? config.ethereum_chain_id)}
   {@const canAccept = !!config?.p2p_available && !isOwn && !wrongNetwork && selected.state === "open" && Date.parse(selected.expires_at) > Date.now()}
   <dialog bind:this={dialog} class="offerDialog" aria-labelledby="otc-offer-details-title" on:cancel|preventDefault={closeOffer} on:click={(event) => { if (event.target === dialog) closeOffer(); }}>
@@ -203,26 +234,36 @@
     <div class="dialogSummary"><div><span>{say("Price", "Цена")}</span><strong>{saleRate(selected.terms.ever_amount,selected.terms.usdt_amount)} <small>{token} / EVER</small></strong></div><div><span>{say("Amount", "Количество")}</span><strong>{selected.terms.ever_amount} <small>EVER</small></strong></div><div><span>{say("Total", "Сумма")}</span><strong>{selected.terms.usdt_amount} <small>{token}</small></strong></div></div>
     {#if fee}<p class="feeSummary">{say("Separate service fee", "Отдельная комиссия сервиса")}: {fee.fee} USDT (3%). {token === "USDC" ? say("Calculated at nominal 1:1 USDC/USDT parity.", "Рассчитана по номинальному курсу 1:1 USDC/USDT.") : ""} {say("Accounted separately; not deducted from the transfer and not automatically collected.", "Учитывается отдельно; не вычитается из перевода и автоматически не взыскивается.")}</p>{/if}
     <div class="addressList">
-      <div class="addressRow"><img src="/icons/assets/ever.svg" alt="" width="22" height="22"><div><span>{side === "buy" ? say("EVER receiving wallet", "Кошелёк получения EVER") : say("Seller EVER wallet", "EVER-кошелёк продавца")}</span><code>{offerOwner(selected)}</code></div><button class="copyButton" type="button" aria-label={say("Copy EVER address", "Копировать EVER-адрес")} on:click={() => copyAddress(offerOwner(selected), "ever")}>{#if copied === "ever"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
-      <div class="addressRow"><img src={token === "USDC" ? "/icons/assets/usdc.png" : "/icons/assets/usdt.png"} alt="" width="22" height="22"><div><span>{side === "buy" ? say(`${token} paying wallet · ethereum`, `Кошелёк оплаты ${token} · Ethereum`) : say(`${token} receiving wallet · ${selected.terms.stablecoin_network || "ethereum"}`, `Кошелёк получения ${token} · ${selected.terms.stablecoin_network || "ethereum"}`)}</span><code>{selected.terms.usdt_address}</code></div><button class="copyButton" type="button" aria-label={say("Copy stablecoin address", "Копировать адрес стейблкоина")} on:click={() => copyAddress(selected.terms.usdt_address, "usdt")}>{#if copied === "usdt"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
+      <div class="addressRow"><img src="/icons/assets/ever.svg" alt="" width="22" height="22"><div><span>{side === "buy" ? say("EVER receiving wallet", "Кошелёк получения EVER") : say("Seller EVER wallet", "EVER-кошелёк продавца")}</span><code>{offerOwner(selected)}</code></div><button class="copyButton" type="button" aria-label={say("Copy EVER address", "Копировать EVER-адрес")} on:click={() => copyAddress(offerOwner(selected), "ever")}>{#if copied === "ever"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>      <div class="addressRow"><img src={token === "USDC" ? "/icons/assets/usdc.png" : "/icons/assets/usdt.png"} alt="" width="22" height="22"><div><span>{side === "buy" ? say(`${token} paying wallet · ${stablecoinNetwork}`, `Кошелёк оплаты ${token} · ${stablecoinNetwork}`) : say(`${token} receiving wallet · ${stablecoinNetwork}`, `Кошелёк получения ${token} · ${stablecoinNetwork}`)}</span><code>{selected.terms.usdt_address}</code></div><button class="copyButton" type="button" aria-label={say("Copy stablecoin address", "Копировать адрес стейблкоина")} on:click={() => copyAddress(selected.terms.usdt_address, "usdt")}>{#if copied === "usdt"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
     </div>
     <div class="dialogFoot"><span><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say("Open until", "Действует до")} {new Date(selected.expires_at).toLocaleString($locale)}</span>{#if isOwn && selected.state === "open"}<button type="button" class="cancelOffer" disabled={busy} on:click={() => { onCancel(selected.id); closeOffer(); }}>{say("Cancel offer", "Снять оффер")}</button>{/if}</div>
     {#if canAccept}
       <div class="acceptRow">
         <p>{say(`Two transfers settle this offer: one side sends ${token}, the other sends EVER. There is no escrow, so verify all addresses before proceeding.`, `Для расчёта оффера нужны два перевода: одна сторона отправляет ${token}, другая — EVER. Эскроу нет, поэтому проверьте все адреса перед отправкой.`)}</p>
         {#if side === "buy"}
-          <label class="buyDestination">{say(`${token} receiving network`, `Сеть получения ${token}`)}
-            <select bind:value={destinationAssetId} disabled={busy || !buyDestinationNetworks.length} data-testid="otc-buy-destination-network">
-              {#each buyDestinationNetworks as destination (destination.asset_id)}<option value={destination.asset_id}>{destination.network} · {destination.asset_id}</option>{/each}
-            </select>
-          </label>
-          {#if !buyDestinationNetworks.length}<p class="settlementNote">{destinationAssetsError || say("No supported receiving network is available for this token.", "Для этого токена нет доступной сети получения.")}</p>{/if}
+          <div class="buyDestination">
+            <span class="destinationLabel">{say(`${token} receiving network`, `Сеть получения ${token}`)}</span>
+            {#if buyDestinationNetworks.length}
+              <div class="networkChoices" role="group" aria-label={say(`${token} receiving network`, `Сеть получения ${token}`)}>
+                {#each buyDestinationNetworks as destination (destination.asset_id)}
+                  <button type="button" class="networkChoice" aria-pressed={destination.asset_id === destinationAssetId} data-network={destination.network} data-testid="otc-buy-destination-network" disabled={busy} on:click={() => chooseDestination(destination.asset_id, destination.network)}>
+                    <img src={networkIcon(destination.network)} alt="" width="18" height="18" aria-hidden="true" />
+                    <span>{networkLabel(destination.network)}</span>
+                  </button>
+                {/each}
+              </div>
+            {:else}
+              <p class="settlementNote">{destinationAssetsError || say("No supported receiving network is available for this token.", "Для этого токена нет доступной сети получения.")}</p>
+            {/if}
+          </div>
           <label class="buyDestination">{say(`${token} receiving address`, `Адрес получения ${token}`)}
             <input bind:value={destinationAddress} required autocomplete="off" spellcheck="false" placeholder={destinationNetwork === "ethereum" ? "0x…" : say("Address on selected network", "Адрес в выбранной сети")} disabled={busy} data-testid="otc-buy-destination-address" />
           </label>
+          {#if destinationAddress.trim() && !destinationValid}<p class="acceptError" role="alert">{say(`Enter a valid ${token} address for ${networkLabel(destinationNetwork)}.`, `Укажите корректный адрес ${token} в сети ${networkLabel(destinationNetwork)}.`)}</p>{/if}
           {#if destinationAssetsError}<p class="settlementNote" role="alert">{destinationAssetsError}</p>{/if}
         {/if}
-        <button type="button" class="acceptOffer" disabled={busy || (side === "buy" && (!selectedBuyDestination || !destinationAddress.trim()))} data-testid="otc-accept-offer" on:click={() => {
+        {#if takerShort}<p class="acceptWarning" role="status" data-testid="otc-accept-shortfall">{say(`Not enough ${takerSymbol} to settle this offer: ${takerAvailable || 0} ${takerSymbol} available on ${takerNetwork}, ${takerAmount} ${takerSymbol} needed. Top up that wallet and reopen the offer.`, `Недостаточно ${takerSymbol} для расчёта по этому офферу: доступно ${takerAvailable || 0} ${takerSymbol} в сети ${takerNetwork}, требуется ${takerAmount} ${takerSymbol}. Пополните кошелёк и откройте оффер заново.`)}</p>{/if}
+        <button type="button" class="acceptOffer" disabled={busy || takerShort || (side === "buy" && !destinationValid)} data-testid="otc-accept-offer" on:click={() => {
           if (side === "buy" && selectedBuyDestination) {
             onAccept(selected.id, {
               stablecoin_network: selectedBuyDestination.network,
@@ -329,10 +370,19 @@
   .settlementNote svg { flex:0 0 auto; color:var(--color-accent-strong); }
   .acceptRow { display:grid; gap:12px; margin:0; padding:14px 22px 18px; border-top:1px solid var(--color-border); }
   .acceptRow p { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
-  .acceptDestination { display:grid; gap:8px; }
-  .acceptDestination label { display:grid; gap:5px; color:var(--color-text-soft); font-size:11px; }
-  .acceptDestination select, .acceptDestination input { width:100%; min-width:0; min-height:38px; padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:var(--color-text); font:inherit; }
+  .buyDestination { display:grid; gap:7px; color:var(--color-text-soft); font-size:11px; }
+  .destinationLabel { font-weight:600; }
+  .networkChoices { display:grid; gap:5px; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); }
+  .networkChoice { display:flex; min-height:36px; align-items:center; gap:7px; padding:6px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:var(--color-text); font-size:12px; text-align:left; overflow:hidden; }
+  .networkChoice span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .networkChoice img { flex:0 0 auto; border-radius:50%; object-fit:contain; }
+  .networkChoice:hover { border-color:var(--color-border-strong); }
+  .networkChoice[aria-pressed="true"] { border-color:var(--color-accent-strong); background:var(--color-accent-soft); font-weight:600; }
+  .networkChoice:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
+  .networkChoice:disabled { opacity:.55; cursor:default; }
+  .buyDestination input { width:100%; min-width:0; min-height:38px; padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:var(--color-text); font:inherit; }
   .acceptError { margin:0; color:var(--color-danger); font-size:11px; line-height:1.5; }
+  .acceptWarning { margin:0; padding:8px 10px; border:1px solid var(--color-danger); border-radius:8px; background:var(--color-panel); color:var(--color-danger); font-size:11px; line-height:1.5; }
   .acceptOffer { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--color-accent-strong); border-radius:8px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }

@@ -297,11 +297,24 @@
     }
   }
 
+  /** A deal just booked by this window must open even when the list refresh races or fails. */
+  async function loadDeal(id: string) {
+    if (!session) return;
+    try {
+      const result = await request<{ deal: P2pDeal; attempts?: Attempt[] }>(`/p2p/trades/${id}`, session.token);
+      if (result?.deal) applyDeal({ ...result.deal, attempts: result.deal.attempts ?? result.attempts ?? [] });
+    } catch (reason) {
+      error = explain(reason);
+      onError(error);
+    }
+  }
+
   export async function openDeal(id: string) {
     dismissed.delete(id);
     saveDismissed(session?.actor || "");
     autoOpen = true;
     if (!deals.some(item => item.id === id)) await refresh();
+    if (!deals.some(item => item.id === id)) await loadDeal(id);
     if (!deals.some(item => item.id === id)) return;
     selectedId = id;
     error = "";
