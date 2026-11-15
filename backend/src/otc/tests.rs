@@ -313,7 +313,7 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
@@ -323,7 +323,8 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
             include_str!("../../migrations/otc_p2p_fee_collection.sql"),
             include_str!("../../migrations/otc_p2p_near_intents.sql"),
-            include_str!("../../migrations/otc_p2p_ui.sql")
+            include_str!("../../migrations/otc_p2p_ui.sql"),
+            include_str!("../../migrations/otc_p2p_chat.sql")
         ))
         .await
         .unwrap();
@@ -1025,7 +1026,7 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
@@ -1035,7 +1036,8 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
             include_str!("../../migrations/otc_p2p_fee_collection.sql"),
             include_str!("../../migrations/otc_p2p_near_intents.sql"),
-            include_str!("../../migrations/otc_p2p_ui.sql")
+            include_str!("../../migrations/otc_p2p_ui.sql"),
+            include_str!("../../migrations/otc_p2p_chat.sql")
         ))
         .await
         .unwrap();

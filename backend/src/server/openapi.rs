@@ -1184,6 +1184,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/ws/otc/chat",
+        "get",
+        "OTC P2P chat WebSocket",
+        "Authenticated chat for the participants of one P2P deal. Authenticate with the OTC session token and deal UUID in the first JSON frame. Message bodies are AES-256-GCM encrypted at rest.",
+        "WebSockets",
+        false,
+        false,
+    ),
+    (
         "/ws/rates",
         "get",
         "Live rates WebSocket",
@@ -1597,6 +1606,7 @@ fn success_response(path: &str, method: &str) -> Value {
         ("/api/exchange/orders/{id}/live", "get")
         | ("/ws", "get")
         | ("/ws/otc", "get")
+        | ("/ws/otc/chat", "get")
         | ("/ws/rates", "get")
         | ("/ws/payments", "get")
         | ("/ws/p2p/routes", "get") => json!({

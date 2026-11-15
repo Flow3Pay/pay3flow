@@ -51,6 +51,7 @@ pub fn router(state: AppState) -> Router {
             "/ws/otc",
             get(move |ws| crate::server::routing::otc::ws(ws, test_otc.clone())),
         )
+        .route("/ws/otc/chat", get(crate::otc::chat::ws))
         .merge(scalar_routes)
         .merge(crate::otc::http::router())
         .merge(crate::hex::router())

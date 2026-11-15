@@ -92,7 +92,17 @@ prompting for a transfer. Closing a deal from the UI cancels it on the server
 while no stablecoin handoff exists, even when one side has already confirmed;
 once a payment attempt is prepared the Close action only hides the window and
 the leg stays tracked. The dialog shows the deal id and the recipient address
-with copy buttons.
+with copy buttons. While the deal window is open, both participants can open a
+chat panel beside the deal details within the same modal; it is available only
+to the trade's two authenticated participants and closes with that modal. Chat messages are
+persisted encrypted with AES-256-GCM using the backend's configured
+`SECRETS_KEY`; the backend can decrypt them when investigating a report. The
+key material sent in the feature request is not used because a key disclosed
+in source or configuration examples cannot protect stored messages.
+`GET /ws/otc/chat` authenticates with an OTC session token and trade UUID in
+its first JSON frame, sends the latest 100 messages, then accepts and streams
+text messages. Messages are limited to 2,000 characters; attachments are not
+supported. The additive `otc_p2p_chat.sql` migration is applied at startup.
 
 Each P2P deal accrues a 3% service fee exactly once from the gross USDT
 leg (`otc_p2p_fees`; startup also applies `backend/migrations/otc_p2p_fees.sql`).

@@ -9,6 +9,7 @@ pub(crate) mod avatar;
 mod balances;
 mod booking;
 mod chain;
+pub(crate) mod chat;
 mod config;
 mod error;
 mod escrow;

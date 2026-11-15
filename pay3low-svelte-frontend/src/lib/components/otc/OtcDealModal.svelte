@@ -5,6 +5,7 @@
   import { connectWallet } from "$lib/wallet-session";
   import type { RouteExecution } from "$lib/exchange";
   import { identiconDataUri } from "$lib/otc/identicon";
+  import OtcChatModal from "./OtcChatModal.svelte";
   import {
     p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
     p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
@@ -20,6 +21,8 @@
   export let onActiveDeals: (deals: P2pDeal[]) => void = () => {};
 
   let dialog: HTMLDialogElement | undefined;
+  let chatModal: { openChat(current: P2pDeal, owner: Session): Promise<void>; closeChat(): void } | undefined;
+  let chatOpen = false;
   let deals: P2pDeal[] = [];
   let selectedId = "";
   let busy = false;
@@ -152,12 +155,19 @@
       selectedSourceAsset = "";
       error = "";
       if (dialog?.open) dialog.close();
+      chatModal?.closeChat();
     }
     if (config?.p2p_available && session) {
       if (!configReady) { configReady = true; void refresh(); }
     } else {
       configReady = false;
     }
+  }
+
+  function openChat() {
+    if (!deal || !session) return;
+    chatOpen = true;
+    void chatModal?.openChat(deal, session);
   }
 
   onMount(() => {
@@ -178,6 +188,7 @@
   }
 
   function dismiss() {
+    chatModal?.closeChat();
     if (selectedId) {
       dismissed.add(selectedId);
       saveDismissed(session?.actor || "");
@@ -264,6 +275,7 @@
       const active = deals.filter(p2pActive);
       if (selectedId && !active.some(item => item.id === selectedId)) {
         if (dialog?.open) dialog.close();
+        chatModal?.closeChat();
         selectedId = "";
         autoOpen = false;
       }
@@ -527,18 +539,26 @@
 <dialog
   bind:this={dialog}
   class="dealDialog"
+  class:chatOpen
   aria-label={say("P2P deal", "Сделка P2P")}
   data-testid="otc-p2p-modal"
   on:cancel|preventDefault={dismiss}
   on:click={(event) => { if (event.target === dialog) dismiss(); }}
 >
   {#if deal}
+    <div class="modalPanels">
+    <section class="dealPanel" aria-label={say("Deal details", "Детали сделки")}>
     <div class="dealHead">
       <div class="dealAmount">
         <strong>{deal.terms.ever_amount}</strong><small>EVER</small>
         <span>·</span>
         <strong>{deal.terms.usdt_amount}</strong><small>{deal.terms.stablecoin || "USDT"}</small>
       </div>
+      {#if session}
+        <button type="button" class="chatButton" aria-label={say("Open deal chat", "Открыть чат сделки")} on:click={openChat} data-testid="otc-p2p-open-chat">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 4.5h12a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H9l-4.5 2v-2H4A1.5 1.5 0 0 1 2.5 13V6A1.5 1.5 0 0 1 4 4.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6 8h8M6 11h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      {/if}
       <button type="button" class="closeButton" aria-label={say("Close window", "Закрыть окно")} on:click={dismiss}>
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
       </button>
@@ -733,18 +753,29 @@
       {/if}
       <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-close" on:click={() => void closeDeal()}>{say("Close deal", "Закрыть сделку")}</button>
     </div>
+    </section>
+    <OtcChatModal bind:this={chatModal} onClose={() => { chatOpen = false; }} />
+    </div>
   {/if}
 </dialog>
 
 <style>
-  .dealDialog { position:fixed; top:0; right:0; bottom:0; left:0; margin:auto; width:min(430px,calc(100% - 32px)); height:fit-content; padding:0; overflow:hidden; border:1px solid var(--color-border-strong); border-radius:18px; background:var(--color-paper); color:var(--color-text); box-shadow:0 24px 80px #0005; }
+  .dealDialog { position:fixed; top:50%; right:auto; bottom:auto; left:50%; margin:0; width:min(430px,calc(100% - 32px)); max-height:calc(100dvh - 32px); height:fit-content; padding:0; overflow:auto; transform:translate(-50%,-50%); border:1px solid var(--color-border-strong); border-radius:18px; background:var(--color-paper); color:var(--color-text); box-shadow:0 24px 80px #0005; }
+  .dealDialog.chatOpen { box-sizing:border-box; width:min(896px,calc(100% - 32px)); height:min(680px,calc(100dvh - 32px)); padding:12px; overflow:hidden; }
   .dealDialog::backdrop { background:#10151bcc; backdrop-filter:blur(4px); }
+  .modalPanels { display:grid; min-height:0; grid-template-columns:minmax(0,1fr); }
+  .dealDialog.chatOpen .modalPanels { height:100%; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .dealPanel { min-width:0; height:100%; max-height:inherit; overflow-y:auto; }
+  .dealDialog.chatOpen .dealPanel { border:1px solid var(--color-border-strong); border-radius:18px; background:var(--color-paper); }
   .dealHead { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px 0; }
   .dealAmount { display:flex; min-width:0; align-items:baseline; gap:5px; overflow:hidden; font-family:var(--font-mono); font-variant-numeric:tabular-nums; white-space:nowrap; }
   .dealAmount strong { overflow:hidden; text-overflow:ellipsis; font-size:15px; font-weight:650; }
   .dealAmount small { color:var(--color-text-faint); font-family:var(--font-sans,inherit); font-size:9px; font-weight:650; }
   .dealAmount span { color:var(--color-text-faint); font-size:11px; }
   .closeButton { display:grid; width:34px; height:34px; flex:0 0 auto; place-items:center; border:1px solid var(--color-border); border-radius:9px; color:var(--color-text-soft); }
+  .chatButton { display:grid; width:34px; height:34px; flex:0 0 auto; place-items:center; border:1px solid var(--color-border); border-radius:9px; color:var(--color-text-soft); }
+  .chatButton:hover { border-color:var(--color-border-strong); color:var(--color-text); }
+  .chatButton:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   .dealMeta { display:flex; align-items:center; gap:8px; margin:10px 26px 0; }
   .dealId { display:flex; min-width:0; flex:1 1 auto; align-items:baseline; gap:7px; }
   .dealId small { flex:0 0 auto; color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; }
@@ -811,6 +842,7 @@
   .spinner { width:13px; height:13px; border:2px solid #15201655; border-top-color:#152016; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @keyframes travel { 0%,100% { transform:translate(-50%,-50%); } 50% { transform:translate(calc(-50% + 13px),-50%); } }
+  @media (max-width:900px) { .dealDialog.chatOpen .modalPanels { grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(2,minmax(0,1fr)); } }
   @media (max-width:420px) { .people, .flow, .legs, .action { padding-right:18px; padding-left:18px; } .dealHead { padding-right:18px; padding-left:18px; } .notice, .dealMeta, .dealDeadline { margin-right:18px; margin-left:18px; } }
   @media (prefers-reduced-motion:reduce) { .flow.active .rail span, .spinner { animation:none; } }
 </style>
