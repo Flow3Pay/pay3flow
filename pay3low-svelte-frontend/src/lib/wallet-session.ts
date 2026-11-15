@@ -47,7 +47,7 @@ async function retain(wallet: ConnectedWallet, generation: number) {
   else subscriptions.set(family, unsubscribe);
 }
 
-export async function connectWallet(network: string): Promise<ConnectedWallet> {
+export async function connectWallet(network: string, connectorId?: string): Promise<ConnectedWallet> {
   const family = walletFamily(network);
   if (!family) throw new Error(`Wallet connection is unavailable for ${network}`);
   const inProgress = pending.get(family);
@@ -55,7 +55,7 @@ export async function connectWallet(network: string): Promise<ConnectedWallet> {
   const generation = (generations.get(family) ?? 0) + 1;
   generations.set(family, generation);
   const promise = (async () => {
-    const wallet = await withConnectTimeout(connectForNetwork(network));
+    const wallet = await withConnectTimeout(connectForNetwork(network, connectorId));
     if (generations.get(family) !== generation) throw new Error("Wallet connection was cancelled");
     await retain(wallet, generation);
     return wallet;

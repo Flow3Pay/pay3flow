@@ -369,7 +369,20 @@ function isUserRejection(error: unknown): boolean {
   return value?.code === 4001 || value?.name === "UserRejectedRequestError";
 }
 
-async function connectInjectedEvm(config: unknown, chainId: number): Promise<EvmConnection> {
+export async function evmWalletChoices(): Promise<{ id: string; name: string }[]> {
+  const { config } = await injectedApp();
+  const ordered = evmConnectorOrder(config);
+  const announced = ordered.filter(connector => connector.id !== LEGACY_EVM_CONNECTOR_ID);
+  // The legacy aggregated proxy is only a fallback; hide it when extensions
+  // announce themselves so the picker lists real wallets.
+  const visible = announced.length ? announced : ordered;
+  return visible.map(connector => ({
+    id: connector.id ?? "",
+    name: connector.name ?? connector.id ?? "Browser wallet",
+  }));
+}
+
+async function connectInjectedEvm(config: unknown, chainId: number, connectorId?: string): Promise<EvmConnection> {
   const { connect, getAccount } = await import("@wagmi/core");
   const account = getAccount(config as Parameters<typeof getAccount>[0]);
   if (account.isConnected && account.address) {
@@ -378,7 +391,8 @@ async function connectInjectedEvm(config: unknown, chainId: number): Promise<Evm
     if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
     return { family: "evm", address: active.address, chainId, config };
   }
-  const connectors = evmConnectorOrder(config);
+  const available = evmConnectorOrder(config);
+  const connectors = connectorId ? available.filter(connector => connector.id === connectorId) : available;
   if (!connectors.length) throw new Error("No injected EVM wallet was found in this browser");
   let failure: unknown = null;
   for (const connector of connectors) {
@@ -408,7 +422,7 @@ async function connectInjectedEvm(config: unknown, chainId: number): Promise<Evm
   throw failure instanceof Error ? failure : new Error("No injected EVM wallet was found in this browser");
 }
 
-export async function connectEvm(network: string): Promise<EvmConnection> {
+export async function connectEvm(network: string, connectorId?: string): Promise<EvmConnection> {
   const chainId = chainIdForNetwork(network);
   if (!chainId) throw new Error(`Embedded EVM execution is unavailable for ${network}`);
   if (usesAppKitEvm()) {
@@ -421,7 +435,7 @@ export async function connectEvm(network: string): Promise<EvmConnection> {
     return { family: "evm", address: active.address, chainId, config };
   }
   const { config } = await injectedApp();
-  return connectInjectedEvm(config, chainId);
+  return connectInjectedEvm(config, chainId, connectorId);
 }
 
 async function nearSelector() {
@@ -467,7 +481,7 @@ export async function connectNear(): Promise<NearConnection> {
   return { family: "near", address: account.accountId, selector };
 }
 
-export async function connectForNetwork(network: string): Promise<ConnectedWallet> {
+export async function connectForNetwork(network: string, connectorId?: string): Promise<ConnectedWallet> {
   const family = walletFamily(network);
   if (family === "tron") {
     const provider = await connectTronProvider();
@@ -476,7 +490,7 @@ export async function connectForNetwork(network: string): Promise<ConnectedWalle
   }
   if (family === "near") return connectNear();
   if (family === "everscale") return connectEverscale();
-  if (family === "evm") return connectEvm(network);
+  if (family === "evm") return connectEvm(network, connectorId);
   if (isExtraNetwork(network)) return connectExtraWallet(network);
   throw new Error(`Wallet execution is not available for ${network}`);
 }
@@ -941,11 +955,21 @@ export async function observeWallet(wallet: ConnectedWallet, changed: (value: Co
       changed(account.isConnected && account.address && account.chainId ? { ...wallet, address: account.address, chainId: account.chainId } : null);
     } });
   }
+  let misses = 0;
   const update = () => {
     const web = wallet.provider.tronWeb;
-    // Invalidate on network changes instead of silently signing on another node.
-    changed(web && web.ready && web.defaultAddress.base58 && new URL(web.fullNode.host).hostname === "api.trongrid.io"
-      ? { ...wallet, address: web.defaultAddress.base58 } : null);
+    const address = web ? web.defaultAddress?.base58 : undefined;
+    // Wallets such as Trust Wallet report the account a moment after approving
+    // and may keep `ready` false, so only drop the connection after two
+    // consecutive probes report no account. Network safety is enforced by
+    // `ensureTronMainnet` before every balance read and signature.
+    if (address) {
+      misses = 0;
+      changed({ ...wallet, address });
+      return;
+    }
+    misses += 1;
+    if (misses >= 2) changed(null);
   };
   const events = ["accountsChanged", "chainChanged", "connect", "disconnect"];
   for (const event of events) wallet.provider.on?.(event, update);

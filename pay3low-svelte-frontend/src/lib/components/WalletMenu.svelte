@@ -9,7 +9,7 @@
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import { identiconDataUri } from "$lib/otc/identicon";
   import { getAnonymousUserId } from "$lib/anonymous-user";
-  import { chainIdForNetwork, usesAppKitEvm, type WalletFamily } from "$lib/wallet-execution";
+  import { chainIdForNetwork, evmWalletChoices, usesAppKitEvm, type WalletFamily } from "$lib/wallet-execution";
   import { mobileWalletLinks, type MobileWalletLink } from "$lib/mobile-wallet-links";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
@@ -38,7 +38,7 @@
   $: open = $walletDialogMode !== null;
   $: account = $walletDialogMode === "otc" ? $otcWalletDialog : null;
   let query = "";
-  $: if (!open) { query = ""; error = ""; }
+  $: if (!open) { query = ""; error = ""; evmChoices = []; pendingEvmNetwork = ""; }
   let searchInput: HTMLInputElement;
   let busy: WalletFamily | null = null;
   let error = "";
@@ -48,6 +48,8 @@
   let anonymousUserId = "";
   let mobile = false;
   let appLinks: MobileWalletLink[] = [];
+  let evmChoices: { id: string; name: string }[] = [];
+  let pendingEvmNetwork = "";
   $: handoff = providerHandoff;
   $: working = Boolean(busy || account?.busy);
   let motionDuration = 160;
@@ -165,6 +167,15 @@
       } finally { busy = null; void focusChoice(network); }
       return;
     }
+    if (family === "evm" && !wallet) {
+      // Several installed extensions share one window.ethereum proxy, so let the
+      // trader pick which wallet should answer before opening its prompt.
+      const choices = await evmWalletChoices().catch(() => []);
+      if (choices.length > 1) {
+        evmChoices = choices; pendingEvmNetwork = network; error = "";
+        return;
+      }
+    }
     if (wallet?.family === "evm") {
       if (wallet.chainId !== chainIdForNetwork(network)) await connect(family, network);
       return;
@@ -172,14 +183,15 @@
     if (wallet) await disconnect(family, network);
     else await connect(family, network);
   }
-  async function connect(family: WalletFamily, network: string) {
+  async function connect(family: WalletFamily, network: string, connectorId?: string) {
     if (busy) return;
     busy = family;
     error = "";
+    evmChoices = [];
     // Selector UIs mount outside our dialog. Let them receive focus and input
     // while keeping the underlying application locked until they return.
     providerHandoff = family === "near" || family === "ton" || (family === "evm" && usesAppKitEvm());
-    try { await connectWallet(network); }
+    try { await connectWallet(network, connectorId); }
     catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
     finally { busy = null; providerHandoff = false; void focusChoice(network); }
   }
@@ -254,6 +266,17 @@
             {/each}
             {#if !visibleChoices.length}<div class="emptySearch" role="status"><strong>{copy("No wallets found")}</strong><span>{copy("Try a different search.")}</span></div>{/if}
           </section>
+          {#if evmChoices.length}
+            <section class="section evmWallets" aria-label={copy("Choose a browser wallet")}>
+              <h3>{copy("Choose a browser wallet")}</h3>
+              {#each evmChoices as choice (choice.id)}
+                <button type="button" class="evmWallet" disabled={working} on:click={() => connect("evm", pendingEvmNetwork, choice.id)}>
+                  <span>{choice.name}</span>
+                </button>
+              {/each}
+              <button type="button" class="evmCancel" disabled={working} on:click={() => { evmChoices = []; pendingEvmNetwork = ""; }}>{copy("Back")}</button>
+            </section>
+          {/if}
           {#if mobile && !$wallets.evm}
             <section class="mobileWallets" aria-label={copy("Mobile wallet apps")}>
               <h3>{copy("Open Pay3Flow in a wallet app")}</h3>
@@ -312,6 +335,10 @@
   .resultPanel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; flex: 1; }
   .walletList { min-height: 0; max-height: min(480px, calc(88dvh - 106px)); overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 12px; scrollbar-gutter: stable; }
   .section { padding: 0 0 8px; }
+  .evmWallets { margin: 0 8px 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); }
+  .evmWallets h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--color-text-soft); }
+  .evmWallet { display: flex; width: 100%; align-items: center; padding: 0 12px; margin-bottom: 6px; font-size: 13px; text-align: left; }
+  .evmCancel { width: 100%; font-size: 12px; }
   .mobileWallets { margin: 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); }
   .mobileWallets h3 { margin: 0 0 5px; font-size: 13px; }
   .mobileWallets p { padding: 0; color: var(--color-text-soft); }
