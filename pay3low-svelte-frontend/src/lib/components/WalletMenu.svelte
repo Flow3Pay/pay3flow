@@ -9,7 +9,7 @@
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import { identiconDataUri } from "$lib/otc/identicon";
   import { getAnonymousUserId } from "$lib/anonymous-user";
-  import { chainIdForNetwork, evmWalletChoices, usesAppKitEvm, type WalletFamily } from "$lib/wallet-execution";
+  import { chainIdForNetwork, evmWalletChoices, usesAppKitEvm, type EvmWalletChoice, type WalletFamily } from "$lib/wallet-execution";
   import { mobileWalletLinks, type MobileWalletLink } from "$lib/mobile-wallet-links";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
@@ -48,7 +48,7 @@
   let anonymousUserId = "";
   let mobile = false;
   let appLinks: MobileWalletLink[] = [];
-  let evmChoices: { id: string; name: string }[] = [];
+  let evmChoices: EvmWalletChoice[] = [];
   let pendingEvmNetwork = "";
   $: handoff = providerHandoff;
   $: working = Boolean(busy || account?.busy);
@@ -148,6 +148,7 @@
 
   async function selectChoice(family: WalletFamily, network: string) {
     if (working) return;
+    evmChoices = []; pendingEvmNetwork = "";
     const context = account;
     const wallet = $wallets[family];
     if (context && (network === "ethereum" || network === "everscale") && context.enabled && context.chains.includes(network)) {
@@ -232,15 +233,15 @@
               {@const proof = otcChain ? account?.bound.find(value => value.startsWith(`${otcChain}:`))?.slice(otcChain.length + 1).trim() : undefined}
               {@const canVerify = !!(otcChain && account?.enabled && account.chains.includes(otcChain))}
               {@const verified = !!(wallet && proof?.toLowerCase() === wallet.address.toLowerCase())}
-              {@const disconnectable = !!wallet && choice.family !== "evm" && (!otcChain || verified || !canVerify)}
-              {@const verificationAction = !!(canVerify && account?.session && (!proof || (wallet && !verified)))}
               {@const selected = !!wallet}
               {@const activeEvmNetwork = wallet?.family === "evm" && wallet.chainId === chainIdForNetwork(choice.network)}
+              {@const disconnectable = !!wallet && (choice.family === "evm" ? activeEvmNetwork : (!otcChain || verified || !canVerify))}
+              {@const verificationAction = !!(canVerify && account?.session && (!proof || (wallet && !verified)))}
               {@const action = busy === choice.family ? copy("Connecting…") : verificationAction ? copy("Verify") : wallet && choice.family === "evm" ? activeEvmNetwork ? copy("Connected") : copy("Switch network") : disconnectable && selected ? copy("Disconnect") : copy("Connect")}
               {@const address = wallet?.address}
               <div class="walletChoice" data-family={choice.family} data-network={choice.network} aria-busy={busy === choice.family}>
                 {#snippet disconnectAction()}
-                {#if wallet && choice.family !== "evm" && !disconnectable}
+                  {#if disconnectable}
                     <button type="button" class="cardAction" disabled={working} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click|stopPropagation={() => disconnect(choice.family, choice.network)}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.9 7.56c.31-3.6 2.16-5.07 6.21-5.07h.13c4.47 0 6.26 1.79 6.26 6.26v6.52c0 4.47-1.79 6.26-6.26 6.26h-.13c-4.02 0-5.87-1.45-6.2-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="M15 12H3.62" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="m5.85 8.65-3.35 3.35 3.35 3.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     </button>
@@ -261,22 +262,27 @@
                   onSelect={() => selectChoice(choice.family, choice.network)}
                 />
                 {#if proof && (!wallet || verified)}<div class="connectionState"><span>{copy("Verified")}</span></div>{/if}
+                {#if pendingEvmNetwork === choice.network && evmChoices.length}
+                  <div class="evmWallets" role="group" aria-label={copy("Choose a browser wallet")}>
+                    <p class="evmWalletsHint">{copy("Choose a browser wallet")}</p>
+                    {#each evmChoices as walletChoice (walletChoice.id)}
+                      <button type="button" class="evmWallet" disabled={working} on:click={() => connect("evm", choice.network, walletChoice.id)}>
+                        {#if walletChoice.icon}
+                          <img src={walletChoice.icon} width="22" height="22" alt="" aria-hidden="true" />
+                        {:else}
+                          <span class="evmWalletBadge" aria-hidden="true">{walletChoice.name.slice(0, 1).toUpperCase()}</span>
+                        {/if}
+                        <span>{walletChoice.name}</span>
+                      </button>
+                    {/each}
+                    <button type="button" class="evmCancel" disabled={working} on:click={() => { evmChoices = []; pendingEvmNetwork = ""; }}>{copy("Back")}</button>
+                  </div>
+                {/if}
                 {#if otcChain && !canVerify}<p class="verificationStatus">{copy("OTC verification is unavailable for this network.")}</p>{/if}
               </div>
             {/each}
             {#if !visibleChoices.length}<div class="emptySearch" role="status"><strong>{copy("No wallets found")}</strong><span>{copy("Try a different search.")}</span></div>{/if}
           </section>
-          {#if evmChoices.length}
-            <section class="section evmWallets" aria-label={copy("Choose a browser wallet")}>
-              <h3>{copy("Choose a browser wallet")}</h3>
-              {#each evmChoices as choice (choice.id)}
-                <button type="button" class="evmWallet" disabled={working} on:click={() => connect("evm", pendingEvmNetwork, choice.id)}>
-                  <span>{choice.name}</span>
-                </button>
-              {/each}
-              <button type="button" class="evmCancel" disabled={working} on:click={() => { evmChoices = []; pendingEvmNetwork = ""; }}>{copy("Back")}</button>
-            </section>
-          {/if}
           {#if mobile && !$wallets.evm}
             <section class="mobileWallets" aria-label={copy("Mobile wallet apps")}>
               <h3>{copy("Open Pay3Flow in a wallet app")}</h3>
@@ -290,7 +296,6 @@
           {/if}
           {#if error || account?.error}<p role="alert">{error || account?.error}</p>{/if}
           {#if account?.progress}<p class="walletStatus" role="status">{copy(account.progress)}</p>{/if}
-          {#if $wallets.evm}<button class="accountAction" type="button" disabled={working} on:click={() => disconnect("evm", "ethereum")}>{copy("Disconnect EVM wallet")}</button>{/if}
           {#if account?.session}<button class="accountAction" type="button" disabled={account.disconnectDisabled || !!account.progress || Boolean(busy)} on:click={account.onDisconnect}>{copy("Disconnect")}</button>{/if}
           {#if account?.requestingQuote}
             {#if account.quoteStatus}<p class="walletStatus" id="otc-quote-status" data-testid="otc-quote-status">{account.quoteStatus}</p>{/if}
@@ -335,9 +340,11 @@
   .resultPanel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; flex: 1; }
   .walletList { min-height: 0; max-height: min(480px, calc(88dvh - 106px)); overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 12px; scrollbar-gutter: stable; }
   .section { padding: 0 0 8px; }
-  .evmWallets { margin: 0 8px 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); }
-  .evmWallets h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--color-text-soft); }
-  .evmWallet { display: flex; width: 100%; align-items: center; padding: 0 12px; margin-bottom: 6px; font-size: 13px; text-align: left; }
+  .evmWallets { display: grid; gap: 6px; margin: 0 8px 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); }
+  .evmWalletsHint { margin: 0 0 2px; font-size: 12px; font-weight: 600; color: var(--color-text-soft); }
+  .evmWallet { display: flex; width: 100%; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; text-align: left; }
+  .evmWallet img { width: 22px; height: 22px; flex: 0 0 auto; border-radius: 6px; object-fit: contain; }
+  .evmWalletBadge { display: grid; width: 22px; height: 22px; flex: 0 0 auto; place-items: center; border-radius: 6px; background: var(--color-accent-soft); font-size: 11px; font-weight: 700; }
   .evmCancel { width: 100%; font-size: 12px; }
   .mobileWallets { margin: 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); }
   .mobileWallets h3 { margin: 0 0 5px; font-size: 13px; }

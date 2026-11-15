@@ -369,17 +369,38 @@ function isUserRejection(error: unknown): boolean {
   return value?.code === 4001 || value?.name === "UserRejectedRequestError";
 }
 
-export async function evmWalletChoices(): Promise<{ id: string; name: string }[]> {
+export interface EvmWalletChoice {
+  id: string;
+  name: string;
+  icon?: string;
+}
+
+// Connector ids are EIP-6963 rdns identifiers, which stay the same across
+// locales while the announced display names do not. Branding is served from
+// our own origin so the dialog keeps its icons under the site CSP.
+const EVM_WALLET_BRANDING: Record<string, { name?: string; icon?: string }> = {
+  "io.metamask": { icon: "/icons/wallets/metamask.png" },
+  "me.rainbow": { icon: "/icons/wallets/rainbow.png" },
+  "com.trustwallet.app": { name: "TrustWallet", icon: "/icons/wallets/trustwallet.png" },
+  "com.trust.wallet": { name: "TrustWallet", icon: "/icons/wallets/trustwallet.png" },
+};
+
+export async function evmWalletChoices(): Promise<EvmWalletChoice[]> {
   const { config } = await injectedApp();
   const ordered = evmConnectorOrder(config);
   const announced = ordered.filter(connector => connector.id !== LEGACY_EVM_CONNECTOR_ID);
   // The legacy aggregated proxy is only a fallback; hide it when extensions
   // announce themselves so the picker lists real wallets.
   const visible = announced.length ? announced : ordered;
-  return visible.map(connector => ({
-    id: connector.id ?? "",
-    name: connector.name ?? connector.id ?? "Browser wallet",
-  }));
+  return visible.map(connector => {
+    const id = connector.id ?? "";
+    const brand = EVM_WALLET_BRANDING[id];
+    return {
+      id,
+      name: brand?.name ?? (connector.name || id || "Browser wallet"),
+      icon: brand?.icon,
+    };
+  });
 }
 
 async function connectInjectedEvm(config: unknown, chainId: number, connectorId?: string): Promise<EvmConnection> {
