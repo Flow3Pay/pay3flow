@@ -302,11 +302,16 @@ this widget are handled by CoW itself rather than Pay3Flow's execution endpoint.
 The widget supports native-asset routes even when the backend does not issue
 an ERC-20 execution descriptor.
 
-The frontend needs a WalletConnect Cloud project id at runtime:
+Optional integrations with their own WalletConnect wallet flows can use a
+WalletConnect Cloud project id at runtime:
 
 ```text
 PUBLIC_REOWN_PROJECT_ID=your-project-id
 ```
+
+Pay3Flow's shared EVM wallet connection does not use this setting or WalletConnect.
+On mobile, open Pay3Flow in a supported wallet app to use its injected browser
+provider.
 
 The separate Aurora widget uses frontend runtime `PUBLIC_AURORA_INTENTS_API_KEY`;
 backend `NEAR_INTENTS_JWT` is a different, server-only credential.

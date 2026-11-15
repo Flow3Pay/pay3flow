@@ -1,6 +1,10 @@
 export const walletMessages = {
   en: {},
   ru: {
+    "Mobile wallet apps": "Мобильные кошельки",
+    "Open Pay3Flow in a wallet app": "Откройте Pay3Flow в приложении кошелька",
+    "Choose your wallet app. Pay3Flow will reopen inside its browser, where the wallet can connect directly.": "Выберите приложение кошелька. Pay3Flow откроется во встроенном браузере, где кошелёк подключится напрямую.",
+    "Open in {wallet}": "Открыть в {wallet}",
     "Deposit address is ready. Pay3Flow tracks receipt and completion automatically.": "Адрес депозита готов. Pay3Flow автоматически отслеживает поступление средств и завершение обмена.",
     "Refund address": "Адрес возврата",
     "Send from another wallet": "Отправить из другого кошелька",
@@ -67,6 +71,10 @@ export const walletMessages = {
     "Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Executable swaps are signed in your wallet. Other route steps are completed on the provider platform.": "Курсы, лимиты и предложения могут измениться. Перед отправкой проверьте поставщика, реквизиты и сеть. Доступные обмены подписываются в вашем кошельке. Остальные шаги выполняются на площадке поставщика.",
   },
   hy: {
+    "Mobile wallet apps": "Բջջային դրամապանակներ",
+    "Open Pay3Flow in a wallet app": "Բացեք Pay3Flow-ը դրամապանակի հավելվածում",
+    "Choose your wallet app. Pay3Flow will reopen inside its browser, where the wallet can connect directly.": "Ընտրեք դրամապանակի հավելվածը։ Pay3Flow-ը կբացվի դրա ներկառուցված դիտարկիչում, որտեղ դրամապանակը կմիանա անմիջապես։",
+    "Open in {wallet}": "Բացել {wallet}-ում",
     "Deposit address is ready. Pay3Flow tracks receipt and completion automatically.": "Ավանդի հասցեն պատրաստ է։ Pay3Flow-ը ավտոմատ հետևում է միջոցների ստացմանը և փոխանակման ավարտին։",
     "Refund address": "Վերադարձի հասցե",
     "Send from another wallet": "Ուղարկել այլ դրամապանակից",

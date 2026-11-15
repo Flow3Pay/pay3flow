@@ -3,7 +3,6 @@
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
   import { fade, fly } from "svelte/transition";
-  import { env } from "$env/dynamic/public";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { locale, t } from "$lib/i18n";
   import { assetIcon } from "$lib/icons";
@@ -11,6 +10,7 @@
   import { identiconDataUri } from "$lib/otc/identicon";
   import { getAnonymousUserId } from "$lib/anonymous-user";
   import { chainIdForNetwork, type WalletFamily } from "$lib/wallet-execution";
+  import { mobileWalletLinks, type MobileWalletLink } from "$lib/mobile-wallet-links";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
@@ -46,7 +46,9 @@
   let providerHandoff = false;
   let activeChain: "ethereum" | "everscale" | null = null;
   let anonymousUserId = "";
-  $: handoff = providerHandoff || (activeChain === "ethereum" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()) && account?.progress === "Connecting wallet…");
+  let mobile = false;
+  let appLinks: MobileWalletLink[] = [];
+  $: handoff = providerHandoff;
   $: working = Boolean(busy || account?.busy);
   let motionDuration = 160;
   let toggle: HTMLButtonElement;
@@ -63,6 +65,9 @@
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
   onMount(() => {
     anonymousUserId = getAnonymousUserId() ?? "";
+    mobile = matchMedia("(max-width: 980px)").matches
+      && (navigator.maxTouchPoints > 0 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+    if (mobile) appLinks = mobileWalletLinks(window.location.href);
     void restoreWallets();
     const resetWalletDialog = () => {
       if (get(walletDialogMode) === null) return;
@@ -175,7 +180,7 @@
     error = "";
     // Selector UIs mount outside our dialog. Let them receive focus and input
     // while keeping the underlying application locked until they return.
-    providerHandoff = family === "near" || family === "ton" || (family === "evm" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()));
+    providerHandoff = family === "near" || family === "ton";
     try { await connectWallet(network); }
     catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
     finally { busy = null; providerHandoff = false; void focusChoice(network); }
@@ -251,6 +256,17 @@
             {/each}
             {#if !visibleChoices.length}<div class="emptySearch" role="status"><strong>{copy("No wallets found")}</strong><span>{copy("Try a different search.")}</span></div>{/if}
           </section>
+          {#if mobile && !$wallets.evm}
+            <section class="mobileWallets" aria-label={copy("Mobile wallet apps")}>
+              <h3>{copy("Open Pay3Flow in a wallet app")}</h3>
+              <p>{copy("Choose your wallet app. Pay3Flow will reopen inside its browser, where the wallet can connect directly.")}</p>
+              <div class="mobileWalletLinks">
+                {#each appLinks as link (link.name)}
+                  <a href={link.href} aria-label={copy("Open in {wallet}", { wallet: link.name })}>{link.name}</a>
+                {/each}
+              </div>
+            </section>
+          {/if}
           {#if error || account?.error}<p role="alert">{error || account?.error}</p>{/if}
           {#if account?.progress}<p class="walletStatus" role="status">{copy(account.progress)}</p>{/if}
           {#if $wallets.evm}<button class="accountAction" type="button" disabled={working} on:click={() => disconnect("evm", "ethereum")}>{copy("Disconnect EVM wallet")}</button>{/if}
@@ -298,6 +314,12 @@
   .resultPanel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; flex: 1; }
   .walletList { min-height: 0; max-height: min(480px, calc(88dvh - 106px)); overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 12px; scrollbar-gutter: stable; }
   .section { padding: 0 0 8px; }
+  .mobileWallets { margin: 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); }
+  .mobileWallets h3 { margin: 0 0 5px; font-size: 13px; }
+  .mobileWallets p { padding: 0; color: var(--color-text-soft); }
+  .mobileWalletLinks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .mobileWalletLinks a { display: inline-flex; min-height: 40px; align-items: center; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); font-size: 12px; font-weight: 650; text-decoration: none; }
+  .mobileWalletLinks a:hover { background: var(--color-accent-soft); }
   .emptySearch { display: grid; gap: 6px; padding: 28px 12px; color: var(--color-text-soft); text-align: center; font-size: 12px; }
   .emptySearch strong { font-size: 13px; font-weight: 600; }
   .emptySearch span { color: var(--color-text-faint); }

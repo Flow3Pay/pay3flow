@@ -66,6 +66,10 @@ header does not initiate a swap. Starting a swap connects its source wallet,
 validates the recipient, obtains a fresh quote, and opens the wallet's signing
 prompt when funds are available. Approvals are confirmed before refreshing the
 swap quote. Submitted transactions survive reloads and notification retries.
+EVM wallet connections use injected providers directly, without WalletConnect.
+On mobile, users can open Pay3Flow inside MetaMask, Trust Wallet, or Coinbase
+Wallet; the wallet app's browser injects the provider used for connection and
+transaction signing.
 
 CoW Swap fees are quote-dependent rather than a universal fixed percentage.
 The live quote accounts for execution costs, while liquidity, gas, and optional

@@ -1,6 +1,4 @@
-import { env } from "$env/dynamic/public";
 import type { RouteExecution, RouteExecutionAction } from "$lib/exchange";
-import type { AppKitNetwork } from "@reown/appkit/networks";
 import type { EIP1193Provider } from "viem";
 import { sei } from "viem/chains";
 import { decimalToAtomic, atomicToDecimal, sameWalletAddress } from "./wallet-amount";
@@ -47,14 +45,13 @@ export interface TronConnection {
   provider: TronProvider;
 }
 
-let evmApp: Promise<{ modal: import("@reown/appkit").AppKit; config: unknown }> | null = null;
 let nearApp: Promise<NearConnection["selector"]> | null = null;
 let injectedEvmApp: Promise<{ config: unknown; connector: unknown }> | null = null;
 
 function injectedWalletTarget() {
-  const provider = window.ethereum as (EIP1193Provider & {
+  const provider = (window as Window & { ethereum?: EIP1193Provider & {
     off?: EIP1193Provider["removeListener"];
-  }) | undefined;
+  } }).ethereum;
   if (!provider) throw new Error("No injected EVM wallet was found in this browser");
 
   // Some wallet extensions expose an EIP-1193 proxy whose `removeListener`
@@ -240,58 +237,6 @@ async function switchEvmChain(config: unknown, chainId: number): Promise<void> {
   }
 }
 
-async function appKit() {
-  if (evmApp) return evmApp;
-  evmApp = (async () => {
-    const projectId = env.PUBLIC_REOWN_PROJECT_ID?.trim();
-    if (!projectId) throw new Error("PUBLIC_REOWN_PROJECT_ID is not configured");
-    const [{ createAppKit }, { WagmiAdapter }, networks] = await Promise.all([
-      import("@reown/appkit"),
-      import("@reown/appkit-adapter-wagmi"),
-      import("@reown/appkit/networks"),
-    ]);
-    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink, sei];
-    const adapter = new WagmiAdapter({ projectId, networks: supported });
-    const modal = createAppKit({
-      adapters: [adapter],
-      networks: supported,
-      projectId,
-      metadata: {
-        name: "Pay3Flow",
-        description: "Non-custodial route execution",
-        url: window.location.origin,
-        icons: [`${window.location.origin}/icons/assets/pay3flow-mark.svg`],
-      },
-      features: { analytics: false, email: false, socials: false },
-    });
-    return { modal, config: adapter.wagmiConfig };
-  })();
-  return evmApp;
-}
-
-async function waitForEvmAddress(modal: import("@reown/appkit").AppKit): Promise<Address> {
-  const existing = modal.getAddress("eip155");
-  if (existing?.startsWith("0x")) return existing as Address;
-  return new Promise<Address>((resolve, reject) => {
-    let unsubscribeAccount = () => {};
-    let unsubscribeState = () => {};
-    let finished = false;
-    const cleanup = () => { finished = true; window.clearTimeout(timeout); unsubscribeAccount(); unsubscribeState(); };
-    const timeout = window.setTimeout(() => { cleanup(); reject(new Error("Wallet connection timed out")); }, 120_000);
-    unsubscribeAccount = modal.subscribeAccount(state => {
-      if (!state.address?.startsWith("0x")) return;
-      cleanup(); resolve(state.address as Address);
-    }, "eip155");
-    let opened = false;
-    unsubscribeState = modal.subscribeState(state => {
-      if (state.open) opened = true;
-      else if (opened && !finished && !modal.getAddress("eip155")) { cleanup(); reject(new Error("Wallet connection was cancelled")); }
-    });
-    if (finished) { unsubscribeAccount(); unsubscribeState(); return; }
-    void modal.open({ view: "Connect", namespace: "eip155" }).catch(cause => { cleanup(); reject(cause); });
-  });
-}
-
 async function injectedApp() {
   if (!injectedEvmApp) {
       injectedEvmApp = (async () => {
@@ -317,21 +262,13 @@ async function injectedApp() {
 export async function connectEvm(network: string): Promise<EvmConnection> {
   const chainId = chainIdForNetwork(network);
   if (!chainId) throw new Error(`Embedded EVM execution is unavailable for ${network}`);
-  if (!env.PUBLIC_REOWN_PROJECT_ID?.trim()) {
-    const { config, connector } = await injectedApp();
-    const { connect, getAccount } = await import("@wagmi/core");
-    const account = getAccount(config as Parameters<typeof getAccount>[0]);
-    const connected = account.isConnected ? { accounts: account.addresses ?? [], chainId: account.chainId } : await connect(config as Parameters<typeof connect>[0], { connector: connector as Parameters<typeof connect>[1]["connector"] });
-    if (!connected.accounts[0]) throw new Error("Injected wallet did not return an account");
-    if (connected.chainId !== chainId) await switchEvmChain(config, chainId);
-    const active = getAccount(config as Parameters<typeof getAccount>[0]);
-    if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
-    return { family: "evm", address: active.address, chainId, config };
-  }
-  const { modal, config } = await appKit();
-  await waitForEvmAddress(modal);
-  const { getAccount } = await import("@wagmi/core");
-  await switchEvmChain(config, chainId);
+  const { config, connector } = await injectedApp();
+  const { connect, getAccount } = await import("@wagmi/core");
+  const account = getAccount(config as Parameters<typeof getAccount>[0]);
+  const connected = account.isConnected ? { accounts: account.addresses ?? [], chainId: account.chainId }
+    : await connect(config as Parameters<typeof connect>[0], { connector: connector as Parameters<typeof connect>[1]["connector"] });
+  if (!connected.accounts[0]) throw new Error("Injected wallet did not return an account");
+  if (connected.chainId !== chainId) await switchEvmChain(config, chainId);
   const active = getAccount(config as Parameters<typeof getAccount>[0]);
   if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
   return { family: "evm", address: active.address, chainId, config };
@@ -831,7 +768,7 @@ export async function restoreWallet(family: WalletFamily): Promise<ConnectedWall
     if (!web || !web.ready || !web.defaultAddress.base58) return null;
     return { family, address: web.defaultAddress.base58, chainId: TRON_CHAIN_ID, provider };
   }
-  const { config } = env.PUBLIC_REOWN_PROJECT_ID?.trim() ? await appKit() : await injectedApp();
+  const { config } = await injectedApp();
   const { reconnect, getAccount } = await import("@wagmi/core");
   await reconnect(config as Parameters<typeof reconnect>[0]);
   const account = getAccount(config as Parameters<typeof getAccount>[0]);

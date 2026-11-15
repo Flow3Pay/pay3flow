@@ -83,6 +83,17 @@ async function wallets(page: Page) {
   await page.waitForLoadState("networkidle");
 }
 
+test("mobile wallet dialog offers direct wallet-app handoffs", async ({ page, isMobile }) => {
+  test.skip(!isMobile);
+  await wallets(page);
+  await page.locator(".walletMenu .walletToggle").click();
+  const dialog = page.getByRole("dialog", { name: "Wallet connections" });
+  for (const wallet of ["MetaMask", "Trust Wallet", "Coinbase Wallet"]) {
+    await expect(dialog.getByRole("link", { name: `Open in ${wallet}` })).toBeVisible();
+  }
+  await expect(dialog.getByRole("link", { name: "Open in MetaMask" })).toHaveAttribute("href", /metamask\.app\.link\/dapp\//);
+});
+
 function execution(provider = "near-intents", network = "tron", symbol = "USDT", destination = "tron") {
   return {
     id: "00000000-0000-4000-8000-000000000999", route_id: "wallet-test-route", provider,
