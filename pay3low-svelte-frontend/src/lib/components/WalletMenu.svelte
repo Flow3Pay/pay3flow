@@ -90,13 +90,11 @@
   function portal(node: HTMLDivElement) {
     const previousFocus = document.activeElement as HTMLElement | null;
     document.body.appendChild(node);
-    const shell = document.querySelector<HTMLElement>(".appShell");
-    const wasInert = shell?.inert ?? false;
-    if (shell) shell.inert = true;
+    // The backdrop already blocks pointer input; making the shell inert used to
+    // trap the page when a wallet modal closed without completing the connect.
     const unlock = lockPageScroll();
     void tick().then(() => searchInput?.focus());
     return { destroy() {
-      if (shell) shell.inert = wasInert;
       unlock(); node.remove(); previousFocus?.focus();
     } };
   }

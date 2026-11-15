@@ -55,6 +55,18 @@ async function injectedProvider(): Promise<EverscaleProvider> {
   });
 }
 
+const EVER_REQUEST_TIMEOUT_MS = 25_000;
+
+// EVER Wallet proxies its RPC through the extension. When that endpoint is
+// unreachable the request never settles, so cap every handshake call.
+function everRequest<T>(provider: EverscaleProvider, args: { method: string; params?: unknown }): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("EVER Wallet did not respond. Unlock the extension, check its network connection and try again.")), EVER_REQUEST_TIMEOUT_MS);
+    (provider.request as unknown as (request: { method: string; params?: unknown }) => Promise<T>)(args)
+      .then(value => { window.clearTimeout(timer); resolve(value); }, error => { window.clearTimeout(timer); reject(error); });
+  });
+}
+
 function connection(provider: EverscaleProvider, state: EverscaleState): EverscaleConnection | null {
   const address = state.permissions.accountInteraction?.address;
   // The documented connection group distinguishes Everscale from other TVM
@@ -65,10 +77,10 @@ function connection(provider: EverscaleProvider, state: EverscaleState): Eversca
 
 export async function connectEverscale(): Promise<EverscaleConnection> {
   const provider = await injectedProvider();
-  const initial = await provider.request({ method: "getProviderState" });
+  const initial = await everRequest<EverscaleState>(provider, { method: "getProviderState" });
   if (initial.selectedConnection !== "mainnet") throw new Error("Switch EVER Wallet to Everscale mainnet and try again.");
-  await provider.request({ method: "requestPermissions", params: { permissions: ["basic", "accountInteraction"] } });
-  const state = await provider.request({ method: "getProviderState" });
+  await everRequest<EverscalePermissions>(provider, { method: "requestPermissions", params: { permissions: ["basic", "accountInteraction"] } });
+  const state = await everRequest<EverscaleState>(provider, { method: "getProviderState" });
   if (state.selectedConnection !== "mainnet") throw new Error("Switch EVER Wallet to Everscale mainnet and try again.");
   const wallet = connection(provider, state);
   if (!wallet) throw new Error("Unlock EVER Wallet and authorize this website.");

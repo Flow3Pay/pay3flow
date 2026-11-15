@@ -57,6 +57,7 @@ interface TonConnect {
   connectionRestored: Promise<boolean>;
   setConnectionNetwork(network?: string): void;
   onStatusChange(callback: (wallet: { account?: TonAccount } | null) => void): () => void;
+  onModalStateChange?(callback: (state: { open: boolean }) => void): () => void;
   openModal(): Promise<void>;
   sendTransaction(input: {
     validUntil: number;
@@ -158,7 +159,7 @@ function normalizedTonAddress(address: string): string {
 async function connectSui(): Promise<ExtraWallet> {
   const { getWallets } = await import("@wallet-standard/app");
   const wallets = getWallets().get().filter(wallet => wallet.chains.includes("sui:mainnet"));
-  if (!wallets.length) throw new Error("No Sui mainnet wallet was found");
+  if (!wallets.length) throw new Error("Install a Sui wallet such as Slush, then retry");
   if (wallets.length > 1) throw new Error("More than one Sui wallet is available; leave one Sui wallet enabled and retry");
   const wallet = wallets[0] as unknown as SuiWallet;
   const connect = record(wallet.features["standard:connect"])?.connect;
@@ -194,23 +195,35 @@ export async function connectExtraWallet(network: string): Promise<ExtraWallet> 
     }
     await new Promise<void>((resolve, reject) => {
       let unsubscribe = () => {};
+      let unsubscribeModal = () => {};
+      let opened = false;
+      const cleanup = () => { unsubscribe(); unsubscribeModal(); };
       const timeout = window.setTimeout(() => {
-        unsubscribe();
+        cleanup();
         reject(new Error("TON wallet connection timed out"));
       }, 120_000);
       unsubscribe = ui.onStatusChange(wallet => {
         if (!wallet?.account) return;
         window.clearTimeout(timeout);
-        unsubscribe();
+        cleanup();
         if (wallet.account.chain !== "-239") {
           reject(new Error("Connect a TON mainnet wallet"));
           return;
         }
         resolve();
       });
+      // Closing the wallet modal without connecting must release the dialog
+      // instead of leaving the page waiting behind a hidden overlay.
+      unsubscribeModal = ui.onModalStateChange?.(state => {
+        if (state.open) { opened = true; return; }
+        if (!opened || ui.connected) return;
+        window.clearTimeout(timeout);
+        cleanup();
+        reject(new Error("TON wallet connection was cancelled"));
+      }) ?? (() => {});
       void ui.openModal().catch(error => {
         window.clearTimeout(timeout);
-        unsubscribe();
+        cleanup();
         reject(error);
       });
     });
