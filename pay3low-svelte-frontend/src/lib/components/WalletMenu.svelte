@@ -9,7 +9,7 @@
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import { identiconDataUri } from "$lib/otc/identicon";
   import { getAnonymousUserId } from "$lib/anonymous-user";
-  import { chainIdForNetwork, type WalletFamily } from "$lib/wallet-execution";
+  import { chainIdForNetwork, usesAppKitEvm, type WalletFamily } from "$lib/wallet-execution";
   import { mobileWalletLinks, type MobileWalletLink } from "$lib/mobile-wallet-links";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
@@ -180,7 +180,7 @@
     error = "";
     // Selector UIs mount outside our dialog. Let them receive focus and input
     // while keeping the underlying application locked until they return.
-    providerHandoff = family === "near" || family === "ton";
+    providerHandoff = family === "near" || family === "ton" || (family === "evm" && usesAppKitEvm());
     try { await connectWallet(network); }
     catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
     finally { busy = null; providerHandoff = false; void focusChoice(network); }
