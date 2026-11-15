@@ -967,7 +967,7 @@ async function mockBackend(page: Page, options: { includeGeorgia?: boolean; incl
           { slug: "symbiosis", name: "Symbiosis Buy", side: "buy", source_url: "https://api.symbiosis.finance", currencies: [], banks: [], searchable: true, search_mode: "selectable" },
         );
       }
-      if (options.guideVenue && options.guideVenue !== "cifra-broker") providers.push({ slug: options.guideVenue, name: ({ "bitcoin-center": "Bitcoin Center", "cow-swap": "CoW Swap", bestchange: "BestChange", symbiosis: "Symbiosis", dzengi: "Dzengi", bncex: "bncex", binance: "Binance", bybit: "Bybit", mexc: "MEXC", bitget: "Bitget", whitebird: "Whitebird" } as Record<string, string>)[options.guideVenue], side: "sell", source_url: "https://example.com/", currencies: ["AMD", "RUB"], banks: [], searchable: true });
+      if (options.guideVenue && options.guideVenue !== "cifra-broker") providers.push({ slug: options.guideVenue, name: ({ "bitcoin-center": "Bitcoin Center", "cow-swap": "CoW Swap", bestchange: "BestChange", symbiosis: "Symbiosis", dzengi: "Dzengi", bncex: "bncex", binance: "Binance", bybit: "Bybit", mexc: "MEXC", bitget: "Bitget", gate: "Gate.io", whitebird: "Whitebird" } as Record<string, string>)[options.guideVenue], side: "sell", source_url: "https://example.com/", currencies: ["AMD", "RUB"], banks: [], searchable: true });
       if (options.spotGuidance) for (const provider of providers) {
         if (["binance", "bybit", "mexc", "bitget", "whitebird"].includes(String(provider.slug))) provider.guidance = { description: "P2P only", steps: ["Open the P2P advertiser profile."], links: [{ label: "Open P2P", url: "https://p2p.binance.com" }] };
       }
@@ -3057,7 +3057,7 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await expect(instructions.getByText(/select Sell: you spend ETH to receive USDT/)).toBeVisible();
 });
 
-for (const venue of ["binance", "bybit", "mexc", "bitget", "whitebird"]) {
+for (const venue of ["binance", "bybit", "mexc", "bitget", "whitebird", "gate"]) {
   test(`${venue} crypto guide opens Spot and excludes P2P provider instructions`, async ({ page }, testInfo) => {
     await mockBackend(page, { guideVenue: venue, spotGuidance: true });
     await openApp(page);
@@ -3076,7 +3076,7 @@ for (const venue of ["binance", "bybit", "mexc", "bitget", "whitebird"]) {
     await expect(guide.locator(".playerTimeline button")).toHaveCount(5);
     await expect(guide).not.toContainText("Open the P2P advertiser profile.");
     await expect(guide.locator('a[href*="p2p"], a[href*="fiat/trade"], a[href*="advertiser"]')).toHaveCount(0);
-    const urls: Record<string, string> = { binance: "https://www.binance.com/en/trade/ETH_USDT?type=spot", bybit: "https://www.bybit.com/trade/spot/ETH/USDT", mexc: "https://www.mexc.com/exchange/ETH_USDT", bitget: "https://www.bitget.com/spot/ETHUSDT", whitebird: "https://whitebird.io/spot/ETH/USDT" };
+    const urls: Record<string, string> = { binance: "https://www.binance.com/en/trade/ETH_USDT?type=spot", bybit: "https://www.bybit.com/trade/spot/ETH/USDT", mexc: "https://www.mexc.com/exchange/ETH_USDT", bitget: "https://www.bitget.com/spot/ETHUSDT", gate: "https://www.gate.com/trade/ETH_USDT", whitebird: "https://whitebird.io/spot/ETH/USDT" };
     await expect(guide.getByTestId("spot-market-link")).toHaveAttribute("href", urls[venue]);
     await guide.getByRole("button", { name: /Scene 3:/ }).click();
     await expect(guide.getByTestId("spot-terminal")).toHaveAttribute("data-frame-kind", "review");

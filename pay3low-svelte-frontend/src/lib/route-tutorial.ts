@@ -4,7 +4,7 @@ import { buildBinanceProfileFrames } from "./guides/binance/frames";
 import { buildBestchangeFrames } from "./guides/bestchange/frames";
 import { buildVenueSwapFrames, swapGuideVenues } from "./guides/exchangers/frames";
 import { buildP2pProfileFrames } from "./guides/p2p/frames";
-import { buildSpotFrames, spotGuideLinks } from "./guides/spot/frames";
+import { buildSpotFrames, spotGuideLinks, spotTutorialUrl } from "./guides/spot/frames";
 import { buildCifraFrames, cifraGuideUrl, cifraTerminalUrl } from "./guides/cifra/frames";
 import { buildOtcFrames, otcTerminalHash } from "./guides/otc/frames";
 
@@ -49,17 +49,6 @@ type Copy = (key: string, params?: Record<string, string | number>) => string;
 export function tutorialMoney(minor?: number, currency?: string, exact?: string): string {
   const value = exact ? Number(exact) : minor == null ? null : minor / 100;
   return value == null ? "—" : `${value.toLocaleString("en-US", { maximumFractionDigits: exact ? 8 : 2 })} ${currency ?? ""}`.trim();
-}
-
-export function spotTutorialUrl(venue: string, symbol: string, first: string, second: string): string | null {
-  const normalized = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
-  const a = first.toUpperCase(), b = second.toUpperCase();
-  const pair = normalized === `${a}${b}` ? [a, b] : normalized === `${b}${a}` ? [b, a] : null;
-  const key = venue.toLowerCase();
-  if (key === "cifra-broker") return "https://tradernet.by/authentication/signup";
-  if (!pair) return ({ binance: "https://www.binance.com/en/trade", bybit: "https://www.bybit.com/trade/spot/", okx: "https://www.okx.com/trade-spot/", bitget: "https://www.bitget.com/spot/", mexc: "https://www.mexc.com/exchange/", whitebird: "https://whitebird.io/spot/BTC/USDT" } as Record<string, string>)[key] ?? null;
-  const [base, quote] = pair;
-  return ({ binance: `https://www.binance.com/en/trade/${base}_${quote}?type=spot`, bybit: `https://www.bybit.com/trade/spot/${base}/${quote}`, okx: `https://www.okx.com/trade-spot/${base.toLowerCase()}-${quote.toLowerCase()}`, bitget: `https://www.bitget.com/spot/${base}${quote}`, mexc: `https://www.mexc.com/exchange/${base}_${quote}`, whitebird: `https://whitebird.io/spot/${base}/${quote}` } as Record<string, string>)[key] ?? null;
 }
 
 /** Compose chapters from route operations; rendering never depends on a particular corridor. */

@@ -7,6 +7,7 @@ export const spotGuideLinks: Record<string, { label: string; url: string } | und
   mexc: { label: "MEXC Spot", url: "https://www.mexc.com/support/article/how-to-use-market-orders-in-spot-trading-332255423024245760" },
   bitget: { label: "Bitget Spot", url: "https://www.bitget.com/support/articles/12560603820568" },
   okx: { label: "OKX Spot", url: "https://www.okx.com/trade-spot/btc-usdt" },
+  gate: { label: "Gate.io Spot", url: "https://www.gate.com/spot" },
   whitebird: { label: "Whitebird Spot", url: "https://whitebird.io/spot/BTC/USDT" },
 };
 export const spotProfiles: Record<string, { buyField: string; sellField: string; location: string; layout: "below-chart" | "right-panel"; history: string } | undefined> = {
@@ -15,6 +16,7 @@ export const spotProfiles: Record<string, { buyField: string; sellField: string;
   mexc: { buyField: "Total", sellField: "Amount", location: "Spot panel on the right", layout: "right-panel", history: "Trade History / Order History" },
   bitget: { buyField: "Total", sellField: "Quantity", location: "Spot panel on the right", layout: "right-panel", history: "Order History / Order details" },
   okx: { buyField: "Total", sellField: "Amount", location: "Spot panel on the right", layout: "right-panel", history: "Order History / Trade History" },
+  gate: { buyField: "Total", sellField: "Amount", location: "Spot order panel on the right", layout: "right-panel", history: "Order History / Trade History" },
   whitebird: { buyField: "Total", sellField: "Quantity", location: "Trading Panel on the right", layout: "right-panel", history: "Order History / Trade History" },
 };
 export interface SpotTrade { base: string; quote: string; side: "buy" | "sell"; label: string }
@@ -27,6 +29,16 @@ export function spotTrade(symbol: string | undefined, from: string, to: string):
   if (!side) return null;
   const base = side === "buy" ? target : source, quote = side === "buy" ? source : target;
   return { base, quote, side, label: `${base} / ${quote}` };
+}
+export function spotTutorialUrl(venue: string, symbol: string, first: string, second: string): string | null {
+  const normalized = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const a = first.toUpperCase(), b = second.toUpperCase();
+  const pair = normalized === `${a}${b}` ? [a, b] : normalized === `${b}${a}` ? [b, a] : null;
+  const key = venue.toLowerCase();
+  if (key === "cifra-broker") return "https://tradernet.by/authentication/signup";
+  if (!pair) return ({ binance: "https://www.binance.com/en/trade", bybit: "https://www.bybit.com/trade/spot/", okx: "https://www.okx.com/trade-spot/", bitget: "https://www.bitget.com/spot/", mexc: "https://www.mexc.com/exchange/", gate: "https://www.gate.com/spot", whitebird: "https://whitebird.io/spot/BTC/USDT" } as Record<string, string>)[key] ?? null;
+  const [base, quote] = pair;
+  return ({ binance: `https://www.binance.com/en/trade/${base}_${quote}?type=spot`, bybit: `https://www.bybit.com/trade/spot/${base}/${quote}`, okx: `https://www.okx.com/trade-spot/${base.toLowerCase()}-${quote.toLowerCase()}`, bitget: `https://www.bitget.com/spot/${base}${quote}`, mexc: `https://www.mexc.com/exchange/${base}_${quote}`, gate: `https://www.gate.com/trade/${base}_${quote}`, whitebird: `https://whitebird.io/spot/${base}/${quote}` } as Record<string, string>)[key] ?? null;
 }
 export function buildSpotFrames(step: Pick<TutorialStep, "provider" | "venue" | "pair" | "from" | "to" | "amount">, copy: Copy): TutorialFrame[] | null {
   const trade = spotTrade(step.pair, step.from, step.to);
@@ -51,7 +63,7 @@ export function buildSpotFrames(step: Pick<TutorialStep, "provider" | "venue" | 
   ];
 }
 
-export const spotGuideVenues = ["binance", "bybit", "mexc", "whitebird", "bitget", "okx"];
+export const spotGuideVenues = ["binance", "bybit", "mexc", "whitebird", "bitget", "okx", "gate"];
 
 export function isSpotStep(step: Pick<TutorialStep, "kind" | "pair" | "provider" | "from" | "to">): boolean {
   return step.kind === "swap" && Boolean(spotMarket(step)) && spotGuideVenues.includes(step.provider.toLowerCase());

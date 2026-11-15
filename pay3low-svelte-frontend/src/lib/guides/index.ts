@@ -38,6 +38,7 @@ export const guideSpotCards: Record<string, ComponentType<SvelteComponent<GuideS
   bybit: SpotCard,
   mexc: SpotCard,
   bitget: SpotCard,
+  gate: SpotCard,
   whitebird: SpotCard,
 };
 
