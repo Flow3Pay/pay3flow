@@ -491,10 +491,54 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
     sort_assets(&mut assets);
     sort_assets(&mut destination_assets);
     sort_assets(&mut buy_destination_assets);
+    // The desk settles the other leg on Ethereum, so every cross-network offer
+    // needs a NEAR Intents swap. Ship its floor with the asset catalog instead
+    // of duplicating the measured fee table in the frontend.
+    let swap_networks = assets
+        .iter()
+        .chain(destination_assets.iter())
+        .chain(buy_destination_assets.iter())
+        .filter_map(|asset| asset["network"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    let swap_minimums = swap_networks
+        .into_iter()
+        .map(|network| {
+            (
+                network.to_string(),
+                json!({
+                    "incoming": super::amount::decimal(
+                        super::config::minimum_stablecoin_units(
+                            network,
+                            super::config::StablecoinLeg::Incoming
+                        ),
+                        6
+                    ),
+                    "outgoing": super::amount::decimal(
+                        super::config::minimum_stablecoin_units(
+                            network,
+                            super::config::StablecoinLeg::Outgoing
+                        ),
+                        6
+                    ),
+                    "fee": {
+                        "incoming": super::amount::decimal(
+                            super::config::stablecoin_withdraw_fee_units("ethereum"),
+                            6
+                        ),
+                        "outgoing": super::amount::decimal(
+                            super::config::stablecoin_withdraw_fee_units(network),
+                            6
+                        ),
+                    },
+                }),
+            )
+        })
+        .collect::<serde_json::Map<String, Value>>();
     Json(json!({
         "assets":assets,
         "destination_assets":destination_assets,
-        "buy_destination_assets":buy_destination_assets
+        "buy_destination_assets":buy_destination_assets,
+        "swap_minimums":swap_minimums
     }))
 }
 async fn p2p_deal(

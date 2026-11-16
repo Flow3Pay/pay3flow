@@ -50,6 +50,26 @@ pub(crate) fn minimum_stablecoin_units(network: &str, leg: StablecoinLeg) -> u12
         StablecoinLeg::Outgoing => ETH_ORIGIN_REFUND.max(destination),
     }
 }
+
+/// Fixed fee charged when the stablecoin is delivered on `network`, in
+/// six-decimal units. This is the part of a cross-network route the trader
+/// always pays, so the offer preview can show it before signing.
+pub(crate) fn stablecoin_withdraw_fee_units(network: &str) -> u128 {
+    match network {
+        "ethereum" => 300_000,
+        "tron" => 200_451,
+        "ton" => 42_912,
+        "sui" => 20_000,
+        "avalanche-c" => 14_307,
+        "aptos" => 11_956,
+        "polygon-pos" | "bnb-smart-chain" | "solana" => 10_039,
+        "arbitrum-one" => 5_300,
+        "base" => 2_400,
+        "optimism" => 494,
+        "gnosis" => 37,
+        _ => 0,
+    }
+}
 fn default_evm_chain() -> u64 {
     1
 }

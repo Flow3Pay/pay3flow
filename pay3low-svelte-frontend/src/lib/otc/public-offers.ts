@@ -49,6 +49,10 @@ export interface SaleTicketState {
   /** Whether the entered address already matches the selected receiving network. */
   addressValid: boolean;
   stablecoinNetwork: string;
+  /** NEAR Intents floor for the selected network, empty when no swap is needed. */
+  swapMinimum: string;
+  /** Fixed route fee charged on the selected leg, empty when no swap is needed. */
+  swapFee: string;
   supportedStablecoinAssets: Array<{ symbol: Stablecoin; network: string }>;
   seller: string;
   askingRate: string;

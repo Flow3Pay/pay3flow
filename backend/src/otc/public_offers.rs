@@ -489,7 +489,13 @@ mod tests {
 
     #[test]
     fn stablecoin_minimums_are_lower_bounds_per_network_and_leg() {
-        use super::super::config::{minimum_stablecoin_units, StablecoinLeg};
+        use super::super::config::{
+            minimum_stablecoin_units, stablecoin_withdraw_fee_units, StablecoinLeg,
+        };
+        assert_eq!(stablecoin_withdraw_fee_units("ethereum"), 300_000);
+        assert_eq!(stablecoin_withdraw_fee_units("solana"), 10_039);
+        assert_eq!(stablecoin_withdraw_fee_units("tron"), 200_451);
+        assert_eq!(stablecoin_withdraw_fee_units("near"), 0);
         assert_eq!(
             minimum_stablecoin_units("ethereum", StablecoinLeg::Outgoing),
             300_065

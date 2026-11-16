@@ -179,7 +179,9 @@ withdrawal fee and stays near the Ethereum floor.
 The limits live in `otc::config::minimum_stablecoin_units` as six-decimal units
 per network and leg, and are enforced both when an offer is published and when
 it is accepted (older offers can predate the limits). Rejection is a 400 with
-the amount, network, and minimum in the message.
+the amount, network, and minimum in the message. `GET /api/otc/p2p/assets`
+returns the same numbers as `swap_minimums`, with the fixed fee per leg, so the
+offer ticket can show its NEAR Intents hint from one server-owned source.
 
 | Network | Incoming (source) | Outgoing (destination) |
 | - | - | - |

@@ -3,11 +3,14 @@
   import { locale } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { offerDecimal, p2pFeeSplit } from "$lib/otc/public-offers";
+  import { venueIcon } from "$lib/icons";
   import type { Stablecoin } from "$lib/otc/public-offers";
   import { type Direction } from "$lib/otc/service";
   export let direction: Direction = "sell";
   export let stablecoin: Stablecoin = "USDT";
   export let stablecoinNetwork = "ethereum";
+  export let swapMinimum = "";
+  export let swapFee = "";
   export let everAmount = "", usdtAmount = "", askingRate = "", seller = "", receivingAddress = "";
   export let error = "";
   export let busy = false;
@@ -22,6 +25,8 @@
   };
   $: networkLabel = networkNames[stablecoinNetwork] ?? stablecoinNetwork;
   $: fee = p2pFeeSplit(usdtAmount);
+  $: swapViaIntents = stablecoinNetwork !== "ethereum";
+  $: swapTooSmall = swapViaIntents && !!swapMinimum && Number(usdtAmount || 0) > 0 && Number(usdtAmount) < Number(swapMinimum);
   onMount(() => {
     const previous = document.activeElement as HTMLElement | null;
     const unlock = lockPageScroll();
@@ -37,6 +42,16 @@
     <p class="reviewPending">{say("Not published yet. Check the terms and press Publish offer.", "Ещё не опубликовано. Проверьте условия и нажмите «Опубликовать предложение».")}</p>
     <strong class="offerSummary">{direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")} {offerDecimal(everAmount, 9)} EVER · {offerDecimal(usdtAmount, 6)} {stablecoin}</strong>
     {#if fee}<dl class="feeSplit" data-testid="otc-offer-fee-split"><div><dt>{say("Gross offer amount", "Сумма оффера до комиссии")}</dt><dd>{fee.basis} {stablecoin}</dd></div><div><dt>{say("Service fee (3%)", "Комиссия сервиса (3%)")}</dt><dd>{fee.fee} USDT</dd></div><div class="net"><dt>{say("Seller receives", "Продавец получает")}</dt><dd>{fee.net} {stablecoin}</dd></div></dl>{/if}
+    {#if swapViaIntents}
+      <p class="swapNote" class:swapWarn={swapTooSmall} data-testid="otc-offer-swap-note">
+        <img src={venueIcon("near-intents")} alt="" width="16" height="16" loading="lazy" decoding="async" />
+        {#if swapTooSmall}
+          <span>{say(`Too small for NEAR Intents · min ${swapMinimum} ${stablecoin}`, `Слишком мало для NEAR Intents · мин. ${swapMinimum} ${stablecoin}`)}</span>
+        {:else}
+          <span>{say(`Swapped inside by NEAR Intents · ≈${swapFee || "0.3"} USDT fee`, `Обмен внутри через NEAR Intents · фикс ≈${swapFee || "0.3"} USDT`)}</span>
+        {/if}
+      </p>
+    {/if}
     <p>{say("Price", "Курс")}: {askingRate} {stablecoin} / EVER</p>
     <p>{direction === "buy" ? say("Your EVER receiving wallet", "Ваш кошелёк для получения EVER") : say("Seller", "Продавец")}: <code>{seller}</code></p>
     <p>{direction === "buy" ? say(`${stablecoin} paying wallet on ${networkLabel}`, `Кошелёк оплаты ${stablecoin} в сети ${networkLabel}`) : say(`${stablecoin} recipient on ${networkLabel}`, `Получатель ${stablecoin} в сети ${networkLabel}`)}: <code>{receivingAddress.trim()}</code></p>
@@ -66,6 +81,9 @@
   .feeSplit dt { color: var(--color-text-soft); font-size: 11px; }
   .feeSplit dd { margin: 0; font-family: var(--font-mono); font-size: 11px; }
   .feeSplit .net dt, .feeSplit .net dd { color: var(--color-text); font-weight: 650; }
+  .swapNote { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 7px; }
+  .swapNote img { flex: 0 0 auto; border-radius: 4px; }
+  .swapNote.swapWarn { border-color: var(--color-danger); color: var(--color-danger); }
   .reviewError { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--color-danger); border-radius: 9px; color: var(--color-danger); font-size: 12px; line-height: 1.6; }
   .confirm { display: flex; justify-content: space-between; gap: 12px; width: 100%; margin-top: 18px; padding: 15px; border-radius: 9px; background: var(--color-accent); color: #152016; font-size: 12px; font-weight: 800; }
   .confirm:hover:not(:disabled) { background: var(--color-accent-strong); }

@@ -24,6 +24,7 @@
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
   let stablecoinNetwork = "ethereum";
   let stablecoinAssets: Array<{ asset: string; symbol: Stablecoin; network: string; asset_id: string }> = [];
+  let swapMinimums: Record<string, { incoming: string; outgoing: string; fee?: { incoming: string; outgoing: string } }> = {};
   let linkingWallet = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
   let marketAbort: AbortController | null = null;
   let balances: WalletBalance[] = [], balanceGeneration = 0;
@@ -58,6 +59,14 @@
   $: amountFloored = offerFloored(everAmount,9) ? "EVER" as const : offerFloored(usdtAmount,6) ? "USDT" as const : null;
   $: everUnits = offerUnits(everAmount,9);
   $: usdtUnits = offerUnits(usdtAmount,6);
+  // The desk settles the other leg on Ethereum, so any other network needs a
+  // NEAR Intents swap and cannot go below the measured route floor.
+  $: swapMinimum = stablecoinNetwork === "ethereum"
+    ? ""
+    : (direction === "buy" ? swapMinimums[stablecoinNetwork]?.incoming : swapMinimums[stablecoinNetwork]?.outgoing) || "";
+  $: swapFee = stablecoinNetwork === "ethereum"
+    ? ""
+    : (direction === "buy" ? swapMinimums[stablecoinNetwork]?.fee?.incoming : swapMinimums[stablecoinNetwork]?.fee?.outgoing) || "";
   /** Only the leg the trader pays from their own wallet can be short: EVER when selling, USDT when buying. */
   $: fundedLeg = direction === "sell" ? "ever" as const : "usdt" as const;
   // Backend balance reads cover Everscale + Ethereum only. Other stablecoin networks
@@ -84,6 +93,8 @@
     ? say(`Enter a positive ${stablecoin} total.`, `Укажите положительную сумму ${stablecoin}.`)
     : usdtUnits > MAX_OFFER_USDT_UNITS
     ? say(`One offer can total at most 1,000,000 ${stablecoin}.`, `Общая сумма одного предложения не может превышать 1 000 000 ${stablecoin}.`)
+    : swapMinimum && usdtUnits !== null && usdtUnits < (offerUnits(swapMinimum,6) ?? 0)
+    ? say(`Minimum for the NEAR Intents swap is ${swapMinimum} ${stablecoin}.`, `Минимум для свопа через NEAR Intents — ${swapMinimum} ${stablecoin}.`)
     : !isValidWalletAddress(stablecoinNetwork, receivingAddress)
       ? say(`Enter a valid receiving ${stablecoin} address for ${networkLabel(stablecoinNetwork)}.`, `Укажите корректный адрес получения ${stablecoin} в сети ${networkLabel(stablecoinNetwork)}.`)
       : "";
@@ -243,8 +254,8 @@
   }
   onMount(() => {
     mounted = true;
-    void request<{ destination_assets: typeof stablecoinAssets }>("/p2p/assets")
-      .then(result => { stablecoinAssets = result.destination_assets || []; })
+    void request<{ destination_assets: typeof stablecoinAssets; swap_minimums?: typeof swapMinimums }>("/p2p/assets")
+      .then(result => { stablecoinAssets = result.destination_assets || []; swapMinimums = result.swap_minimums || {}; })
       .catch(() => { stablecoinAssets = []; });
     const timer = setInterval(() => { if (enabled && !posting && !busy) void refresh(); }, 5000);
     const controller = new AbortController();
@@ -281,7 +292,7 @@
     edited();
   }
   $: ticket = {
-    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, addressValid: isValidWalletAddress(stablecoinNetwork, receivingAddress), stablecoinNetwork, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
+    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, addressValid: isValidWalletAddress(stablecoinNetwork, receivingAddress), stablecoinNetwork, swapMinimum, swapFee, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
     marketPrice, marketRate, marketUsdRate, usdtApprox, everApprox, error,
     onPrice: changePrice,
     onEver: changeEver,
