@@ -201,6 +201,14 @@ quote; the provider's own rejection remains authoritative. Known gaps: 1Click
 currently returns `NO_QUOTE` for USDT on Optimism and cannot quote TON as a
 destination, and XRP Ledger answers HTTP 500 on every pair.
 
+A cross-network payment routes the 3% service fee separately, and that fee is
+often far smaller than the payment itself. When the fee falls under the
+provider's bridge floor (0.285629 USDT at the time of writing) no route exists
+for that network, so the prepare step answers 409 with the fee amount and the
+measured floor instead of the generic "OTC payment route is temporarily
+unavailable". Paying the same USDT on Ethereum settles the fee directly and is
+not subject to the floor.
+
 ### Fees
 
 - The OTC transaction fee is charged/denominated in **USDT**. The conversation

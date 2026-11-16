@@ -819,7 +819,7 @@ impl Service {
                     .await
                     .map_err(|error| {
                         tracing::warn!(trade=%id, error=%error, "OTC fee route preflight failed");
-                        Error::RouteUnavailable
+                        route_floor_conflict(&error, "the service fee", fee_units)
                     })?;
                 let source_decimals = source_token.decimals.ok_or(Error::RouteUnavailable)?;
                 if !fee_preflight_matches(
@@ -1062,7 +1062,7 @@ impl Service {
                 .await
                 .map_err(|error| {
                     tracing::warn!(trade=%id, error=%error, "OTC fee route preflight failed");
-                    Error::RouteUnavailable
+                    route_floor_conflict(&error, "the service fee", fee_units)
                 })?;
             if !fee_preflight_matches(
                 &quote.output.value,
@@ -1140,7 +1140,7 @@ impl Service {
             .await
             .map_err(|error| {
                 tracing::warn!(trade=%id, error=%error, "OTC payment route quote failed");
-                Error::RouteUnavailable
+                route_floor_conflict(&error, "the payment amount", net_units)
             })?;
         let deposit_address = quote
             .deposit_address
@@ -1353,7 +1353,7 @@ impl Service {
             .await
             .map_err(|error| {
                 tracing::warn!(trade=%id, error=%error, "OTC fee route quote failed");
-                Error::RouteUnavailable
+                route_floor_conflict(&error, "the service fee", fee_units)
             })?;
         if amount::units(&quote.output.value, 6)? != fee_units {
             return Err(Error::Conflict(
@@ -1922,6 +1922,27 @@ fn direct_fee_transfer_supported(
         && source == fee_asset
 }
 
+/// A provider bridge floor is a final answer for this amount, not an outage.
+/// Report it as an actionable conflict so the taker can raise the amount or
+/// pay from Ethereum instead of retrying a route that cannot succeed.
+fn route_floor_conflict(error: &anyhow::Error, subject: &str, units: u128) -> Error {
+    let message = error.to_string();
+    let floor = message
+        .split("minimum swap amount is ")
+        .nth(1)
+        .and_then(|rest| rest.split(" (1Click").next())
+        .map(str::trim)
+        .filter(|floor| !floor.is_empty());
+    let Some(floor) = floor else {
+        return Error::RouteUnavailable;
+    };
+    let amount = amount::decimal(units, 6);
+    tracing::warn!(%subject, %amount, %floor, "OTC route is below the provider bridge minimum");
+    Error::Conflict(format!(
+        "{subject} of {amount} USDT is below the 1Click bridge minimum of {floor} on this network; pay with USDT on Ethereum or increase the amount"
+    ))
+}
+
 fn fee_preflight_matches(
     output_amount: &str,
     source_amount: &str,
@@ -1985,6 +2006,28 @@ mod route_status_tests {
         assert!(valid_near_intents_reference(
             "near",
             &bs58::encode([2u8; 32]).into_string()
+        ));
+    }
+
+    #[test]
+    fn provider_bridge_floor_is_reported_as_an_actionable_conflict() {
+        let floor = anyhow::anyhow!(
+            "minimum swap amount is 0.285629 USDT (1Click bridge limit; 285629 atomic units)"
+        );
+        match route_floor_conflict(&floor, "the service fee", 3_000) {
+            Error::Conflict(message) => {
+                assert!(
+                    message.contains("the service fee of 0.003 USDT"),
+                    "{message}"
+                );
+                assert!(message.contains("0.285629 USDT"), "{message}");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let outage = anyhow::anyhow!("request NEAR Intents quote failed with HTTP 503");
+        assert!(matches!(
+            route_floor_conflict(&outage, "the service fee", 3_000),
+            Error::RouteUnavailable
         ));
     }
 
