@@ -167,21 +167,25 @@
   {@const taker = level.own ? "own" : offerDirection(level.offer) === "sell" ? "buy" : "sell"}
   {@const token = offerStablecoin(level.offer)}
   <div class="obRow" class:own={level.own} data-testid={testId} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} ${token}`}>
-    <span class="obOwner"><img class="obAvatar" src={avatar(level.offer)} alt="" width="18" height="18" /><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
+    <span class="obOwner"><img class="obAvatar" src={avatar(level.offer)} alt="" width="18" height="18" /><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code>{#if level.own}<span class="ownBadge">{say("You", "Вы")}</span>{/if}</span>
     <span class="obPrice"><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b><small>{token}</small></span>
     <span class="obAmount">{formatEver(level.amount, numberLocale)}</span>
     <span class="obTotal">{formatEver(level.total, numberLocale)}<small>{token}</small></span>
-    <button type="button" class="obTake" class:takeBuy={taker === "buy"} class:takeSell={taker === "sell"} data-testid="otc-offer-take" aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} ${token} / EVER`} on:click={() => showOffer(level.offer)}>{taker === "buy" ? say("Buy", "Купить") : taker === "sell" ? say("Sell", "Продать") : say("Details", "Детали")}</button>
+    <button type="button" class="obTake" class:takeBuy={taker === "buy"} class:takeSell={taker === "sell"} data-testid="otc-offer-take" aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} ${token} / EVER`} on:click={() => showOffer(level.offer)}>{taker === "buy" ? say("Buy EVER", "Купить EVER") : taker === "sell" ? say("Sell EVER", "Продать EVER") : say("Details", "Детали")}</button>
   </div>
 {/snippet}
 
-{#snippet side(levels: BookLevel[], who: string, label: string, key: string)}
-  <section class="obTable" data-side={key} aria-label={label}>
-    <div class="obHead"><span>{who}</span><span>{say("Price", "Цена")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT / <img src="/icons/assets/usdc.png" alt="" width="12" height="12" />USDC</small></span><span>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></span><span>{say("Total", "Всего")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT / <img src="/icons/assets/usdc.png" alt="" width="12" height="12" />USDC</small></span></div>
+{#snippet side(levels: BookLevel[], title: string, hint: string, empty: string, key: string)}
+  <section class="obTable" data-side={key} aria-label={title}>
+    <header class="obTitle">
+      <div class="obTitleText"><strong>{title}</strong><span>{hint}</span></div>
+      <span class="obCount" aria-label={say("Open offers", "Открытых офферов")}>{levels.length}</span>
+    </header>
+    <div class="obHead"><span>{say("Offer", "Оффер")}</span><span>{say("Price", "Цена")}<small>USDT / EVER</small></span><span>{say("Amount", "Объём")}<small>EVER</small></span><span>{say("Total", "Сумма")}<small>USDT</small></span><span class="obHeadAction">{say("Action", "Действие")}</span></div>
     {#each levels as level (level.offer.id)}
       {@render levelRow(level)}
     {:else}
-      {#if showEmpty}<div class="obEmpty">{label}</div>{/if}
+      {#if showEmpty}<div class="obEmpty">{empty}</div>{/if}
     {/each}
   </section>
 {/snippet}
@@ -217,9 +221,9 @@
     {#if config?.public_offers_available}
     <div class="orderbook">
       <div class="obTables">
-        <!-- Sellers come first so the book reads ask-then-bid; the grid places buyers on the left, as the layout asks for. -->
-        {@render side(askLevels, say("Sellers", "Продавцы"), say("Sell offers", "Предложения на продажу"), "asks")}
-        {@render side(bidLevels, say("Buyers", "Покупатели"), say("Buy offers", "Предложения на покупку"), "bids")}
+        <!-- Selling EVER lands in the sellers' book, buying EVER in the buyers' book. -->
+        {@render side(askLevels, say("Sellers · they sell EVER", "Продавцы · продают EVER"), say("You buy EVER and pay USDT or USDC", "Вы покупаете EVER и платите USDT или USDC"), say("Nobody is selling EVER yet", "Пока никто не продаёт EVER"), "asks")}
+        {@render side(bidLevels, say("Buyers · they buy EVER", "Покупатели · покупают EVER"), say("You sell EVER and get USDT or USDC", "Вы продаёте EVER и получаете USDT или USDC"), say("Nobody is buying EVER yet", "Пока никто не покупает EVER"), "bids")}
       </div>
       {#if offers.length}
         <div class="deskQuotes">
@@ -340,18 +344,28 @@
 <style>
   .bookRows.compact { min-height:0; flex:0 0 auto; }
   .orderbook { display:flex; flex:1; min-height:0; flex-direction:column; overflow-y:auto; scrollbar-width:thin; padding:0 var(--otc-panel-padding,20px) 12px; gap:12px; }
-  .obTables { display:flex; flex-wrap:wrap; gap:20px; }
-  .obTable { display:flex; flex:1 1 260px; min-width:0; flex-direction:column; gap:8px; }
-  .obTable[data-side="bids"] { order:-1; }
-  .obHead { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr) 64px; gap:8px; align-items:end; min-height:32px; padding:0 12px; color:var(--color-text-soft); font-size:11px; line-height:1.35; text-align:right; }
+  .obTables { display:flex; flex-wrap:wrap; align-items:flex-start; gap:20px; }
+  .obTable { display:flex; flex:1 1 300px; min-width:0; flex-direction:column; gap:6px; }
+  .obTitle { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-panel); }
+  .obTitle strong { font-family:var(--font-sans,inherit); font-size:12.5px; font-weight:700; letter-spacing:-.01em; }
+  .obTable[data-side="asks"] .obTitle strong { color:var(--color-good-ink); }
+  .obTable[data-side="bids"] .obTitle strong { color:var(--color-danger); }
+  .obTitleText { display:grid; min-width:0; gap:2px; }
+  .obTitleText span { color:var(--color-text-soft); font-size:10.5px; line-height:1.4; }
+  .obCount { flex:0 0 auto; min-width:24px; padding:2px 7px; border-radius:999px; background:var(--color-paper); color:var(--color-text-soft); font-family:var(--font-mono); font-size:10.5px; text-align:center; }
+  .obHead { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr) 96px; gap:8px; align-items:end; min-height:28px; padding:0 12px; color:var(--color-text-soft); font-size:11px; line-height:1.35; text-align:right; }
   .obHead > span:first-child { text-align:left; }
   .obHead small { display:flex; align-items:center; justify-content:flex-end; gap:4px; color:var(--color-text-faint); font-size:9px; }
   .obHead small img { width:12px; height:12px; flex:0 0 auto; border-radius:50%; object-fit:contain; }
   .obSideHead { display:flex; min-height:24px; align-items:center; justify-content:space-between; gap:8px; padding:4px 12px; border-bottom:1px solid var(--color-border); color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.08em; line-height:1.4; text-transform:uppercase; }
   .obSideHead > span:last-child { font-family:var(--font-mono); font-size:10px; font-weight:400; letter-spacing:0; }
-  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr) 64px; width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 8px 6px 12px; border:1px solid var(--color-border); border-radius:10px; background:transparent; color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; }
-  .obTake { width:100%; min-height:30px; padding:4px 6px; border:0; border-radius:7px; background:var(--color-panel); color:var(--color-text-soft); font-family:var(--font-sans,inherit); font-size:11px; font-weight:650; line-height:1.4; cursor:pointer; transition:background .12s ease; }
+  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr) 96px; width:100%; min-height:46px; align-items:center; gap:8px; padding:6px 8px 6px 12px; border:1px solid var(--color-border); border-radius:10px; background:transparent; color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; }
+  .obRow:hover { border-color:var(--color-border-strong); background:var(--color-panel); }
+  .obRow.own { border-style:dashed; }
+  .ownBadge { flex:0 0 auto; padding:1px 5px; border-radius:4px; background:var(--color-panel); color:var(--color-text-soft); font-family:var(--font-sans,inherit); font-size:9px; font-weight:600; }
+  .obTake { width:100%; min-height:32px; padding:4px 4px; border:1px solid var(--color-border); border-radius:7px; background:var(--color-panel); color:var(--color-text-soft); font-family:var(--font-sans,inherit); font-size:10.5px; font-weight:700; line-height:1.35; white-space:nowrap; cursor:pointer; transition:background .12s ease; }
   .obTake:hover { background:var(--color-border); }
+  .obHeadAction { padding-right:4px; }
   .takeBuy { color:var(--color-good-ink); }
   .takeSell { color:var(--color-danger); }
   .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
@@ -446,6 +460,6 @@
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   @media (min-width:640px) { .rowOwner { display:flex; } }
-  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr) 64px; gap:5px; font-size:10.5px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
+  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.72fr) minmax(0,.72fr) minmax(0,.85fr) 86px; gap:5px; font-size:10.5px; } .obTake { font-size:10px; } .obTitle { padding:8px 10px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
   @media (prefers-reduced-motion:reduce) { .bookRow,.obRow,.proposalSelect,.copyButton { transition:none; } }
 </style>
