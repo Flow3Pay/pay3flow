@@ -27,13 +27,15 @@ interface AptosProvider {
 }
 
 interface StandardAccount { address: string; chains?: string[] }
-interface SuiWallet {
+/** Wallet Standard wallet shape shared by Sui and Solana. */
+interface StandardWallet {
   name: string;
   chains: string[];
   accounts: StandardAccount[];
   features: Record<string, unknown>;
   on?(event: "change", listener: () => void): () => void;
 }
+type SuiWallet = StandardWallet;
 interface SuiClient {
   getBalance(input: { owner: string; coinType: string }): Promise<{ totalBalance: string }>;
   getCoins(input: { owner: string; coinType: string; limit?: number; cursor?: string | null }): Promise<{
@@ -112,14 +114,77 @@ function rpcUrl(value: string | undefined, network: string): string {
   return url;
 }
 
-function solanaProvider(): SolanaProvider {
+function legacySolanaProvider(): SolanaProvider | null {
   const provider = (window as Window & { solana?: unknown }).solana;
   const candidate = record(provider);
-  if (!candidate || typeof candidate.connect !== "function" || typeof candidate.signTransaction !== "function") {
-    throw new Error("Install a Solana browser wallet such as Phantom");
-  }
+  if (!candidate || typeof candidate.connect !== "function" || typeof candidate.signTransaction !== "function") return null;
   return provider as SolanaProvider;
 }
+
+async function solanaStandardWallets(): Promise<StandardWallet[]> {
+  const { getWallets } = await import("@wallet-standard/app");
+  return (getWallets().get() as unknown as StandardWallet[]).filter(wallet =>
+    wallet.chains.includes("solana:mainnet")
+    && typeof record(wallet.features["standard:connect"])?.connect === "function");
+}
+
+function solanaAccount(accounts: StandardAccount[] | undefined, wallet: StandardWallet): StandardAccount | undefined {
+  return accounts?.find(account => account.chains?.includes("solana:mainnet"))
+    ?? wallet.accounts.find(account => account.chains?.includes("solana:mainnet"))
+    ?? accounts?.[0]
+    ?? wallet.accounts[0];
+}
+
+/**
+ * Wallet Standard exposes Solana through feature methods rather than the
+ * legacy `window.solana` object Phantom-style wallets inject. MetaMask Solana
+ * only announces itself through Wallet Standard, so wrap it in the same
+ * provider surface the SPL transfer flow already uses.
+ */
+function standardSolanaProvider(wallet: StandardWallet, initial: StandardAccount): SolanaProvider {
+  let account = initial;
+  const publicKey = () => ({ toBase58: () => account.address });
+  const connect = record(wallet.features["standard:connect"])?.connect;
+  const disconnect = record(wallet.features["standard:disconnect"])?.disconnect;
+  const sign = record(wallet.features["solana:signTransaction"])?.signTransaction;
+  return {
+    get publicKey() { return publicKey(); },
+    get isConnected() { return true; },
+    async connect() {
+      if (typeof connect === "function") {
+        const result = await (connect as () => Promise<{ accounts?: StandardAccount[] }>)();
+        account = solanaAccount(result.accounts, wallet) ?? account;
+      }
+      return { publicKey: publicKey() };
+    },
+    ...(typeof disconnect === "function" ? { disconnect: async () => { await (disconnect as () => Promise<void>)(); } } : {}),
+    async signTransaction(transaction) {
+      if (typeof sign !== "function") throw new Error("The connected Solana wallet cannot sign transactions");
+      const bytes = (transaction as { serialize(options?: unknown): Uint8Array })
+        .serialize({ requireAllSignatures: false, verifySignatures: false });
+      const output = await (sign as (input: { account: StandardAccount; chain: string; transaction: Uint8Array }) => Promise<{ signedTransaction?: Uint8Array }[]>)({
+        account, chain: "solana:mainnet", transaction: bytes,
+      });
+      const signed = output?.[0]?.signedTransaction;
+      if (!signed?.length) throw new Error("The Solana wallet did not return a signed transaction");
+      return { serialize: () => signed };
+    },
+  };
+}
+
+async function connectSolanaStandard(): Promise<ExtraWallet> {
+  const wallets = await solanaStandardWallets();
+  if (!wallets.length) throw new Error("Install a Solana browser wallet such as Phantom or MetaMask");
+  if (wallets.length > 1) throw new Error("More than one Solana wallet is available; leave one Solana wallet enabled and retry");
+  const wallet = wallets[0];
+  const connect = record(wallet.features["standard:connect"])?.connect;
+  if (typeof connect !== "function") throw new Error("The selected Solana wallet does not support connection");
+  const result = await (connect as () => Promise<{ accounts?: StandardAccount[] }>)();
+  const account = solanaAccount(result.accounts, wallet);
+  if (!account?.address) throw new Error("The Solana wallet did not return a mainnet account");
+  return { family: "solana", address: account.address, provider: standardSolanaProvider(wallet, account) };
+}
+
 
 function aptosProvider(): AptosProvider {
   const provider = (window as Window & { aptos?: unknown }).aptos;
@@ -174,7 +239,8 @@ async function connectSui(): Promise<ExtraWallet> {
 
 export async function connectExtraWallet(network: string): Promise<ExtraWallet> {
   if (network === "solana") {
-    const provider = solanaProvider();
+    const provider = legacySolanaProvider();
+    if (!provider) return connectSolanaStandard();
     const result = await provider.connect();
     const address = result.publicKey?.toBase58() ?? provider.publicKey?.toBase58();
     if (!address) throw new Error("Solana wallet did not return an account");
@@ -236,9 +302,17 @@ export async function connectExtraWallet(network: string): Promise<ExtraWallet> 
 
 export async function restoreExtraWallet(family: ExtraWallet["family"]): Promise<ExtraWallet | null> {
   if (family === "solana") {
-    const provider = solanaProvider();
-    const address = provider.isConnected ? provider.publicKey?.toBase58() : undefined;
-    return address ? { family, address, provider } : null;
+    const provider = legacySolanaProvider();
+    if (provider) {
+      const address = provider.isConnected ? provider.publicKey?.toBase58() : undefined;
+      return address ? { family, address, provider } : null;
+    }
+    const wallets = (await solanaStandardWallets()).filter(wallet =>
+      wallet.accounts.some(account => account.chains?.includes("solana:mainnet")));
+    if (wallets.length !== 1) return null;
+    const wallet = wallets[0];
+    const account = solanaAccount(wallet.accounts, wallet);
+    return account?.address ? { family, address: account.address, provider: standardSolanaProvider(wallet, account) } : null;
   }
   if (family === "sui") {
     const { getWallets } = await import("@wallet-standard/app");

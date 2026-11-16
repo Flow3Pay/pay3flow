@@ -36,13 +36,58 @@ export interface TronProvider {
   removeListener?(event: string, listener: (value: unknown) => void): void;
 }
 
-export function tronProvider(): TronProvider {
+interface TronAnnouncement {
+  info?: { name?: string; rdns?: string; uuid?: string; icon?: string };
+  provider?: TronProvider;
+}
+
+let discoveredTron: TronProvider | null = null;
+let tronDiscovery: Promise<TronProvider | null> | null = null;
+
+function injectedTronProvider(): TronProvider | null {
   const browser = window as Window & { tron?: TronProvider; tronLink?: TronProvider; tronWeb?: TronWeb };
-  const provider = browser.tron ?? browser.tronLink;
-  if (!provider) throw new Error("TronLink is not installed. Install TronLink to connect a TRON wallet.");
+  const provider = browser.tron ?? browser.tronLink ?? null;
+  if (!provider) return null;
   // Older extensions publish the authorized instance directly on window.
   if (!provider.tronWeb && browser.tronWeb) provider.tronWeb = browser.tronWeb;
   return provider;
+}
+
+/**
+ * TIP-6963 replaced the single `window.tron` slot so several TRON wallets can
+ * coexist. Probe the announcement channel before concluding that no provider
+ * is installed; MetaMask and newer extensions use this path.
+ */
+async function announcedTronProvider(): Promise<TronProvider | null> {
+  if (discoveredTron) return discoveredTron;
+  if (!tronDiscovery) {
+    tronDiscovery = new Promise<TronProvider | null>(resolve => {
+      const providers: TronProvider[] = [];
+      const onAnnounce = (event: Event) => {
+        const provider = (event as CustomEvent<TronAnnouncement>).detail?.provider;
+        if (provider) providers.push(provider);
+      };
+      window.addEventListener("TIP6963:announceProvider", onAnnounce);
+      window.dispatchEvent(new Event("TIP6963:requestProvider"));
+      window.setTimeout(() => {
+        window.removeEventListener("TIP6963:announceProvider", onAnnounce);
+        discoveredTron = providers[0] ?? null;
+        resolve(discoveredTron);
+      }, 200);
+    });
+  }
+  return tronDiscovery;
+}
+
+export async function tronProvider(): Promise<TronProvider> {
+  const injected = injectedTronProvider();
+  if (injected) return injected;
+  const announced = await announcedTronProvider();
+  if (announced) return announced;
+  const metamask = (window as Window & { ethereum?: { isMetaMask?: boolean } }).ethereum?.isMetaMask;
+  throw new Error(metamask
+    ? "This browser exposes MetaMask, but MetaMask does not offer TRON dapp connections here yet. Install TronLink to sign TRON transfers."
+    : "No TRON browser wallet was found. Install TronLink to connect a TRON wallet.");
 }
 
 export function tronAddress(web: TronWeb, address: string): string {
@@ -53,7 +98,7 @@ export function tronAddress(web: TronWeb, address: string): string {
 }
 
 export async function connectTronProvider(): Promise<TronProvider> {
-  const provider = tronProvider();
+  const provider = await tronProvider();
   if (!provider.tronWeb || !provider.tronWeb.ready) {
     try {
       await provider.request({ method: "eth_requestAccounts" });

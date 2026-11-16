@@ -948,7 +948,7 @@ export async function restoreWallet(family: WalletFamily): Promise<ConnectedWall
     return account ? { family, address: account.accountId, selector } : null;
   }
   if (family === "tron") {
-    const provider = tronProvider();
+    const provider = await tronProvider();
     const web = provider.tronWeb;
     if (!web || !web.ready || !web.defaultAddress.base58) return null;
     return { family, address: web.defaultAddress.base58, chainId: TRON_CHAIN_ID, provider };
