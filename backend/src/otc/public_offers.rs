@@ -130,6 +130,19 @@ impl PublicOfferDraft {
         {
             return Err(invalid("stablecoin asset identity is required"));
         }
+        let leg = match self.direction {
+            Direction::Buy => super::config::StablecoinLeg::Incoming,
+            Direction::Sell => super::config::StablecoinLeg::Outgoing,
+        };
+        let minimum = super::config::minimum_stablecoin_units(&network, leg);
+        if usdt < minimum {
+            return Err(invalid(&format!(
+                "stablecoin amount {} is below the {} cross-network minimum {}",
+                amount::decimal(usdt, 6),
+                network,
+                amount::decimal(minimum, 6)
+            )));
+        }
         let policy = fee_policy(usdt, self.stablecoin.symbol());
         Ok(json!({
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
@@ -399,7 +412,7 @@ mod tests {
             item.terms(&cfg).unwrap()["ever_units"],
             "1000000000000000000000"
         );
-        for value in ["0", "-1", "0.0000001", "1000001"] {
+        for value in ["0", "-1", "0.0000001", "0.3", "1000001"] {
             let mut item = draft();
             item.usdt_amount = value.into();
             assert!(item.terms(&cfg).is_err(), "{value}");
@@ -446,12 +459,65 @@ mod tests {
         assert_eq!(policy["fee_units"], "356670");
         assert_eq!(policy["net_units"], "11532330");
         assert_eq!(policy["floor"], "0");
-        let mut one = draft();
-        one.usdt_amount = "0.000001".into();
-        let terms = one.terms(&super::super::config::Config::default()).unwrap();
-        assert_eq!(terms["fee_policy"]["basis_units"], "1");
-        assert_eq!(terms["fee_policy"]["fee_units"], "1");
-        assert_eq!(terms["fee_policy"]["net_units"], "0");
+    }
+
+    #[test]
+    fn offer_minimums_follow_the_cross_network_leg() {
+        let cfg = super::super::config::Config::default();
+        // Every cross-network leg has an Ethereum side, so its 0.3 fee is the floor.
+        let mut item = draft();
+        item.usdt_amount = "0.3".into();
+        assert!(item.terms(&cfg).is_err(), "0.3 is below the Ethereum floor");
+        item.usdt_amount = "0.31".into();
+        assert!(item.terms(&cfg).is_ok());
+
+        // TRON as the source keeps 1Click's $100 minimum because the swap starts
+        // there. As a destination only its 0.2 withdrawal fee applies, so the
+        // Ethereum floor still binds and small payouts stay allowed.
+        item.stablecoin_network = "tron".into();
+        item.stablecoin_asset_id = Some("nep141:trx-usdt.omft.near".into());
+        item.usdt_address = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb".into();
+        item.direction = Direction::Buy;
+        item.usdt_amount = "99".into();
+        assert!(item.terms(&cfg).is_err());
+        item.usdt_amount = "100.2".into();
+        assert!(item.terms(&cfg).is_ok());
+        item.direction = Direction::Sell;
+        item.usdt_amount = "1".into();
+        assert!(item.terms(&cfg).is_ok());
+    }
+
+    #[test]
+    fn stablecoin_minimums_are_lower_bounds_per_network_and_leg() {
+        use super::super::config::{minimum_stablecoin_units, StablecoinLeg};
+        assert_eq!(
+            minimum_stablecoin_units("ethereum", StablecoinLeg::Outgoing),
+            300_065
+        );
+        assert_eq!(
+            minimum_stablecoin_units("solana", StablecoinLeg::Outgoing),
+            300_001
+        );
+        assert_eq!(
+            minimum_stablecoin_units("solana", StablecoinLeg::Incoming),
+            300_065
+        );
+        assert_eq!(
+            minimum_stablecoin_units("tron", StablecoinLeg::Incoming),
+            100_100_000
+        );
+        assert_eq!(
+            minimum_stablecoin_units("tron", StablecoinLeg::Outgoing),
+            300_001
+        );
+        assert_eq!(
+            minimum_stablecoin_units("near", StablecoinLeg::Incoming),
+            300_065
+        );
+        assert_eq!(
+            minimum_stablecoin_units("sei", StablecoinLeg::Outgoing),
+            300_001
+        );
     }
 
     #[test]

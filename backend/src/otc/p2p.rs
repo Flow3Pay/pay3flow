@@ -251,6 +251,21 @@ impl Service {
             owner.as_str()
         };
         let offer_network = terms["stablecoin_network"].as_str().unwrap_or("ethereum");
+        // Offers published before the limits changed can still be small. Refuse
+        // them at acceptance rather than letting the swap fail at the provider.
+        let leg = match direction {
+            Direction::Buy => super::config::StablecoinLeg::Incoming,
+            Direction::Sell => super::config::StablecoinLeg::Outgoing,
+        };
+        let minimum = super::config::minimum_stablecoin_units(offer_network, leg);
+        if usdt_basis < minimum {
+            return Err(invalid(&format!(
+                "offer stablecoin amount {} is below the {} settlement minimum {}",
+                amount::decimal(usdt_basis, 6),
+                offer_network,
+                amount::decimal(minimum, 6)
+            )));
+        }
         if self.cfg.p2p_chain() != 1
             || terms["ethereum_chain_id"] != json!(1)
             || (offer_network == "ethereum" && token_contract != stablecoin.contract())

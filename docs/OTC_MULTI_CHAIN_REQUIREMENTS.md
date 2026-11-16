@@ -167,6 +167,38 @@ identifies a network.
 - Preserve the compatibility rule that a legacy offer without `stablecoin`
   means USDT.
 
+### Cross-network minimum amounts
+
+Every cross-network OTC deal has an Ethereum leg, so the 0.3 USDT Ethereum
+fixed fee sets the floor for almost every pair: about 0.300001 USDT when the
+stablecoin leaves Ethereum and 0.300065 USDT when it arrives. TRON is the
+exception — 1Click rejects origin amounts below $100, so collecting USDT from
+TRON needs roughly 100.1 USDT, while delivering to TRON only pays its 0.200451
+withdrawal fee and stays near the Ethereum floor.
+
+The limits live in `otc::config::minimum_stablecoin_units` as six-decimal units
+per network and leg, and are enforced both when an offer is published and when
+it is accepted (older offers can predate the limits). Rejection is a 400 with
+the amount, network, and minimum in the message.
+
+| Network | Incoming (source) | Outgoing (destination) |
+| - | - | - |
+| Ethereum | 0.300065 | 0.300065 |
+| TRON | **100.1** | 0.300001 |
+| TON | 0.300065 | 0.300001 |
+| Sui | 0.300065 | 0.300001 |
+| Avalanche C-Chain | 0.300065 | 0.300001 |
+| Aptos | 0.300065 | 0.300001 |
+| Polygon, BNB Chain | 0.300065 | 0.300001 |
+| Solana | 0.300065 | 0.300001 |
+| Arbitrum, Base, Optimism, Gnosis, NEAR, Sei | 0.300065 | 0.300001 |
+
+These values were measured against the live 1Click quote API on 2026-11-16.
+Bridge floors move between requests, so they are lower bounds rather than a
+quote; the provider's own rejection remains authoritative. Known gaps: 1Click
+currently returns `NO_QUOTE` for USDT on Optimism and cannot quote TON as a
+destination, and XRP Ledger answers HTTP 500 on every pair.
+
 ### Fees
 
 - The OTC transaction fee is charged/denominated in **USDT**. The conversation

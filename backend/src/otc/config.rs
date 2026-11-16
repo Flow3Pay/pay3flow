@@ -5,6 +5,51 @@ use std::collections::BTreeMap;
 pub(crate) const USDT: &str = "0xdac17f958d2ee523a2206206994597c13d831ec7";
 pub(crate) const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub(crate) const PROFILE: &str = "pay3flow-otc-fep0837-v1";
+
+/// Direction of the stablecoin leg relative to the desk.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StablecoinLeg {
+    /// The stablecoin arrives from the deal network and the swap starts there.
+    Incoming,
+    /// The stablecoin is delivered to the deal network and the swap ends there.
+    Outgoing,
+}
+
+/// Smallest cross-network stablecoin amount in six-decimal units.
+///
+/// Every cross-network deal has an Ethereum leg, so the Ethereum fixed fee
+/// (0.3 USDT) sets the floor for most networks. TRON is the exception: 1Click
+/// rejects origin amounts below $100, so a TRON source needs roughly 100.1
+/// USDT before the fee is even considered. The per-network values are the
+/// fixed fees measured against the live 1Click quote API on 2026-11-16; bridge
+/// floors move, so this is a lower bound rather than a live quote.
+pub(crate) fn minimum_stablecoin_units(network: &str, leg: StablecoinLeg) -> u128 {
+    const ETH_ORIGIN_REFUND: u128 = 300_001;
+    const ETH_DESTINATION_WITHDRAW: u128 = 300_065;
+    let (origin, destination) = match network {
+        "ethereum" => (ETH_ORIGIN_REFUND, ETH_DESTINATION_WITHDRAW),
+        // $100 protocol minimum on TRON as origin plus the TRON withdrawal fee.
+        "tron" => (100_100_000, 200_451),
+        "ton" => (42_912, 42_912),
+        "sui" => (20_001, 20_000),
+        "avalanche-c" => (14_302, 14_307),
+        "aptos" => (11_957, 11_956),
+        "polygon-pos" | "bnb-smart-chain" => (10_040, 10_039),
+        "solana" => (9_977, 10_039),
+        "arbitrum-one" => (5_300, 5_300),
+        "base" => (2_400, 2_400),
+        "optimism" => (494, 494),
+        "gnosis" => (37, 37),
+        // NEAR charges no fixed withdrawal fee, so only the Ethereum leg binds.
+        "near" => (1, 0),
+        // Sei has no 1Click route yet and other listed chains settle directly.
+        _ => (1, 1),
+    };
+    match leg {
+        StablecoinLeg::Incoming => ETH_DESTINATION_WITHDRAW.max(origin),
+        StablecoinLeg::Outgoing => ETH_ORIGIN_REFUND.max(destination),
+    }
+}
 fn default_evm_chain() -> u64 {
     1
 }
