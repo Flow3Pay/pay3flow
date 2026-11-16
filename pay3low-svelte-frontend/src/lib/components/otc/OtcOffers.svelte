@@ -67,6 +67,17 @@
   $: swapFee = stablecoinNetwork === "ethereum"
     ? ""
     : (direction === "buy" ? swapMinimums[stablecoinNetwork]?.fee?.incoming : swapMinimums[stablecoinNetwork]?.fee?.outgoing) || "";
+  // Payout preview for the offer review: what the receiving side gets on each
+  // network at the same gross amount. Ethereum is a direct transfer, so its
+  // row carries no swap fee.
+  $: swapOptions = Object.entries(swapMinimums)
+    // 1Click still quotes no route into TON, so promising a TON payout would be wrong.
+    .filter(([network, entry]) => !!entry.outgoing && network !== "ton")
+    .map(([network, entry]) => ({
+      network,
+      minimum: network === "ethereum" ? "0" : entry.outgoing,
+      fee: network === "ethereum" ? "0" : entry.fee?.outgoing || "0",
+    }));
   /** Only the leg the trader pays from their own wallet can be short: EVER when selling, USDT when buying. */
   $: fundedLeg = direction === "sell" ? "ever" as const : "usdt" as const;
   // Backend balance reads cover Everscale + Ethereum only. Other stablecoin networks
@@ -292,7 +303,7 @@
     edited();
   }
   $: ticket = {
-    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, addressValid: isValidWalletAddress(stablecoinNetwork, receivingAddress), stablecoinNetwork, swapMinimum, swapFee, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
+    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, addressValid: isValidWalletAddress(stablecoinNetwork, receivingAddress), stablecoinNetwork, swapMinimum, swapFee, swapOptions, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
     marketPrice, marketRate, marketUsdRate, usdtApprox, everApprox, error,
     onPrice: changePrice,
     onEver: changeEver,

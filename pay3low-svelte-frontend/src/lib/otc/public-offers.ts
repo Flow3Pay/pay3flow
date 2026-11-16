@@ -26,10 +26,12 @@ export interface OfferHistoryPoint {
   terms: { direction: Direction; stablecoin?: Stablecoin; ever_amount: string; usdt_amount: string };
 }
 
-export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, everFromUsd, p2pFeeSplit, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
+export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, everFromUsd, p2pFeeSplit, swapPayoutRows, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
+export type { SwapOption } from "./offer-amount";
 
 export const offerDirection = (offer: PublicOffer): Direction => offer.terms.direction || "sell";
 export const offerOwner = (offer: PublicOffer): string => offer.owner_ever || offer.seller_ever;
+
 
 export interface SaleTicketState {
   direction: Direction;
@@ -53,6 +55,8 @@ export interface SaleTicketState {
   swapMinimum: string;
   /** Fixed route fee charged on the selected leg, empty when no swap is needed. */
   swapFee: string;
+  /** Per-network payout preview: floor and fixed fee for a stablecoin delivery. */
+  swapOptions: Array<{ network: string; minimum: string; fee: string }>;
   supportedStablecoinAssets: Array<{ symbol: Stablecoin; network: string }>;
   seller: string;
   askingRate: string;

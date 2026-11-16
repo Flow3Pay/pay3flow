@@ -101,6 +101,28 @@ export function offerEver(usdt: string, price: string): { amount: string; rounde
   return {amount:decimal((numerator/denominator).toString(),9),rounded:numerator%denominator!==0n};
 }
 
+/** One stablecoin delivery network and its NEAR Intents floor and fixed fee. */
+export interface SwapOption {
+  network: string;
+  minimum: string;
+  fee: string;
+}
+
+/**
+ * Net payout per network after the NEAR Intents fixed fee. Rows the same amount
+ * cannot even route to stay hidden, and the highest payout comes first.
+ */
+export function swapPayoutRows(amount: string, options: SwapOption[]): Array<SwapOption & { net: string }> {
+  const micro = (value: string) => Math.round(Number(value || 0) * 1_000_000);
+  const total = micro(amount);
+  if (!(total > 0)) return [];
+  return options
+    .map((option) => ({ ...option, units: total - micro(option.fee) }))
+    .filter((option) => option.units > 0 && total >= micro(option.minimum))
+    .sort((left, right) => right.units - left.units)
+    .map(({ units, ...option }) => ({ ...option, net: decimal(units.toString(), 6) }));
+}
+
 /** One 3% service fee per P2P deal, rounded up to its six USDT decimals. */
 export function p2pFeeSplit(usdt: string): { basis: string; fee: string; net: string } | null {
   const units = offerUnits(usdt, 6);

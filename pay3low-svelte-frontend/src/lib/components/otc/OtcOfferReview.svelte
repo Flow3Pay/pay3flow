@@ -2,8 +2,8 @@
   import { onMount } from "svelte";
   import { locale } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
-  import { offerDecimal, p2pFeeSplit } from "$lib/otc/public-offers";
-  import { venueIcon } from "$lib/icons";
+  import { offerDecimal, p2pFeeSplit, swapPayoutRows } from "$lib/otc/public-offers";
+  import { networkIcon, venueIcon } from "$lib/icons";
   import type { Stablecoin } from "$lib/otc/public-offers";
   import { type Direction } from "$lib/otc/service";
   export let direction: Direction = "sell";
@@ -11,6 +11,7 @@
   export let stablecoinNetwork = "ethereum";
   export let swapMinimum = "";
   export let swapFee = "";
+  export let swapOptions: Array<{ network: string; minimum: string; fee: string }> = [];
   export let everAmount = "", usdtAmount = "", askingRate = "", seller = "", receivingAddress = "";
   export let error = "";
   export let busy = false;
@@ -27,6 +28,7 @@
   $: fee = p2pFeeSplit(usdtAmount);
   $: swapViaIntents = stablecoinNetwork !== "ethereum";
   $: swapTooSmall = swapViaIntents && !!swapMinimum && Number(usdtAmount || 0) > 0 && Number(usdtAmount) < Number(swapMinimum);
+  $: payoutRows = swapPayoutRows(usdtAmount, swapOptions);
   onMount(() => {
     const previous = document.activeElement as HTMLElement | null;
     const unlock = lockPageScroll();
@@ -51,6 +53,17 @@
           <span>{say(`Swapped inside by NEAR Intents · ≈${swapFee || "0.3"} USDT fee`, `Обмен внутри через NEAR Intents · фикс ≈${swapFee || "0.3"} USDT`)}</span>
         {/if}
       </p>
+    {/if}
+    {#if direction === "buy" && payoutRows.length}
+      <div class="swapTable" data-testid="otc-swap-table">
+        <div class="swapTableHead"><img src={venueIcon("near-intents")} alt="" width="16" height="16" loading="lazy" decoding="async" /><span>{say("Counterparty receives · after NEAR Intents", "Контрагент получит · после NEAR Intents")}</span></div>
+        {#each payoutRows as row}
+          <div class="swapTableRow">
+            <span class="swapTableNet"><img src={networkIcon(networkNames[row.network] ?? row.network)} alt="" width="18" height="18" loading="lazy" decoding="async" />{networkNames[row.network] ?? row.network}</span>
+            <strong>{row.net} {stablecoin}</strong>
+          </div>
+        {/each}
+      </div>
     {/if}
     <p>{say("Price", "Курс")}: {askingRate} {stablecoin} / EVER</p>
     <p>{direction === "buy" ? say("Your EVER receiving wallet", "Ваш кошелёк для получения EVER") : say("Seller", "Продавец")}: <code>{seller}</code></p>
@@ -81,6 +94,13 @@
   .feeSplit dt { color: var(--color-text-soft); font-size: 11px; }
   .feeSplit dd { margin: 0; font-family: var(--font-mono); font-size: 11px; }
   .feeSplit .net dt, .feeSplit .net dd { color: var(--color-text); font-weight: 650; }
+  .swapTable { display: grid; gap: 2px; margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 10px; }
+  .swapTableHead { display: flex; align-items: center; gap: 7px; padding-bottom: 6px; border-bottom: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 11px; line-height: 1.4; }
+  .swapTableHead img { flex: 0 0 auto; border-radius: 4px; }
+  .swapTableRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 12px; }
+  .swapTableNet { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--color-text-soft); }
+  .swapTableNet img { flex: 0 0 auto; border-radius: 50%; }
+  .swapTableRow strong { font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
   .swapNote { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 7px; }
   .swapNote img { flex: 0 0 auto; border-radius: 4px; }
   .swapNote.swapWarn { border-color: var(--color-danger); color: var(--color-danger); }
