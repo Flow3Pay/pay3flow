@@ -96,12 +96,13 @@
     const family = walletFamily(network);
     if (!family) return "";
     if (family === "evm") {
-      const expected = network === "ethereum" ? otcP2pNetwork().chainId : chainIdForNetwork(network);
-      if (network === "ethereum" || network === otcP2pNetwork().name) {
-        const verified = session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "";
-        if (verified) return verified;
-      }
-      return $wallets.evm?.family === "evm" && expected != null && $wallets.evm.chainId === expected ? $wallets.evm.address : "";
+      // An EVM account address is identical on every EVM chain. Reuse the
+      // connected account even while the wallet is still on another chain,
+      // instead of forcing the trader to paste the same 0x… address again.
+      const connected = $wallets.evm?.family === "evm" ? $wallets.evm.address : "";
+      if (connected) return connected;
+      // The verified login wallet is the same account on every EVM network.
+      return session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "";
     }
     return $wallets[family]?.address || "";
   }
@@ -272,12 +273,15 @@
   function changeStablecoinNetwork(value: string) {
     if (stablecoinNetwork === value) return;
     stablecoinNetwork = value;
-    receivingAddress = "";
+    // An EVM address, and any address that stays valid across the switch,
+    // remains usable. Clearing it silently made switching networks look like
+    // the form had forgotten the address and rejected it.
+    if (!isValidWalletAddress(value, receivingAddress)) receivingAddress = "";
     suggestionKey = "";
     edited();
   }
   $: ticket = {
-    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, stablecoinNetwork, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
+    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, addressValid: isValidWalletAddress(stablecoinNetwork, receivingAddress), stablecoinNetwork, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
     marketPrice, marketRate, marketUsdRate, usdtApprox, everApprox, error,
     onPrice: changePrice,
     onEver: changeEver,

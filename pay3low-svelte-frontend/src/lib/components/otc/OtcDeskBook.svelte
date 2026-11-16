@@ -5,7 +5,8 @@
   import { request, type Config, type Direction, type Proposal, type WalletBalance } from "$lib/otc/service";
   import { saleRate, compareOfferRates, offerDirection, offerOwner, offerStablecoin, p2pFeeSplit, balanceUnits, offerShortfall, type PublicOffer } from "$lib/otc/public-offers";
   import { identiconDataUri } from "$lib/otc/identicon";
-  import { isValidWalletAddress } from "$lib/wallet-address";
+  import { connectedWalletAddress, destinationAddressFor, isValidWalletAddress, preferredDestinationAsset } from "$lib/wallet-address";
+  import type { ConnectedWallet, WalletFamily } from "$lib/wallet-execution";
   import { networkIcon } from "$lib/icons";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
@@ -18,6 +19,8 @@
   export let balances: WalletBalance[] = [];
   /** The trader's verified EVM address, offered as the default stablecoin recipient. */
   export let evmAddress = "";
+  /** Connected browser wallets, reused for the receiving network and address. */
+  export let wallets: Partial<Record<WalletFamily, ConnectedWallet>> = {};
   export let listings: Proposal[] = [];
   export let selectedId = "";
   export let onSelect: (proposal: Proposal, direction: Direction) => void;
@@ -48,14 +51,24 @@
   $: takerAvailable = balances.find(balance => balance.symbol === takerSymbol && balance.state === "ok" && balance.network === takerNetwork)?.amount ?? null;
   $: takerShort = !!selectedOffer && offerShortfall(balanceUnits(takerAmount, takerPrecision), balanceUnits(takerAvailable, takerPrecision));
   const networkLabel = (network: string) => balanceNetworkLabels[network] ?? network;
-  const evmNetwork = (network: string) => ["ethereum", "gnosis", "arbitrum-one", "base", "polygon-pos", "avalanche-c", "bnb-smart-chain", "optimism", "sei"].includes(network);
-  // Every lib can only pay its own address format, so a verified EVM address is
-  // offered only where it is valid and typed by hand everywhere else.
-  const defaultDestinationAddress = (network: string) => evmNetwork(network) ? evmAddress : "";
+  /** Address of the connected wallet that can receive on this network, if any. */
+  const connectedAddress = (network: string) => connectedWalletAddress(network, wallets);
+  // Reuse a connected wallet on the selected network. A verified EVM address is
+  // still valid on every EVM chain, so it remains the fallback there.
+  const defaultDestinationAddress = (network: string) => destinationAddressFor(network, wallets, evmAddress);
+  /** Prefer a network the trader already has a wallet for, without hiding the explicit picker. */
+  const preferredDestination = (symbol: string) => preferredDestinationAsset(buyDestinationAssets, symbol, wallets);
   $: destinationValid = !!selectedBuyDestination && isValidWalletAddress(destinationNetwork, destinationAddress.trim());
+  $: destinationWallet = connectedAddress(destinationNetwork);
+  $: destinationWalletMatches = !!destinationWallet && destinationAddress.trim().toLowerCase() === destinationWallet.toLowerCase();
   function chooseDestination(assetId: string, network: string) {
     destinationAssetId = assetId;
-    destinationAddress = defaultDestinationAddress(network);
+    const current = destinationAddress.trim();
+    // Keep a typed or reused address while it stays valid on the new network
+    // (for example when moving between two EVM chains).
+    destinationAddress = current && isValidWalletAddress(network, current)
+      ? current
+      : defaultDestinationAddress(network);
   }
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: offers = listings.map(proposal => ({ proposal, direction: proposalDirection(proposal, config) })).filter(item => item.direction);
@@ -98,9 +111,7 @@
   async function showOffer(offer: PublicOffer) {
     selectedOffer = offer;
     copied = "";
-    const initialDestination = buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer) && asset.network === "ethereum")
-      || buyDestinationAssets.find(asset => asset.symbol === offerStablecoin(offer))
-      || null;
+    const initialDestination = preferredDestination(offerStablecoin(offer));
     destinationAssetId = initialDestination?.asset_id || "";
     destinationAddress = initialDestination ? defaultDestinationAddress(initialDestination.network) : "";
     await tick();
@@ -120,8 +131,7 @@
       .then(result => {
         buyDestinationAssets = result.buy_destination_assets || [];
         if (selectedOffer && !destinationAssetId) {
-          const fallback = buyDestinationAssets.find(asset => asset.symbol === offerToken && asset.network === "ethereum")
-            || buyDestinationAssets.find(asset => asset.symbol === offerToken);
+          const fallback = preferredDestination(offerToken);
           destinationAssetId = fallback?.asset_id || "";
           if (fallback && !destinationAddress) destinationAddress = defaultDestinationAddress(fallback.network);
         }
@@ -259,6 +269,14 @@
           <label class="buyDestination">{say(`${token} receiving address`, `Адрес получения ${token}`)}
             <input bind:value={destinationAddress} required autocomplete="off" spellcheck="false" placeholder={destinationNetwork === "ethereum" ? "0x…" : say("Address on selected network", "Адрес в выбранной сети")} disabled={busy} data-testid="otc-buy-destination-address" />
           </label>
+          {#if destinationWallet && !destinationWalletMatches}
+            <button type="button" class="walletSource" data-testid="otc-buy-destination-wallet" disabled={busy} on:click={() => destinationAddress = destinationWallet}>
+              {say(`Use my ${networkLabel(destinationNetwork)} wallet`, `Использовать мой кошелёк ${networkLabel(destinationNetwork)}`)}
+              <code>{destinationWallet.slice(0, 6)}…{destinationWallet.slice(-4)}</code>
+            </button>
+          {:else if destinationWalletMatches}
+            <p class="walletSource" data-testid="otc-buy-destination-wallet-filled">{say(`Reused your connected ${networkLabel(destinationNetwork)} wallet.`, `Использован подключённый кошелёк ${networkLabel(destinationNetwork)}.`)}</p>
+          {/if}
           {#if destinationAddress.trim() && !destinationValid}<p class="acceptError" role="alert">{say(`Enter a valid ${token} address for ${networkLabel(destinationNetwork)}.`, `Укажите корректный адрес ${token} в сети ${networkLabel(destinationNetwork)}.`)}</p>{/if}
           {#if destinationAssetsError}<p class="settlementNote" role="alert">{destinationAssetsError}</p>{/if}
         {/if}
@@ -381,6 +399,9 @@
   .networkChoice:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   .networkChoice:disabled { opacity:.55; cursor:default; }
   .buyDestination input { width:100%; min-width:0; min-height:38px; padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:var(--color-text); font:inherit; }
+  .walletSource { display:flex; width:100%; min-width:0; align-items:center; justify-content:space-between; gap:8px; margin:0; padding:7px 10px; border:1px solid var(--color-border); border-radius:8px; background:transparent; color:var(--color-text-soft); font-size:11px; line-height:1.45; text-align:left; }
+  .walletSource code { overflow:hidden; color:var(--color-text); font-family:var(--font-mono); font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
+  button.walletSource:hover { border-color:var(--color-border-strong); color:var(--color-text); }
   .acceptError { margin:0; color:var(--color-danger); font-size:11px; line-height:1.5; }
   .acceptWarning { margin:0; padding:8px 10px; border:1px solid var(--color-danger); border-radius:8px; background:var(--color-panel); color:var(--color-danger); font-size:11px; line-height:1.5; }
   .acceptOffer { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--color-accent-strong); border-radius:8px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }

@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const ever = `0:${"a".repeat(64)}`, eth = `0x${"b".repeat(40)}`;
-async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean; deals?: any[]; balances?: { ever?: string | null; usdt?: string | null; state?: "ok" | "unverified" | "unavailable"; fail?: boolean } } = {}) {
+async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean; deals?: any[]; balances?: { ever?: string | null; usdt?: string | null; state?: "ok" | "unverified" | "unavailable"; fail?: boolean }; destinationAssets?: any[] } = {}) {
   const session = { token: "seller-token", actor: "https://relay.example/actors/seller", desk: false, expires_at: "2099-01-01T00:00:00Z", signing_wallet: { chain: "everscale", address: ever }, wallets: [{ chain: "everscale", address: ever, verified_at: new Date().toISOString() }] };
   if (options.verifiedEthereum) session.wallets.push({chain:"ethereum",address:eth,verified_at:new Date().toISOString()});
   const calls: { path: string; method: string; body: any; key: string | undefined }[] = [];
@@ -59,6 +59,7 @@ async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: b
     }
     else if (path === "/config") response = { enabled: false, available: false, public_offers_available: true, public_offer_directions: ["buy","sell"], p2p_available: !!options.deals, wallet_login_available: true, wallet_login_chains: ["everscale", "ethereum"], demo: false, desk: "", desk_name: "", ever_resource: "", usdt_resource: "" };
     else if (path === "/session/challenge") response = { id: "challenge", message: "Sign in only; no transfer", everscale_data: btoa("sign-in") };
+    else if (path === "/p2p/assets") response = { assets: [], destination_assets: options.destinationAssets || [], buy_destination_assets: options.destinationAssets || [] };
     else if (path === "/session/proof" || path === "/session") response = session;
     else if (path === "/session/revoke") response = { revoked: true };
     else if (path === "/p2p/trades") response = { deals: options.deals || [] };
@@ -175,6 +176,59 @@ test("the searchable token picker publishes USDC only on Ethereum ERC-20 and kee
   await expect(page.getByTestId("otc-public-offer")).toContainText("USDC");
   await page.getByTestId("otc-offer-take").click();
   await expect(page.getByRole("dialog", { name: "Offer details" })).toContainText("USDC receiving wallet");
+});
+
+test("switching the receiving network keeps a valid EVM address and publishes its asset identity", async ({ page }) => {
+  const f = await setup(page, {
+    signedIn: true,
+    verifiedEthereum: true,
+    destinationAssets: [
+      { symbol: "USDT", network: "ethereum", asset_id: "eth-usdt" },
+      { symbol: "USDT", network: "avalanche-c", asset_id: "avax-usdt" },
+    ],
+  });
+  await page.getByTestId("otc-offer-ever").fill("10");
+  await page.getByTestId("otc-offer-usdt").fill("1");
+  await openOfferSettings(page);
+  await page.getByTestId("otc-offer-recipient").fill(eth);
+  await closeOfferSettings(page);
+  await page.getByRole("button", { name: "Select recipient network: Ethereum (ERC-20)", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choose USDT network" });
+  const avalanche = picker.getByRole("option").filter({ hasText: "Avalanche C-Chain" });
+  await expect(avalanche).toBeVisible();
+  await avalanche.click();
+  await expect(page.getByRole("button", { name: "Select recipient network: Avalanche C-Chain", exact: true })).toBeVisible();
+  await openOfferSettings(page);
+  await expect(page.getByTestId("otc-offer-recipient")).toHaveValue(eth);
+  await closeOfferSettings(page);
+  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
+  expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toMatchObject({
+    usdt_address: eth,
+    stablecoin_network: "avalanche-c",
+    stablecoin_asset_id: "avax-usdt",
+  });
+});
+
+test("a missing receiving address is requested inline instead of only behind offer settings", async ({ page }) => {
+  await setup(page, {
+    signedIn: true,
+    destinationAssets: [
+      { symbol: "USDT", network: "ethereum", asset_id: "eth-usdt" },
+      { symbol: "USDT", network: "avalanche-c", asset_id: "avax-usdt" },
+    ],
+  });
+  await page.getByTestId("otc-offer-ever").fill("10");
+  await page.getByTestId("otc-offer-usdt").fill("1");
+  await page.getByRole("button", { name: "Select recipient network: Ethereum (ERC-20)", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choose USDT network" });
+  await picker.getByRole("option").filter({ hasText: "Avalanche C-Chain" }).click();
+  const prompt = page.getByTestId("otc-offer-address-prompt");
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("textbox", { name: "USDT address on Avalanche C-Chain" }).fill(eth);
+  await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
+  await page.getByTestId("otc-publish-offer").click();
+  await expect(page.getByTestId("otc-offer-review")).toContainText("Avalanche");
 });
 
 test("USD input converts the EVER amount and shows the token value", async ({ page }) => {

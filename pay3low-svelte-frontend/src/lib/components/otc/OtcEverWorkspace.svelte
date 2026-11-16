@@ -16,7 +16,7 @@
   import OtcTradeDetails from "./OtcTradeDetails.svelte";
   import OtcDeskConsole from "./OtcDeskConsole.svelte";
   import { otcWalletDialog, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
-  import { disconnectFamily } from "$lib/wallet-session";
+  import { disconnectFamily, wallets } from "$lib/wallet-session";
   import OtcTransferReview from "./OtcTransferReview.svelte";
   import OtcOffers from "./OtcOffers.svelte";
   import OtcTerminal from "./OtcTerminal.svelte";
@@ -335,7 +335,7 @@
         <OtcActivityContent activeKey={tab} duration={motionDuration}>
         <div class="activityContent" role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
           {#if tab === "trades"}
-            <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {balances} evmAddress={evmWalletAddress} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
+            <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {balances} evmAddress={evmWalletAddress} wallets={$wallets} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
           {:else}
             {#if tab === "orders" && p2pActiveCount}
               <div class="activeDealRow">
@@ -376,7 +376,7 @@
   <p class="risk">{config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
   {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
-<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} onSelect={() => {}} busy={busy || offersBusy} {config} {balances} evmAddress={evmWalletAddress} />
+<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} onSelect={() => {}} busy={busy || offersBusy} {config} {balances} evmAddress={evmWalletAddress} wallets={$wallets} />
 </OtcOffers>
 
 {#if transferReview}<OtcTransferReview trade={transferReview.trade} kind={transferReview.kind} instructions={transferReview.attempt.instructions} disabled={busy || !!config?.demo || transferReview.trade.terms.demo || (transferReview.attempt.instructions.escrow && now >= Date.parse(transferReview.attempt.instructions.expires_at!) - 1800000) || (!transferReview.trade.terms.escrow && transferReview.kind === "payment" && now > Date.parse(transferReview.trade.terms.pay_by))} onClose={() => transferReview = null} onConfirm={() => run(confirmTransfer)} />{/if}

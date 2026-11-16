@@ -222,6 +222,15 @@
     {#if sale.reviewing && sale.seller}<OtcOfferReview {direction} stablecoin={sale.stablecoin} stablecoinNetwork={sale.stablecoinNetwork} everAmount={sale.everAmount} usdtAmount={sale.usdtAmount} askingRate={sale.askingRate} seller={sale.seller} receivingAddress={sale.receivingAddress} error={sale.error} busy={busy} onClose={sale.onCloseReview} onPublish={() => sale.onRequest()} />{/if}
   {/if}
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
+  {#if sale?.seller && !sale.addressValid && !settingsOpen}
+    <div class="recipientPrompt" data-testid="otc-offer-address-prompt">
+      <span>{say(`Add the ${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address on ${walletNetworkLabel}`, `Укажите ${direction === "buy" ? "адрес оплаты" : "адрес получения"} ${sale.stablecoin} в сети ${walletNetworkLabel}`)}</span>
+      <div class="recipientPromptRow">
+        <input value={sale.receivingAddress} on:input={(event) => sale.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={addressPlaceholders[sale.stablecoinNetwork] ?? say("Wallet address", "Адрес кошелька")} disabled={busy} aria-label={say(`${sale.stablecoin} address on ${walletNetworkLabel}`, `Адрес ${sale.stablecoin} в сети ${walletNetworkLabel}`)} />
+        {#if walletConnectable}<button class="walletAddress" type="button" disabled={busy || sale.linkingWallet} on:click={sale.onUseWallet}>{sale.linkingWallet ? say("Connecting…", "Подключаем…") : say("Use my wallet", "Использовать мой кошелёк")}</button>{/if}
+      </div>
+    </div>
+  {/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
   {#if sale?.seller && sale.blockingReason}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
   {#if pendingBooking}<p class="priceHint" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button type="button" class="reconcileButton" disabled={busy || pendingBookingLocked} on:click={onReconcile}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}
@@ -232,6 +241,11 @@
 <style>
   .recipientField { display:grid; gap:8px; margin:16px 0 8px; color:var(--color-text-soft); font-size:12px; }
   .recipientField input { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid var(--exchange-field-border); border-radius:8px; background:var(--exchange-field-bg); color:var(--color-text); font:inherit; }
+  .recipientPrompt { display:grid; gap:7px; margin:6px 0 12px; color:var(--color-text-soft); font-size:12px; line-height:1.5; }
+  .recipientPromptRow { display:grid; gap:6px; grid-template-columns:minmax(0,1fr) auto; }
+  .recipientPromptRow input { width:100%; min-width:0; min-height:40px; padding:8px 10px; border:1px solid var(--exchange-field-border); border-radius:8px; background:var(--exchange-field-bg); color:var(--color-text); font:inherit; }
+  .recipientPromptRow .walletAddress { width:auto; min-height:40px; white-space:nowrap; }
+  @media (max-width:520px) { .recipientPromptRow { grid-template-columns:minmax(0,1fr); } }
   .walletAddress { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; font-size:12px; }
   .reconcileButton { width:100%; min-height:44px; margin:8px 0 12px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:inherit; font-size:13px; }
   .reconcileButton:disabled { opacity:.45; cursor:default; }

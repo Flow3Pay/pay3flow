@@ -46,6 +46,8 @@ export interface SaleTicketState {
   everAmount: string;
   usdtAmount: string;
   receivingAddress: string;
+  /** Whether the entered address already matches the selected receiving network. */
+  addressValid: boolean;
   stablecoinNetwork: string;
   supportedStablecoinAssets: Array<{ symbol: Stablecoin; network: string }>;
   seller: string;

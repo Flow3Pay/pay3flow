@@ -23,10 +23,58 @@ export function isSolanaAddress(address: string): boolean {
   return leadingZeros + Math.ceil(value.toString(16).length / 2) === 32;
 }
 
+/** Mirror the backend's per-network OTC receiving-address validation. */
 const EVM_WALLET_NETWORKS = new Set([
   "ethereum", "gnosis", "arbitrum-one", "base", "polygon-pos",
   "avalanche-c", "bnb-smart-chain", "optimism", "sei",
 ]);
+const NON_EVM_WALLET_FAMILIES: Record<string, string> = {
+  near: "near", tron: "tron", everscale: "everscale", solana: "solana", sui: "sui", aptos: "aptos", ton: "ton",
+};
+
+export interface WalletAddressLike { address: string; family: string }
+export type WalletAddressMap = Partial<Record<string, WalletAddressLike>>;
+
+/** The wallet family that can receive on an OTC stablecoin network. */
+export function walletFamilyForNetwork(network: string): string {
+  if (EVM_WALLET_NETWORKS.has(network)) return "evm";
+  return NON_EVM_WALLET_FAMILIES[network] ?? "";
+}
+
+/**
+ * The address of a connected wallet that can receive on this network. Every
+ * EVM chain shares one account address, so the connected EVM chain id does not
+ * need to match the selected network.
+ */
+export function connectedWalletAddress(network: string, wallets: WalletAddressMap): string {
+  const family = walletFamilyForNetwork(network);
+  const wallet = family ? wallets[family] : undefined;
+  if (!wallet) return "";
+  if (family === "evm" && wallet.family !== "evm") return "";
+  return wallet.address;
+}
+
+/** Prefer the connected wallet on the selected network, then a verified EVM address on any EVM chain. */
+export function destinationAddressFor(network: string, wallets: WalletAddressMap, evmAddress = ""): string {
+  const connected = connectedWalletAddress(network, wallets);
+  if (connected && isValidWalletAddress(network, connected)) return connected;
+  return walletFamilyForNetwork(network) === "evm" ? evmAddress : "";
+}
+
+export interface DestinationAssetLike { symbol: string; network: string; asset_id: string }
+
+/** Prefer a destination network the trader already has a wallet for, without hiding the picker. */
+export function preferredDestinationAsset<T extends DestinationAssetLike>(
+  assets: readonly T[],
+  symbol: string,
+  wallets: WalletAddressMap,
+): T | null {
+  const candidates = assets.filter(asset => asset.symbol === symbol);
+  return candidates.find(asset => {
+    const address = connectedWalletAddress(asset.network, wallets);
+    return !!address && isValidWalletAddress(asset.network, address);
+  }) ?? candidates.find(asset => asset.network === "ethereum") ?? candidates[0] ?? null;
+}
 
 function tonCrc16(bytes: Uint8Array): number {
   let crc = 0;

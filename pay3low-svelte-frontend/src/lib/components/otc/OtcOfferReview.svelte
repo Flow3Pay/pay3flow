@@ -15,6 +15,12 @@
   export let onPublish: () => void;
   let dialog: HTMLDialogElement;
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
+  const networkNames: Record<string, string> = {
+    ethereum: "Ethereum", sei: "Sei", "bnb-smart-chain": "BNB Smart Chain", "polygon-pos": "Polygon",
+    "avalanche-c": "Avalanche C-Chain", "arbitrum-one": "Arbitrum One", base: "Base", optimism: "Optimism",
+    gnosis: "Gnosis", near: "NEAR", tron: "TRON", solana: "Solana", ton: "TON", sui: "Sui", aptos: "Aptos",
+  };
+  $: networkLabel = networkNames[stablecoinNetwork] ?? stablecoinNetwork;
   $: fee = p2pFeeSplit(usdtAmount);
   onMount(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -33,7 +39,7 @@
     {#if fee}<dl class="feeSplit" data-testid="otc-offer-fee-split"><div><dt>{say("Gross offer amount", "Сумма оффера до комиссии")}</dt><dd>{fee.basis} {stablecoin}</dd></div><div><dt>{say("Service fee (3%)", "Комиссия сервиса (3%)")}</dt><dd>{fee.fee} USDT</dd></div><div class="net"><dt>{say("Seller receives", "Продавец получает")}</dt><dd>{fee.net} {stablecoin}</dd></div></dl>{/if}
     <p>{say("Price", "Курс")}: {askingRate} {stablecoin} / EVER</p>
     <p>{direction === "buy" ? say("Your EVER receiving wallet", "Ваш кошелёк для получения EVER") : say("Seller", "Продавец")}: <code>{seller}</code></p>
-    <p>{direction === "buy" ? say(`${stablecoin} paying wallet on Ethereum`, `Кошелёк оплаты ${stablecoin} в Ethereum`) : say(`${stablecoin} recipient on ${stablecoinNetwork}`, `Получатель ${stablecoin} в ${stablecoinNetwork}`)}: <code>{receivingAddress.trim()}</code></p>
+    <p>{direction === "buy" ? say(`${stablecoin} paying wallet on ${networkLabel}`, `Кошелёк оплаты ${stablecoin} в сети ${networkLabel}`) : say(`${stablecoin} recipient on ${networkLabel}`, `Получатель ${stablecoin} в сети ${networkLabel}`)}: <code>{receivingAddress.trim()}</code></p>
     <p>{say("The 3% service fee is denominated in USDT. For a USDC offer it is calculated at nominal 1:1 parity, not a live exchange rate. The seller receives the offer amount minus the fee; the designated payer separately signs the fee transfer. Any route cost is shown separately before signing.", "Комиссия 3% учитывается в USDT. Для оффера в USDC она рассчитывается по номинальному курсу 1:1, а не по биржевому курсу. Продавец получает сумму оффера за вычетом комиссии; назначенный плательщик отдельно подтверждает перевод комиссии. Расходы маршрута показываются отдельно до подписи.")}</p>
     <p>{say("These amounts and addresses will be public for 24 hours, or until you cancel. Publication does not move or reserve funds.", "Эти суммы и адреса будут опубликованы на 24 часа или до отмены. Публикация не переводит и не резервирует средства.")}</p>
     {#if error}<p class="reviewError" role="alert">{error}</p>{/if}
