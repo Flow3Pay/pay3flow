@@ -8,9 +8,10 @@
   import { connectedWalletAddress, destinationAddressFor, isValidWalletAddress, preferredDestinationAsset } from "$lib/wallet-address";
   import type { ConnectedWallet, WalletFamily } from "$lib/wallet-execution";
   import { networkIcon } from "$lib/icons";
+  import { p2pCompatibleSources } from "$lib/otc/p2p";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
-  export let onAccept: (id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string }) => void = () => {};
+  export let onAccept: (id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string }, paymentSource?: string) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
   export let dialogOnly = false;
   export let testId = "otc-public-offer";
@@ -28,6 +29,9 @@
   let dialog: HTMLDialogElement;
   let copied = "";
   let buyDestinationAssets: Array<{ symbol: "USDT" | "USDC"; network: string; asset_id: string }> = [];
+  type PaymentSource = { asset: string; symbol: "USDT" | "USDC"; network: string; asset_id: string; destination_asset_ids: string[] };
+  let paymentSourceAssets: PaymentSource[] = [];
+  let paymentSourceAsset = "";
   let destinationAssetId = "";
   $: offerToken = selectedOffer ? offerStablecoin(selectedOffer) : "USDT";
   $: buyDestinationNetworks = buyDestinationAssets.filter(asset => asset.symbol === offerToken);
@@ -47,10 +51,26 @@
   $: takerSymbol = selectedOffer && takerPaysToken ? offerStablecoin(selectedOffer) : "EVER";
   $: takerAmount = selectedOffer ? (takerPaysToken ? takerFee?.net ?? selectedOffer.terms.usdt_amount : selectedOffer.terms.ever_amount) : "";
   $: takerPrecision = takerPaysToken ? 6 : 9;
-  $: takerNetwork = takerPaysToken ? "Ethereum" : "Everscale";
+  // The taker of a sell offer pays the stablecoin leg, so it can come from any
+  // source network the provider can route to the seller's receiving network.
+  $: paymentDestinationId = selectedOffer
+    ? selectedOffer.terms.stablecoin_asset_id
+      || buyDestinationAssets.find(asset => asset.symbol === offerToken && asset.network === (selectedOffer?.terms.stablecoin_network || "ethereum"))?.asset_id
+      || ""
+    : "";
+  $: paymentNetworks = selectedOffer && takerPaysToken
+    ? p2pCompatibleSources(paymentSourceAssets, paymentDestinationId).filter(asset => asset.symbol === offerToken)
+    : [];
+  $: selectedPaymentSource = paymentNetworks.find(asset => asset.asset === paymentSourceAsset)
+    || paymentNetworks.find(asset => asset.network === (selectedOffer?.terms.stablecoin_network || "ethereum"))
+    || paymentNetworks[0]
+    || null;
+  const networkLabel = (network: string) => balanceNetworkLabels[network] ?? network;
+  $: takerNetwork = takerPaysToken
+    ? (selectedPaymentSource ? networkLabel(selectedPaymentSource.network) : "Ethereum")
+    : "Everscale";
   $: takerAvailable = balances.find(balance => balance.symbol === takerSymbol && balance.state === "ok" && balance.network === takerNetwork)?.amount ?? null;
   $: takerShort = !!selectedOffer && offerShortfall(balanceUnits(takerAmount, takerPrecision), balanceUnits(takerAvailable, takerPrecision));
-  const networkLabel = (network: string) => balanceNetworkLabels[network] ?? network;
   /** Address of the connected wallet that can receive on this network, if any. */
   const connectedAddress = (network: string) => connectedWalletAddress(network, wallets);
   // Reuse a connected wallet on the selected network. A verified EVM address is
@@ -111,6 +131,7 @@
   async function showOffer(offer: PublicOffer) {
     selectedOffer = offer;
     copied = "";
+    paymentSourceAsset = "";
     const initialDestination = preferredDestination(offerStablecoin(offer));
     destinationAssetId = initialDestination?.asset_id || "";
     destinationAddress = initialDestination ? defaultDestinationAddress(initialDestination.network) : "";
@@ -127,9 +148,10 @@
     catch { copied = ""; }
   }
   onMount(() => {
-    void request<{ buy_destination_assets?: typeof buyDestinationAssets }>("/p2p/assets")
+    void request<{ assets?: PaymentSource[]; buy_destination_assets?: typeof buyDestinationAssets }>("/p2p/assets")
       .then(result => {
         buyDestinationAssets = result.buy_destination_assets || [];
+        paymentSourceAssets = result.assets || [];
         if (selectedOffer && !destinationAssetId) {
           const fallback = preferredDestination(offerToken);
           destinationAssetId = fallback?.asset_id || "";
@@ -279,6 +301,22 @@
           {/if}
           {#if destinationAddress.trim() && !destinationValid}<p class="acceptError" role="alert">{say(`Enter a valid ${token} address for ${networkLabel(destinationNetwork)}.`, `Укажите корректный адрес ${token} в сети ${networkLabel(destinationNetwork)}.`)}</p>{/if}
           {#if destinationAssetsError}<p class="settlementNote" role="alert">{destinationAssetsError}</p>{/if}
+        {:else}
+          <div class="buyDestination">
+            <span class="destinationLabel">{say(`${token} payment network`, `Сеть оплаты ${token}`)}</span>
+            {#if paymentNetworks.length}
+              <div class="networkChoices" role="group" aria-label={say(`${token} payment network`, `Сеть оплаты ${token}`)}>
+                {#each paymentNetworks as source (source.asset)}
+                  <button type="button" class="networkChoice" aria-pressed={source.asset === selectedPaymentSource?.asset} data-network={source.network} data-testid="otc-pay-network" disabled={busy} on:click={() => paymentSourceAsset = source.asset}>
+                    <img src={networkIcon(source.network)} alt="" width="18" height="18" aria-hidden="true" />
+                    <span>{networkLabel(source.network)}</span>
+                  </button>
+                {/each}
+              </div>
+            {:else}
+              <p class="settlementNote">{say("Payment networks are temporarily unavailable; the payment leg stays on Ethereum.", "Сети оплаты временно недоступны; оплата останется в Ethereum.")}</p>
+            {/if}
+          </div>
         {/if}
         {#if takerShort}<p class="acceptWarning" role="status" data-testid="otc-accept-shortfall">{say(`Not enough ${takerSymbol} to settle this offer: ${takerAvailable || 0} ${takerSymbol} available on ${takerNetwork}, ${takerAmount} ${takerSymbol} needed. Top up that wallet and reopen the offer.`, `Недостаточно ${takerSymbol} для расчёта по этому офферу: доступно ${takerAvailable || 0} ${takerSymbol} в сети ${takerNetwork}, требуется ${takerAmount} ${takerSymbol}. Пополните кошелёк и откройте оффер заново.`)}</p>{/if}
         <button type="button" class="acceptOffer" disabled={busy || takerShort || (side === "buy" && !destinationValid)} data-testid="otc-accept-offer" on:click={() => {
@@ -289,7 +327,7 @@
               stablecoin_address: destinationAddress.trim(),
             });
           } else {
-            onAccept(selected.id);
+            onAccept(selected.id, undefined, selectedPaymentSource?.asset);
           }
           closeOffer();
         }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button>

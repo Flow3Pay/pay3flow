@@ -40,6 +40,8 @@
   let sourceAssets: RouteAsset[] = [];
   let destinationAssets: DestinationAsset[] = [];
   let selectedSourceAsset = "";
+  /** Payment network the taker chose on the offer card, per deal. */
+  const preferredSources: Record<string, string> = {};
   let routePickerOpen = false;
   let assetLoadError = "";
   let copied = "";
@@ -255,6 +257,9 @@
   }
 
   function defaultSourceAsset(current: P2pDeal) {
+    // Honour the network the taker picked when accepting the offer.
+    const preferred = preferredSources[current.id];
+    if (preferred && sourceAssets.some(item => item.asset === preferred)) return preferred;
     const destination = `${current.terms.stablecoin || "USDT"}@${current.terms.stablecoin_network || "ethereum"}`;
     const destinationId = current.terms.stablecoin_asset_id
       || destinationAssets.find(item => item.asset === destination)?.asset_id
@@ -309,7 +314,8 @@
     }
   }
 
-  export async function openDeal(id: string) {
+  export async function openDeal(id: string, paymentSource?: string) {
+    if (paymentSource) preferredSources[id] = paymentSource;
     dismissed.delete(id);
     saveDismissed(session?.actor || "");
     autoOpen = true;

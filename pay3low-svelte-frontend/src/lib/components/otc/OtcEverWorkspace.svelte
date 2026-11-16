@@ -173,6 +173,7 @@
   async function acceptOffer(
     id: string,
     destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string },
+    paymentSource?: string,
   ) {
     const owner = session;
     tab = "orders";
@@ -181,7 +182,7 @@
     await run(async () => {
       const accepted = await request<P2pDeal>(`/offers/${id}/accept`, owner.token, destination || {}, crypto.randomUUID());
       await tick();
-      await dealModal?.openDeal(accepted.id);
+      await dealModal?.openDeal(accepted.id, paymentSource);
       notice = say("Offer accepted. Confirm the deal terms and send your leg.", "Оффер принят. Подтвердите условия сделки и отправьте свою часть.");
     });
     void refreshBalances();
