@@ -85,6 +85,22 @@ identifies a network.
   validation, transaction signing/submission, and transaction-status handling.
 - A wallet option must not be presented as complete merely because the wallet
   can connect: the corresponding OTC payment and refund path must also work.
+- Multi-chain extension wallets are not tied to one family. MetaMask's Solana
+  support is discovered through Wallet Standard (`solana:mainnet`) when no
+  legacy `window.solana` provider exists; the legacy Phantom-style provider is
+  still preferred when present. TRON wallets are discovered through the
+  legacy `window.tron`/`window.tronLink` slots and TIP-6963
+  (`TIP6963:requestProvider`/`TIP6963:announceProvider`). MetaMask does not
+  currently expose a TRON dapp connection in this environment, so the TRON
+  flow reports that limitation and recommends TronLink instead of claiming
+  MetaMask TRON support.
+- Network selection stays explicit, but an address does not have to be retyped
+  when it is already known. A connected wallet address is reused for its own
+  network: every EVM chain shares one account address, so the connected EVM
+  account (or the verified Ethereum login wallet) can fill any EVM receiving
+  network. TON, Solana, TRON, NEAR, Sui, and Aptos reuse only their own family's
+  address. Switching networks keeps an already-entered address while it remains
+  valid in the new network and does not imply a network from the address alone.
 
 ## Expected user journeys
 
@@ -267,6 +283,14 @@ Implemented:
   receiving network and enter the destination address; accepted destination
   terms are bound to the trade. Legacy offers without a stablecoin still mean
   USDT.
+- The offer and accept forms reuse an already-connected wallet for the selected
+  network instead of asking for the same address again. A connected EVM account
+  is reused on every EVM receiving network without a chain switch, and a
+  verified Ethereum login address remains the EVM fallback. TON, Solana, TRON,
+  NEAR, Sui, and Aptos reuse their own connected wallet address. A typed
+  address is preserved when switching between networks where it is still
+  valid. When no address is available, the publish form requests it inline;
+  the explicit network picker is never removed or inferred from the address.
 - Sell offers persist their selected receiving network and exact asset ID.
   When accepting a buy offer, the counterparty selects the receiving network,
   asset ID, and address; the backend validates and freezes those terms into the
@@ -353,7 +377,11 @@ Not implemented or not yet verified:
 - The browser wallet adapters and backend OTC gates include Solana, Sui, TON,
   Aptos, and Sei (EVM). Deployment config supplies public RPC/API defaults and
   a TON Connect manifest; production wallet/provider combinations still need
-  deployment validation.
+  deployment validation. Solana is also reachable through Wallet Standard
+  wallets such as MetaMask Solana. TRON supports legacy TronLink-style
+  providers and TIP-6963 announcements; a full MetaMask TRON dapp connection is
+  not implemented or verified, and the UI says so instead of presenting
+  MetaMask as a TRON wallet.
 - Memo handling is implemented for NEAR, Solana, and TON deposits. Memo-bearing
   routes for other networks are rejected rather than sent without the memo.
 - Direct same-network settlement is implemented for EVM, TRON, TON and
