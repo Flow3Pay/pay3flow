@@ -476,16 +476,47 @@ impl NearIntentsProvider {
                     .and_then(Value::as_str)
                     .map(str::to_owned)
             });
-            if status == reqwest::StatusCode::BAD_REQUEST
-                && message.as_deref().is_some_and(|message| {
-                    message.starts_with("Temporary swap limits: minimum swap amount")
-                })
-            {
-                return Err(QuoteUnavailable {
-                    provider: "near-intents",
-                    reason: message.unwrap_or_default(),
+            if status == reqwest::StatusCode::BAD_REQUEST {
+                if let Some(message) = &message {
+                    // 1Click rejects amounts below a chain minimum (BNB, TRON)
+                    // and, separately, amounts below a bridge's fixed-fee floor.
+                    // Both are valid answers for this exact amount, not provider
+                    // outages, so keep them retry-visible without failing the
+                    // provider.
+                    if message.starts_with("Temporary swap limits: minimum swap amount") {
+                        return Err(QuoteUnavailable {
+                            provider: "near-intents",
+                            reason: message.clone(),
+                        }
+                        .into());
+                    }
+                    if let Some(minimum) =
+                        message.strip_prefix("Amount is too low for bridge, try at least ")
+                    {
+                        let minimum = minimum.trim();
+                        // The bridge floor is expressed in the quoted asset's
+                        // atomic units: origin for EXACT_INPUT, destination for
+                        // EXACT_OUTPUT.
+                        let (decimals, asset) = if exact_output {
+                            (destination_decimals, &request.to)
+                        } else {
+                            (origin_decimals, &request.from)
+                        };
+                        let formatted = match decimals {
+                            Some(decimals) => atomic_to_decimal(minimum, decimals)
+                                .unwrap_or_else(|_| minimum.to_string()),
+                            None => minimum.to_string(),
+                        };
+                        return Err(QuoteUnavailable {
+                            provider: "near-intents",
+                            reason: format!(
+                                "minimum swap amount is {formatted} {} (1Click bridge limit; {minimum} atomic units)",
+                                asset.symbol
+                            ),
+                        }
+                        .into());
+                    }
                 }
-                .into());
             }
             let detail = body.chars().take(500).collect::<String>();
             bail!("request NEAR Intents quote failed with HTTP {status}: {detail}");

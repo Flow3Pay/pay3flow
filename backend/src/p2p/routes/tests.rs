@@ -535,7 +535,7 @@ impl PublicRouteProvider for LimitedCycleProvider {
     }
     async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        if self.reason.starts_with("Temporary swap limits")
+        if self.reason.contains("minimum swap amount")
             && (from.symbol == "DAI" || to.symbol == "DAI")
         {
             return Ok(PublicRouteQuote {
@@ -565,6 +565,11 @@ impl PublicRouteProvider for LimitedCycleProvider {
 async fn crypto_cycles_keep_searching_other_pairs_after_a_minimum_amount_rejection() {
     for (reason, expected_calls, expected_routes) in [
         ("Temporary swap limits: minimum swap amount is $1,000", 3, 1),
+        (
+            "minimum swap amount is 0.300001 USDT (1Click bridge limit; 300001 atomic units)",
+            3,
+            1,
+        ),
         ("No swap available for BTC → USDT", 2, 0),
     ] {
         let calls = Arc::new(AtomicUsize::new(0));

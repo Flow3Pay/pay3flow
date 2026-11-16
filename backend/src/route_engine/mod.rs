@@ -1770,17 +1770,25 @@ mod tests {
 
     #[tokio::test]
     async fn near_minimum_limits_preserve_origin_chain_refunds_and_do_not_hide_invalid_requests() {
-        for (message, status, unavailable) in [
+        for (message, status, unavailable, expected_reason) in [
             (
                 "Temporary swap limits: minimum swap amount is $1,000",
                 StatusCode::BAD_REQUEST,
                 true,
+                Some("Temporary swap limits: minimum swap amount is $1,000"),
             ),
-            ("refundTo is not valid", StatusCode::BAD_REQUEST, false),
+            (
+                "Amount is too low for bridge, try at least 300001",
+                StatusCode::BAD_REQUEST,
+                true,
+                Some("minimum swap amount is 0.300001 TRX (1Click bridge limit; 300001 atomic units)"),
+            ),
+            ("refundTo is not valid", StatusCode::BAD_REQUEST, false, None),
             (
                 "Temporary swap limits: minimum swap amount is $1,000",
                 StatusCode::UNAUTHORIZED,
                 false,
+                None,
             ),
         ] {
             let app = axum::Router::new().route(
@@ -1833,6 +1841,14 @@ mod tests {
                 unavailable,
                 "status: {status}, message: {message}"
             );
+            if let Some(expected_reason) = expected_reason {
+                let unavailable = error.downcast_ref::<QuoteUnavailable>().unwrap();
+                assert!(
+                    unavailable.reason.contains(expected_reason),
+                    "unexpected reason: {}",
+                    unavailable.reason
+                );
+            }
             server.abort();
         }
     }

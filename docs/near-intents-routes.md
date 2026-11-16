@@ -50,6 +50,18 @@ provider failures. Cached minimum-amount rejections retain that distinction
 and apply only to the exact origin, destination, and input amount; they do
 not suppress other destinations or amounts.
 
+1Click publishes no USD minimum for Ethereum or Solana. A chain-to-chain quote
+can still be rejected below a bridge's fixed-fee floor with HTTP 400 and
+`Amount is too low for bridge, try at least <atomic>`. The adapter also treats
+that answer as a path-level minimum rather than a provider failure and rewrites
+the reason into the quoted token's precision, for example `minimum swap amount
+is 0.300001 USDT (1Click bridge limit; 300001 atomic units)`. The floor is
+dominated by the route's largest fixed fee: an Ethereum origin refund costs
+0.3 USDT, so USDT@ethereum -> USDT@solana starts at 0.300001 USDT, while
+USDT@solana -> USDT@ethereum starts near the 0.3 USDT Ethereum withdrawal fee.
+The advertised `try at least` value can be slightly conservative for the
+reverse direction.
+
 Symbiosis previews likewise use chain-specific sender and recipient addresses
 for Bitcoin, TRON, and Solana, and the configured EVM preview address for EVM
 chains. Networks without a preview wallet address are excluded before quoting.

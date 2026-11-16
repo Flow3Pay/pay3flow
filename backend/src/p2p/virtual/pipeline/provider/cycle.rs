@@ -318,7 +318,7 @@ impl P2pSearchService {
                 tracing::warn!(provider = provider.name(), %from, %to, amount = %amount.value, %error, "crypto cycle quote failed");
             }
             let message = error.to_string();
-            if message.contains("Temporary swap limits: minimum swap amount") {
+            if message.contains("minimum swap amount") {
                 failures.lock().map_err(quote_error)?.insert(
                     provider_quote_key(provider.name(), &from, &to, &amount),
                     error.clone(),
