@@ -546,6 +546,44 @@ impl Service {
             recipient,
         })
     }
+    /// Whether the accrued service fee can be transferred as plain USDT on the
+    /// network the payer already used, without a provider route.
+    async fn p2p_fee_pays_directly(&self, actor: &str, id: Uuid) -> Result<bool> {
+        let client = self.pool.get().await?;
+        let body = match repo::p2p::trade_body_by_actor(&client, &id, actor).await {
+            Ok(body) => body,
+            Err(Error::NotFound) => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        let payment = repo::p2p::verified_payment_instructions(&client, &id).await?;
+        Ok(self.fee_collection(&body, &payment).is_some())
+    }
+    /// Network and token contract for a fee transfer that skips the bridge.
+    ///
+    /// The fee is plain USDT, so collecting it on the payer's own network keeps
+    /// the exact amount and stays clear of the provider's minimum swap size,
+    /// which is far above a 3% fee on a small deal. A payer who did not send
+    /// USDT themselves (for example a USDC payment) still needs the route.
+    fn fee_collection(&self, body: &Value, payment: &Value) -> Option<(String, String)> {
+        let network = fee_source_network(payment)?;
+        if !self.p2p_direct_network_available(&network)
+            || !self.cfg.fee_recipients.contains_key(&network)
+        {
+            return None;
+        }
+        let deal_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
+        // The contract must be the exact token the payer already moved, so a
+        // same-ticker lookalike can never be forwarded as the service fee.
+        let contract = payment_token_contract(payment)
+            .map(str::to_string)
+            .or_else(|| {
+                (network == deal_network)
+                    .then(|| body["fee_usdt_contract"].as_str().map(str::to_string))
+                    .flatten()
+            })
+            .or_else(|| (network == "ethereum").then(|| self.cfg.p2p_usdt().to_string()))?;
+        Some((network, contract))
+    }
     pub(crate) async fn p2p_prepare(
         &self,
         actor: &str,
@@ -578,6 +616,13 @@ impl Service {
                     request.slippage_bps.unwrap_or(100),
                 )
                 .await;
+        }
+        // The service fee is plain USDT, so it is sent on the network the payer
+        // already used. Bridging a 3% fee costs a route and hits the provider's
+        // minimum swap size on small deals; only a payer who did not send USDT
+        // themselves still needs the routed fee.
+        if request.kind == "fee" && !self.p2p_fee_pays_directly(actor, id).await? {
+            return self.p2p_prepare_near_intents_fee(actor, id, key).await;
         }
         let kind = request.kind.as_str();
         if !self.p2p_available() {
@@ -698,6 +743,7 @@ impl Service {
             };
             return Err(Error::Conflict(message.into()));
         }
+        let mut fee_token: Option<(String, String)> = None;
         let leg = if kind == "fee" {
             let (fee_units, fee_payer, fee_asset, fee_precision) =
                 repo::p2p::lock_accrued_fee_units_first(&tx, &id).await?;
@@ -710,39 +756,27 @@ impl Service {
                 ));
             }
             let payment_instructions = repo::p2p::verified_payment_instructions(&tx, &id).await?;
-            let payment_source = payment_instructions["source_asset"]
-                .as_str()
-                .or_else(|| payment_instructions["fee_source_asset"].as_str())
-                .unwrap_or_else(|| {
-                    if body["stablecoin"].as_str().unwrap_or("USDT") == "USDT" {
-                        "USDT@ethereum"
-                    } else {
-                        ""
-                    }
-                });
-            let fee_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
-            let payment_source_asset_id = payment_instructions["source_asset_id"]
-                .as_str()
-                .or_else(|| payment_instructions["fee_source_asset_id"].as_str());
-            let expected_fee_asset_id = body["fee_usdt_asset_id"].as_str();
-            if payment_source != format!("USDT@{fee_network}")
-                || expected_fee_asset_id
-                    .is_some_and(|expected| payment_source_asset_id != Some(expected))
-                || !self.p2p_direct_network_available(fee_network)
-            {
-                return Err(Error::Conflict(
-                    "this service fee requires a supported conversion route".into(),
-                ));
-            }
-            let recipient = self.cfg.fee_recipients.get(fee_network).ok_or_else(|| {
-                Error::Conflict(
-                    "service-fee recipient is not configured for the deal network".into(),
-                )
-            })?;
+            let (fee_network, contract) = self
+                .fee_collection(&body, &payment_instructions)
+                .ok_or_else(|| {
+                    Error::Conflict("this service fee requires a supported conversion route".into())
+                })?;
+            let recipient = self
+                .cfg
+                .fee_recipients
+                .get(fee_network.as_str())
+                .ok_or_else(|| {
+                    Error::Conflict(
+                        "service-fee recipient is not configured for this network".into(),
+                    )
+                })?;
+            crate::route_execution::validate_otc_wallet_address(&fee_network, recipient)
+                .map_err(|_| invalid("invalid service-fee recipient for the payment network"))?;
             let fee_sender = payment_instructions["leg"]["sender"]
                 .as_str()
                 .unwrap_or(verified.as_str());
-            fee_leg(fee_network, &fee_units, fee_sender, recipient)?
+            fee_token = Some((fee_network.clone(), contract));
+            fee_leg(&fee_network, &fee_units, fee_sender, recipient)?
         } else {
             self.deal_leg(&body, kind)?
         };
@@ -753,15 +787,23 @@ impl Service {
         }
         let evm_net = if kind == "payout" || super::config::evm_chain_id(&leg.chain).is_none() {
             None
+        } else if let Some((fee_network, contract)) = &fee_token {
+            // The fee is collected on the payer's own EVM network, which is not
+            // necessarily the network the deal settles on.
+            let chain_id = super::config::evm_chain_id(fee_network)
+                .ok_or_else(|| invalid("service fee network is not an OTC EVM network"))?;
+            let rpcs = self
+                .cfg
+                .p2p_evm_rpcs(fee_network)
+                .filter(|endpoints| endpoints.len() >= 2)
+                .ok_or_else(|| invalid("two independent OTC EVM endpoints are required"))?;
+            Some(super::chain::EvmNet {
+                rpcs: rpcs.to_vec(),
+                chain_id,
+                usdt: contract.clone(),
+            })
         } else {
-            let mut net = self.p2p_net(&body)?;
-            if kind == "fee" {
-                net.usdt = body["fee_usdt_contract"]
-                    .as_str()
-                    .unwrap_or(self.cfg.p2p_usdt())
-                    .to_string();
-            }
-            Some(net)
+            Some(self.p2p_net(&body)?)
         };
         let call = match (kind, &evm_net) {
             ("payout", _) => {
@@ -778,10 +820,8 @@ impl Service {
                 json!({"family":"evm","chain_id":net.chain_id,"from":leg.sender,"to":net.usdt,"data":data,"value":"0x0","nonce":nonce})
             }
             (_, None) => {
-                let token = if kind == "fee" {
-                    body["fee_usdt_contract"]
-                        .as_str()
-                        .unwrap_or(self.cfg.p2p_usdt())
+                let token = if let Some((_, contract)) = &fee_token {
+                    contract.as_str()
                 } else {
                     body.get("stablecoin_contract")
                         .or_else(|| body.get("usdt_contract"))
@@ -901,6 +941,7 @@ impl Service {
             "fee_source_asset": if kind == "payment" { Some(format!("{}@{fee_source_network}", body["stablecoin"].as_str().unwrap_or("USDT"))) } else { None },
             "fee_source_asset_id": if kind == "payment" { body.get("stablecoin_asset_id").cloned() } else { None },
             "fee_source_address": fee_source_address,
+            "fee_network": fee_token.as_ref().map(|(network, _)| network.clone()),
             "fee_preflight": fee_preflight,
             "attempt_id": attempt, "trade_id": id, "kind": kind,
             "submit_path": format!("/p2p/attempts/{attempt}/reference"),
@@ -1799,11 +1840,17 @@ impl Service {
                 && evidence.raw["actual_output_units"].as_str() == Some(fee_units.as_str())
                 && instructions["destination_asset"] == json!(format!("USDT@{expected_network}"))
                 && instructions["recipient"].as_str() == expected_recipient.map(String::as_str);
-            let direct_transfer = attempt_chain == expected_network
-                && evidence.chain == expected_network
+            // A direct fee is collected on the network the payer used, which is
+            // not always the network the deal settles on.
+            let direct_network = instructions["fee_network"]
+                .as_str()
+                .unwrap_or(expected_network);
+            let direct_recipient = self.cfg.fee_recipients.get(direct_network);
+            let direct_transfer = attempt_chain == direct_network
+                && evidence.chain == direct_network
                 && expected_leg.amount == fee_units
-                && expected_leg.chain == expected_network
-                && expected_leg.recipient == expected_recipient.cloned().unwrap_or_default();
+                && expected_leg.chain == direct_network
+                && direct_recipient.map(String::as_str) == Some(expected_leg.recipient.as_str());
             if source_payer != fee.0
                 || fee.2 != "USDT"
                 || fee.3 != 6
@@ -1932,6 +1979,34 @@ fn valid_near_intents_reference(network: &str, reference: &str) -> bool {
         "tron" | "ton" => wallet::unhex(reference).is_ok_and(|bytes| bytes.len() == 32),
         _ => false,
     }
+}
+
+/// The network the service fee is collected on: the network the payer actually
+/// spent USDT on. A payment in any other token has to be converted first, so it
+/// returns `None` and the fee keeps its routed path.
+fn fee_source_network(payment: &Value) -> Option<String> {
+    let source = payment["source_asset"]
+        .as_str()
+        .or_else(|| payment["fee_source_asset"].as_str())?;
+    let asset = Asset::parse(source).ok()?;
+    if !asset.symbol.eq_ignore_ascii_case("USDT") {
+        return None;
+    }
+    asset.location
+}
+
+/// The token contract recorded with a verified payment attempt: either the
+/// routed source token or the token address of the direct wallet transfer.
+fn payment_token_contract(payment: &Value) -> Option<&str> {
+    let direct = payment["call"]["to"]
+        .as_str()
+        .or_else(|| payment["call"]["contract"].as_str())
+        .or_else(|| payment["call"]["mint"].as_str())
+        .or_else(|| payment["call"]["jetton"].as_str());
+    payment["token_contract"]
+        .as_str()
+        .or(direct)
+        .filter(|contract| !contract.trim().is_empty())
 }
 
 fn fee_leg(network: &str, fee_units: &str, sender: &str, recipient: &str) -> Result<Leg> {
@@ -2230,6 +2305,38 @@ mod route_status_tests {
             "canonical-usdt",
             "canonical-usdt"
         ));
+    }
+
+    #[test]
+    fn the_service_fee_is_collected_on_the_network_the_payer_used() {
+        // A routed USDT payment names its own source network and token.
+        let routed = json!({
+            "source_asset": "USDT@tron",
+            "source_asset_id": "tron-usdt",
+            "token_contract": "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj",
+            "call": {"family": "near_deposit", "to": "DepositAddress"},
+        });
+        assert_eq!(fee_source_network(&routed).as_deref(), Some("tron"));
+        assert_eq!(
+            payment_token_contract(&routed),
+            Some("TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj")
+        );
+        // A direct wallet transfer records the token it moves, not a route.
+        let direct = json!({
+            "fee_source_asset": "USDT@base",
+            "call": {"family": "evm", "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"},
+        });
+        assert_eq!(fee_source_network(&direct).as_deref(), Some("base"));
+        assert_eq!(
+            payment_token_contract(&direct),
+            Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")
+        );
+        // Only USDT can pay the fee directly; a USDC payment keeps its route.
+        assert_eq!(
+            fee_source_network(&json!({"source_asset": "USDC@tron"})),
+            None
+        );
+        assert_eq!(fee_source_network(&json!({})), None);
     }
 
     #[test]

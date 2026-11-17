@@ -126,9 +126,14 @@ cannot change it. The stablecoin payment sends `gross - fee` to the seller; the
 fee payer separately authorizes an exact USDT transfer to the configured
 recipient. The fee is not a network cost. It is recorded as `accrued` only after
 payment verification, and the EVER payout remains blocked until fee collection
-is verified. Cross-network fee source amount and provider fee are preflighted
-and displayed before the principal payment is signed; an executable fee quote is
-requested again when the payer prepares the separate fee transfer.
+is verified. The fee is plain USDT, so it is collected on the network the payer
+already used (when that network has a fee recipient and direct settlement),
+without a provider route: a 3% fee is normally far below the provider's minimum
+swap size, and bridging it would either fail or cost more than it earns. Only a
+payer who did not send USDT themselves (for example a USDC payment) still needs
+the routed fee, and only that case preflights a cross-network fee source amount
+and provider fee before the principal payment is signed; an executable fee quote
+is requested again when the payer prepares the separate fee transfer.
 
 The route deliberately bypasses the desk: it works with `enabled: false`, needs no
 inventory, relay account, RFQ, federation or staffed-hours gate, and the worker
@@ -159,9 +164,10 @@ payments; direct same-network NEAR, Sui and Aptos settlement is not implemented.
 The deal stores the receiving network, exact catalog asset identity, token
 contract and EVM chain ID. Direct same-network settlement is enabled only when
 the exact source/destination asset IDs match and the required observer pair is
-configured. A fee transfer is direct only when its source is the exact USDT
-token on the configured recipient network; otherwise it requires an
-exact-output route. `validate_network` keeps the base network on canonical
+configured. A fee transfer is direct when the payer spent the exact USDT token
+on a network with a configured fee recipient and observer pair, which is also
+the network the fee leg is sent on; otherwise the fee requires an exact-output
+route to the deal network. `validate_network` keeps the base network on canonical
 Ethereum mainnet and requires a usable `p2p_ever_fee_reserve`. The EVER leg adds
 that reserve to the booked amount and accepts a balance increase of at least
 the booked amount, because a receiving contract may take its fee from the

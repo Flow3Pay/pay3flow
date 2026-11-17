@@ -201,13 +201,17 @@ quote; the provider's own rejection remains authoritative. Known gaps: 1Click
 currently returns `NO_QUOTE` for USDT on Optimism and cannot quote TON as a
 destination, and XRP Ledger answers HTTP 500 on every pair.
 
-A cross-network payment routes the 3% service fee separately, and that fee is
-often far smaller than the payment itself. When the fee falls under the
-provider's bridge floor (0.285629 USDT at the time of writing) no route exists
-for that network, so the prepare step answers 409 with the fee amount and the
+The 3% service fee is not routed with the principal. The fee is plain USDT, so
+it is sent directly to the configured fee recipient on the network the payer
+already used, whenever that network has a recipient and direct settlement. The
+network of the fee leg therefore follows the payment, not the deal's receiving
+network, and it is recorded with the attempt (`fee_network`) so the verifier
+checks the transfer on the right chain. A payer who spent USDC, or USDT on a
+network with no recipient or observer pair, still needs a converted fee; only
+that case can fall under the provider's bridge floor (0.285629 USDT at the time
+of writing), where the prepare step answers 409 with the fee amount and the
 measured floor instead of the generic "OTC payment route is temporarily
-unavailable". Paying the same USDT on Ethereum settles the fee directly and is
-not subject to the floor.
+unavailable".
 
 ### Fees
 

@@ -395,22 +395,17 @@
     const owner = session;
     if (!current || !owner) return;
     await run(async () => {
-      const paymentAttempt = current.attempts?.find(attempt => attempt.kind === "payment" && attempt.state === "verified");
-      const paymentSource = paymentAttempt?.instructions.source_asset
-        || paymentAttempt?.instructions.fee_source_asset
-        || `${current.terms.stablecoin || "USDT"}@${outputNetwork}`;
-      const paymentSourceId = paymentAttempt?.instructions.source_asset_id
-        || paymentAttempt?.instructions.fee_source_asset_id;
-      const directFee = paymentSource === `USDT@${outputNetwork}`
-        && (!current.terms.fee_usdt_asset_id || paymentSourceId === current.terms.fee_usdt_asset_id);
-      const needsRoute = !directFee;
+      // The backend decides how the fee travels: it sends plain USDT on the
+      // payer's own network whenever that is possible and only bridges the fee
+      // when the payer did not send USDT (a bridge cannot carry a 3% fee on a
+      // small deal).
       const storageKey = `pay3flow.otc.fee-key.${current.id}`;
       const key = sessionStorage.getItem(storageKey) || crypto.randomUUID();
       sessionStorage.setItem(storageKey, key);
       const prepared = await request<P2pDeal & { attempt: Attempt }>(
         `/p2p/trades/${current.id}/prepare`,
         owner.token,
-        { kind: needsRoute ? "near-intents-fee" : "fee" },
+        { kind: "fee" },
         key,
       );
       sessionStorage.removeItem(storageKey);
