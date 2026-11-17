@@ -9,11 +9,20 @@ use super::{
 use chrono::{TimeZone, Utc};
 use serde_json::{json, Value};
 const TRANSFER: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+/// A configured wallet keeps its EIP-55 mixed case for display, but every
+/// on-chain byte is lower-case hex. Both the calldata and the log topics are
+/// compared against chain readings, so they are built lower-case here.
+fn call_address(address: &str) -> String {
+    address.trim_start_matches("0x").to_ascii_lowercase()
+}
+fn topic_address(address: &str) -> String {
+    format!("0x{:0>64}", call_address(address))
+}
 pub(crate) fn transfer_data(leg: &Leg) -> Result<String> {
     let amount = super::super::amount::integer(&leg.amount)?;
     Ok(format!(
         "0xa9059cbb{:0>64}{amount:064x}",
-        leg.recipient.trim_start_matches("0x")
+        call_address(&leg.recipient)
     ))
 }
 pub(crate) fn receipt(
@@ -28,10 +37,15 @@ pub(crate) fn receipt(
     if receipt.is_null() {
         return Ok(None);
     }
+    let expected_data = transfer_data(leg)?;
     if number(&receipt["status"])? != 1
-        || wallet::address("ethereum", transaction["from"].as_str().unwrap_or(""))? != leg.sender
-        || wallet::address("ethereum", transaction["to"].as_str().unwrap_or(""))? != contract
-        || transaction["input"].as_str() != Some(&transfer_data(leg)?)
+        || wallet::address("ethereum", transaction["from"].as_str().unwrap_or(""))?
+            != leg.sender.to_ascii_lowercase()
+        || wallet::address("ethereum", transaction["to"].as_str().unwrap_or(""))?
+            != contract.to_ascii_lowercase()
+        || !transaction["input"]
+            .as_str()
+            .is_some_and(|input| input.eq_ignore_ascii_case(&expected_data))
         || nonce.is_some_and(|n| number(&transaction["nonce"]).ok() != Some(n))
     {
         return Err(invalid(
@@ -48,8 +62,8 @@ pub(crate) fn receipt(
         return Err(invalid("Ethereum observation is not canonical"));
     }
     let expected = super::super::amount::integer(&leg.amount)?;
-    let sender = format!("0x{:0>64}", leg.sender.trim_start_matches("0x"));
-    let recipient = format!("0x{:0>64}", leg.recipient.trim_start_matches("0x"));
+    let sender = topic_address(&leg.sender);
+    let recipient = topic_address(&leg.recipient);
     let matching: Vec<&Value> = receipt["logs"]
         .as_array()
         .into_iter()
@@ -245,7 +259,7 @@ impl Service {
         let from = instructions["checkpoint"]["block"]
             .as_str()
             .ok_or_else(|| invalid("missing payment checkpoint"))?;
-        let logs=self.evm_agree(net, "eth_getLogs",json!([{"address":net.usdt,"fromBlock":from,"toBlock":"finalized","topics":[TRANSFER,format!("0x{:0>64}",leg.sender.trim_start_matches("0x")),format!("0x{:0>64}",leg.recipient.trim_start_matches("0x"))]}])).await?;
+        let logs=self.evm_agree(net, "eth_getLogs",json!([{"address":net.usdt,"fromBlock":from,"toBlock":"finalized","topics":[TRANSFER,topic_address(&leg.sender),topic_address(&leg.recipient)]}])).await?;
         let mut references = Vec::new();
         for log in logs.as_array().into_iter().flatten() {
             if number(&log["data"]).ok() != Some(super::super::amount::integer(&leg.amount)?) {

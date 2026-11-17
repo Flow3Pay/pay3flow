@@ -1856,23 +1856,22 @@ impl Service {
             let expected_leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
             let fee_units: String = fee.1;
             let expected_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
-            let expected_recipient = self.cfg.fee_recipients.get(expected_network);
+            // The recorded instructions are the authorization for this leg. An
+            // operator may change a fee destination while a transfer is already
+            // on its way, and the attempt would otherwise never verify.
             let exact_output = attempt_chain == "near-intents"
                 && evidence.chain == "near-intents"
                 && evidence.raw["actual_output_units"].as_str() == Some(fee_units.as_str())
-                && instructions["destination_asset"] == json!(format!("USDT@{expected_network}"))
-                && instructions["recipient"].as_str() == expected_recipient.map(String::as_str);
+                && instructions["destination_asset"] == json!(format!("USDT@{expected_network}"));
             // A direct fee is collected on the network the payer used, which is
             // not always the network the deal settles on.
             let direct_network = instructions["fee_network"]
                 .as_str()
                 .unwrap_or(expected_network);
-            let direct_recipient = self.cfg.fee_recipients.get(direct_network);
             let direct_transfer = attempt_chain == direct_network
                 && evidence.chain == direct_network
                 && expected_leg.amount == fee_units
-                && expected_leg.chain == direct_network
-                && direct_recipient.map(String::as_str) == Some(expected_leg.recipient.as_str());
+                && expected_leg.chain == direct_network;
             if source_payer != fee.0
                 || fee.2 != "USDT"
                 || fee.3 != 6

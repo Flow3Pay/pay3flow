@@ -628,6 +628,7 @@ impl Service {
             )
             .await?;
         let leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
+        let data = super::chain::ethereum::transfer_data(&leg)?;
         if transaction["hash"] == receipt["transactionHash"]
             && receipt["blockHash"] == block["hash"]
             && super::chain::number(&receipt["blockNumber"])?
@@ -638,7 +639,9 @@ impl Service {
             && transaction["to"]
                 .as_str()
                 .is_some_and(|to| to.eq_ignore_ascii_case(super::config::USDT))
-            && transaction["input"] == super::chain::ethereum::transfer_data(&leg)?
+            && transaction["input"]
+                .as_str()
+                .is_some_and(|input| input.eq_ignore_ascii_case(&data))
             && transaction["nonce"] == instructions["nonce"]
         {
             Ok(Some(

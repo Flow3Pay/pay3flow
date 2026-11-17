@@ -197,6 +197,53 @@ fn ethereum_receipt_requires_exact_token_sender_nonce_and_finality() {
 }
 
 #[test]
+fn ethereum_receipt_matches_checksummed_wallets_against_lowercase_chain_data() {
+    // Wallets are configured in EIP-55 mixed case, while RPC answers are
+    // lower-case hex; a difference in case is not a different transfer.
+    let mut leg = terms(Direction::Buy).leg("payment").unwrap();
+    leg.sender = "0x1d249110d194c792104dCa35B9029db5f1b9652F".into();
+    leg.recipient = "0xF5Fd8acFF17d6aa02015b28Bf22642bC23C4202b".into();
+    leg.amount = "30000".into();
+    leg.transfer_amount = "30000".into();
+    let data = super::chain::ethereum::transfer_data(&leg).unwrap();
+    assert_eq!(
+        data,
+        "0xa9059cbb000000000000000000000000f5fd8acff17d6aa02015b28bf22642bc23c4202b0000000000000000000000000000000000000000000000000000000000007530"
+    );
+    let hash = format!("0x{}", "c".repeat(64));
+    let tx = json!({
+        "hash":hash, "from":leg.sender.to_ascii_lowercase(), "to":super::config::USDT,
+        "input":data.to_ascii_lowercase(), "nonce":"0x3"
+    });
+    let block = json!({"hash":"canonical","timestamp":"0x640","number":"0x64"});
+    let receipt = json!({
+        "status":"0x1", "blockHash":"canonical", "blockNumber":"0x64", "transactionHash":hash,
+        "logs":[{
+            "address":super::config::USDT,
+            "topics":[
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                format!("0x{:0>64}", leg.sender.trim_start_matches("0x").to_ascii_lowercase()),
+                format!("0x{:0>64}", leg.recipient.trim_start_matches("0x").to_ascii_lowercase())
+            ],
+            "data":"0x7530", "logIndex":"0x0", "removed":false
+        }]
+    });
+    let evidence = super::chain::ethereum::receipt(
+        &receipt,
+        &tx,
+        &block,
+        100,
+        &leg,
+        Some(3),
+        super::config::USDT,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(evidence.leg, leg);
+    assert!(evidence.canonical && evidence.successful);
+}
+
+#[test]
 fn ethereum_receipt_binds_usdc_to_its_contract() {
     let leg = terms(Direction::Buy).leg("payment").unwrap();
     let hash = format!("0x{}", "c".repeat(64));
