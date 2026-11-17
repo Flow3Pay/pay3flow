@@ -322,7 +322,7 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
             include_str!("../../migrations/otc_p2p_fee_basis.sql"),
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
             include_str!("../../migrations/otc_p2p_fee_collection.sql"),
-            include_str!("../../migrations/otc_p2p_near_intents.sql"),
+            include_str!("../../migrations/otc_p2p_evm_networks.sql"),
             include_str!("../../migrations/otc_p2p_ui.sql"),
             include_str!("../../migrations/otc_p2p_chat.sql")
         ))
@@ -1035,7 +1035,7 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
             include_str!("../../migrations/otc_p2p_fee_basis.sql"),
             include_str!("../../migrations/otc_p2p_fee_payer.sql"),
             include_str!("../../migrations/otc_p2p_fee_collection.sql"),
-            include_str!("../../migrations/otc_p2p_near_intents.sql"),
+            include_str!("../../migrations/otc_p2p_evm_networks.sql"),
             include_str!("../../migrations/otc_p2p_ui.sql"),
             include_str!("../../migrations/otc_p2p_chat.sql")
         ))
