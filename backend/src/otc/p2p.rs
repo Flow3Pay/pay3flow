@@ -1088,11 +1088,6 @@ impl Service {
         {
             return Err(invalid("destination token precision is unsupported"));
         }
-        let fee_recipient = self.cfg.fee_recipients.get(output_network).ok_or_else(|| {
-            Error::Conflict("service-fee recipient is not configured for the deal network".into())
-        })?;
-        crate::route_execution::validate_otc_wallet_address(output_network, fee_recipient)
-            .map_err(|_| invalid("invalid service-fee recipient for the deal network"))?;
         let fee_asset = Asset::new("USDT", Some(output_network))?;
         let direct_payment = is_direct_evm_asset_match(
             &from,
@@ -1105,72 +1100,99 @@ impl Service {
                 "source and destination token identities do not match",
             ));
         }
-        let fee_token = provider
-            .unique_token_for_asset(&fee_asset)
-            .await
-            .map_err(|_| Error::RouteUnavailable)?;
-        let direct_fee_transfer = direct_fee_transfer_supported(
-            &from,
-            &fee_asset,
-            output_network,
-            self.p2p_direct_network_available(output_network),
-            source_token.asset_id == fee_token.asset_id,
-        );
-        if fee_token.decimals != Some(6)
-            || fee_token
-                .contract_address
-                .as_deref()
-                .is_none_or(|address| address.trim().is_empty())
-            || (!direct_fee_transfer && !provider.route_available(&from, &fee_asset).await)
-        {
-            return Err(Error::RouteUnavailable);
-        }
         let fee_units = amount::integer(
             body["fee_policy"]["fee_units"]
                 .as_str()
                 .ok_or_else(|| invalid("deal fee terms are malformed"))?,
         )?;
         let fee_amount = amount::decimal(fee_units, 6);
-        let fee_preflight = if direct_fee_transfer {
+        // A USDT payment already carries the fee asset. Collect it on the payer's
+        // network later; do not preflight a 1Click bridge to the deal network —
+        // a 3% fee is normally below the provider floor and blocks the deal.
+        let collect_fee_on_payment_network = fee_collectible_on_payment_network(
+            &from,
+            network,
+            self.p2p_direct_network_available(network),
+            self.cfg.fee_recipients.contains_key(network),
+            !token_contract.trim().is_empty(),
+        );
+        let fee_preflight = if collect_fee_on_payment_network {
+            let fee_recipient = self.cfg.fee_recipients.get(network).ok_or_else(|| {
+                Error::Conflict(
+                    "service-fee recipient is not configured for the payment network".into(),
+                )
+            })?;
+            crate::route_execution::validate_otc_wallet_address(network, fee_recipient)
+                .map_err(|_| invalid("invalid service-fee recipient for the payment network"))?;
             None
         } else {
-            let quote = provider
-                .dry_executable_quote(NearQuoteRequest {
-                    from: from.clone(),
-                    to: fee_asset.clone(),
-                    origin_asset_id: Some(source_token.asset_id.clone()),
-                    destination_asset_id: Some(fee_token.asset_id.clone()),
-                    amount: Amount::new(fee_amount.clone(), fee_asset.clone())?,
-                    recipient: fee_recipient.to_string(),
-                    refund_to: source_address.to_string(),
-                    slippage_bps: 0,
-                    app_fees: Vec::new(),
-                    dry: true,
-                })
+            let fee_recipient = self.cfg.fee_recipients.get(output_network).ok_or_else(|| {
+                Error::Conflict(
+                    "service-fee recipient is not configured for the deal network".into(),
+                )
+            })?;
+            crate::route_execution::validate_otc_wallet_address(output_network, fee_recipient)
+                .map_err(|_| invalid("invalid service-fee recipient for the deal network"))?;
+            let fee_token = provider
+                .unique_token_for_asset(&fee_asset)
                 .await
-                .map_err(|error| {
-                    tracing::warn!(trade=%id, error=%error, "OTC fee route preflight failed");
-                    route_floor_conflict(&error, "the service fee", fee_units)
-                })?;
-            if !fee_preflight_matches(
-                &quote.output.value,
-                &quote.input.value,
-                fee_units,
-                u32::from(decimals),
-            ) {
+                .map_err(|_| Error::RouteUnavailable)?;
+            let direct_fee_transfer = direct_fee_transfer_supported(
+                &from,
+                &fee_asset,
+                output_network,
+                self.p2p_direct_network_available(output_network),
+                source_token.asset_id == fee_token.asset_id,
+            );
+            if direct_fee_transfer {
+                None
+            } else if fee_token.decimals != Some(6)
+                || fee_token
+                    .contract_address
+                    .as_deref()
+                    .is_none_or(|address| address.trim().is_empty())
+                || !provider.route_available(&from, &fee_asset).await
+            {
                 return Err(Error::RouteUnavailable);
+            } else {
+                let quote = provider
+                    .dry_executable_quote(NearQuoteRequest {
+                        from: from.clone(),
+                        to: fee_asset.clone(),
+                        origin_asset_id: Some(source_token.asset_id.clone()),
+                        destination_asset_id: Some(fee_token.asset_id.clone()),
+                        amount: Amount::new(fee_amount.clone(), fee_asset.clone())?,
+                        recipient: fee_recipient.to_string(),
+                        refund_to: source_address.to_string(),
+                        slippage_bps: 0,
+                        app_fees: Vec::new(),
+                        dry: true,
+                    })
+                    .await
+                    .map_err(|error| {
+                        tracing::warn!(trade=%id, error=%error, "OTC fee route preflight failed");
+                        route_floor_conflict(&error, "the service fee", fee_units)
+                    })?;
+                if !fee_preflight_matches(
+                    &quote.output.value,
+                    &quote.input.value,
+                    fee_units,
+                    u32::from(decimals),
+                ) {
+                    return Err(Error::RouteUnavailable);
+                }
+                Some(json!({
+                    "source_asset": from,
+                    "source_asset_id": source_token.asset_id,
+                    "source_amount": quote.input.value,
+                    "destination_asset": fee_asset,
+                    "expected_output": quote.output.value,
+                    "expected_fee": quote.fee.as_ref().map(|route_fee| json!({
+                        "asset": route_fee.asset.to_string(),
+                        "amount": route_fee.value,
+                    })),
+                }))
             }
-            Some(json!({
-                "source_asset": from,
-                "source_asset_id": source_token.asset_id,
-                "source_amount": quote.input.value,
-                "destination_asset": fee_asset,
-                "expected_output": quote.output.value,
-                "expected_fee": quote.fee.as_ref().map(|route_fee| json!({
-                    "asset": route_fee.asset.to_string(),
-                    "amount": route_fee.value,
-                })),
-            }))
         };
         if network == "ethereum" {
             let expected_contract = if source_token.symbol.eq_ignore_ascii_case("USDT") {
@@ -2052,6 +2074,23 @@ fn direct_fee_transfer_supported(
         && source == fee_asset
 }
 
+/// Whether a routed payment's source can also carry the service fee as plain
+/// USDT on that same network, so payment prepare must not quote a bridge to the
+/// deal network (a 3% fee is normally below the provider floor).
+fn fee_collectible_on_payment_network(
+    source: &Asset,
+    network: &str,
+    direct_network_enabled: bool,
+    fee_recipient_configured: bool,
+    has_token_contract: bool,
+) -> bool {
+    source.symbol.eq_ignore_ascii_case("USDT")
+        && source.location.as_deref() == Some(network)
+        && direct_network_enabled
+        && fee_recipient_configured
+        && has_token_contract
+}
+
 /// A provider bridge floor is a final answer for this amount, not an outage.
 /// Report it as an actionable conflict so the taker can raise the amount or
 /// pay from Ethereum instead of retrying a route that cannot succeed.
@@ -2363,6 +2402,33 @@ mod route_status_tests {
         ));
         assert!(!direct_fee_transfer_supported(
             &base_usdt, &base_usdt, "base", false, true,
+        ));
+    }
+
+    #[test]
+    fn usdt_on_the_payers_network_skips_the_fee_bridge_preflight() {
+        let tron_usdt = Asset::new("USDT", Some("tron")).unwrap();
+        let tron_usdc = Asset::new("USDC", Some("tron")).unwrap();
+        let base_usdt = Asset::new("USDT", Some("base")).unwrap();
+        // Paying USDT on Tron for an Ethereum deal must not quote 1Click for the fee.
+        assert!(fee_collectible_on_payment_network(
+            &tron_usdt, "tron", true, true, true
+        ));
+        assert!(fee_collectible_on_payment_network(
+            &base_usdt, "base", true, true, true
+        ));
+        // USDC still needs the routed fee, and so does a network without a recipient.
+        assert!(!fee_collectible_on_payment_network(
+            &tron_usdc, "tron", true, true, true
+        ));
+        assert!(!fee_collectible_on_payment_network(
+            &tron_usdt, "tron", true, false, true
+        ));
+        assert!(!fee_collectible_on_payment_network(
+            &tron_usdt, "tron", false, true, true
+        ));
+        assert!(!fee_collectible_on_payment_network(
+            &tron_usdt, "tron", true, true, false
         ));
     }
 
