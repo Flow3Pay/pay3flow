@@ -175,12 +175,8 @@
   </div>
 {/snippet}
 
-{#snippet side(levels: BookLevel[], title: string, hint: string, empty: string, key: string)}
-  <section class="obTable" data-side={key} aria-label={title}>
-    <header class="obTitle">
-      <div class="obTitleText"><strong>{title}</strong><span>{hint}</span></div>
-      <span class="obCount" aria-label={say("Open offers", "Открытых офферов")}>{levels.length}</span>
-    </header>
+{#snippet side(levels: BookLevel[], label: string, empty: string, key: string)}
+  <section class="obTable" data-side={key} aria-label={label}>
     <div class="obHead"><span>{say("Offer", "Оффер")}</span><span>{say("Price", "Цена")}<small>USDT / EVER</small></span><span>{say("Amount", "Объём")}<small>EVER</small></span><span>{say("Total", "Сумма")}<small>USDT</small></span><span class="obHeadAction">{say("Action", "Действие")}</span></div>
     {#each levels as level (level.offer.id)}
       {@render levelRow(level)}
@@ -222,8 +218,8 @@
     <div class="orderbook">
       <div class="obTables">
         <!-- Selling EVER lands in the sellers' book, buying EVER in the buyers' book. -->
-        {@render side(askLevels, say("Sellers · they sell EVER", "Продавцы · продают EVER"), say("You buy EVER and pay USDT or USDC", "Вы покупаете EVER и платите USDT или USDC"), say("Nobody is selling EVER yet", "Пока никто не продаёт EVER"), "asks")}
-        {@render side(bidLevels, say("Buyers · they buy EVER", "Покупатели · покупают EVER"), say("You sell EVER and get USDT or USDC", "Вы продаёте EVER и получаете USDT или USDC"), say("Nobody is buying EVER yet", "Пока никто не покупает EVER"), "bids")}
+        {@render side(askLevels, say("Sellers · they sell EVER", "Продавцы · продают EVER"), say("Nobody is selling EVER yet", "Пока никто не продаёт EVER"), "asks")}
+        {@render side(bidLevels, say("Buyers · they buy EVER", "Покупатели · покупают EVER"), say("Nobody is buying EVER yet", "Пока никто не покупает EVER"), "bids")}
       </div>
       {#if offers.length}
         <div class="deskQuotes">
@@ -346,13 +342,6 @@
   .orderbook { display:flex; flex:1; min-height:0; flex-direction:column; overflow-y:auto; scrollbar-width:thin; padding:0 var(--otc-panel-padding,20px) 12px; gap:12px; }
   .obTables { display:flex; flex-wrap:wrap; align-items:flex-start; gap:20px; }
   .obTable { display:flex; flex:1 1 300px; min-width:0; flex-direction:column; gap:6px; }
-  .obTitle { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-panel); }
-  .obTitle strong { font-family:var(--font-sans,inherit); font-size:12.5px; font-weight:700; letter-spacing:-.01em; }
-  .obTable[data-side="asks"] .obTitle strong { color:var(--color-good-ink); }
-  .obTable[data-side="bids"] .obTitle strong { color:var(--color-danger); }
-  .obTitleText { display:grid; min-width:0; gap:2px; }
-  .obTitleText span { color:var(--color-text-soft); font-size:10.5px; line-height:1.4; }
-  .obCount { flex:0 0 auto; min-width:24px; padding:2px 7px; border-radius:999px; background:var(--color-paper); color:var(--color-text-soft); font-family:var(--font-mono); font-size:10.5px; text-align:center; }
   .obHead { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr) 96px; gap:8px; align-items:end; min-height:28px; padding:0 12px; color:var(--color-text-soft); font-size:11px; line-height:1.35; text-align:right; }
   .obHead > span:first-child { text-align:left; }
   .obHead small { display:flex; align-items:center; justify-content:flex-end; gap:4px; color:var(--color-text-faint); font-size:9px; }
@@ -460,6 +449,6 @@
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   @media (min-width:640px) { .rowOwner { display:flex; } }
-  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.72fr) minmax(0,.72fr) minmax(0,.85fr) 86px; gap:5px; font-size:10.5px; } .obTake { font-size:10px; } .obTitle { padding:8px 10px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
+  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.72fr) minmax(0,.72fr) minmax(0,.85fr) 86px; gap:5px; font-size:10.5px; } .obTake { font-size:10px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
   @media (prefers-reduced-motion:reduce) { .bookRow,.obRow,.proposalSelect,.copyButton { transition:none; } }
 </style>
