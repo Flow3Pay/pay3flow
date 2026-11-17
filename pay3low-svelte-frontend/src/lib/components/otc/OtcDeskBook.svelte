@@ -11,7 +11,14 @@
   import { p2pCompatibleSources } from "$lib/otc/p2p";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
-  export let onAccept: (id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string }, paymentSource?: string) => void = () => {};
+  export let onAccept: (id: string, destination?: {
+    stablecoin_network?: string;
+    stablecoin_asset_id?: string | null;
+    stablecoin_address?: string;
+    /** Source the payer intends to spend; stored so a reload keeps the route. */
+    payment_source?: string;
+    payment_source_asset_id?: string;
+  }, paymentSource?: string) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
   export let dialogOnly = false;
   export let testId = "otc-public-offer";
@@ -327,7 +334,13 @@
               stablecoin_address: destinationAddress.trim(),
             });
           } else {
-            onAccept(selected.id, undefined, selectedPaymentSource?.asset);
+            // The taker's payment source has to reach the backend, otherwise a
+            // reloaded deal falls back to a direct transfer on the seller's
+            // network instead of the NEAR Intents route the taker picked.
+            onAccept(selected.id, selectedPaymentSource ? {
+              payment_source: selectedPaymentSource.asset,
+              payment_source_asset_id: selectedPaymentSource.asset_id,
+            } : undefined, selectedPaymentSource?.asset);
           }
           closeOffer();
         }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button>

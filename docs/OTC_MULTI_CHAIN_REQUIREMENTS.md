@@ -341,14 +341,18 @@ Implemented:
   catalog and review the calculated source amount, exact net quote output,
   expiry, deposit address, and memo before wallet submission. The source
   stablecoin may differ from the deal stablecoin, enabling a USDC-to-USDT or
-  USDT-to-USDC principal conversion through the route.
+  USDT-to-USDC principal conversion through the route. Acceptance records the
+  chosen source network and asset ID with the deal, and the deal window opens on
+  that source instead of the seller's receiving network, so a reload cannot
+  turn a routed payment into a dead-end direct transfer.
 - The end-to-end cross-network principal-payment path is implemented for both
   USDT and USDC deal assets: the backend prepares an exact-output quote bound to
   the exact source/destination asset IDs, recipient, and source refund address;
   the matching wallet signs and submits the deposit; the backend notifies and
-  polls NEAR Intents. The deal advances only on the exact required output, while
-  a provider-confirmed refund marks the attempt failed and permits an explicit
-  retry. This shared path does not promise that every catalog pair is routable.
+  polls NEAR Intents. The deal advances only when the delivered output is at
+  least the required net amount, while a provider-confirmed refund marks the
+  attempt failed and permits an explicit retry. This shared path does not promise
+  that every catalog pair is routable.
 - The backend validates the selected source asset against its exact catalog
   asset ID and the selected OTC stablecoin. Quote creation binds exact source
   and destination asset IDs to avoid resolving duplicate tickers to a different
@@ -359,14 +363,17 @@ Implemented:
   temporary route outage; provider-specific error details are kept out of the
   user response.
 - OTC attempt instructions persist the source/destination asset identity and
-  quote/deposit information. Provider status polling advances the trade only
-  when the reported output amount exactly matches the required net amount; a
-  confirmed refund releases the attempt for retry. Exact-output quote creation
-  is covered by a mocked provider test that checks the requested output and
-  decodes the calculated source amount.
+  quote/deposit information. Provider status polling advances the trade when the
+  delivered output is at least the required net amount. Current 1Click responses
+  put that amount in `swapDetails.amountOut` (atomic) or
+  `swapDetails.amountOutFormatted`; the older top-level field is still read.
+  A status `SUCCESS` without a readable amount stays pending, `FAILED` closes the
+  attempt as failed, and a confirmed refund releases the attempt for retry.
+  Exact-output quote creation is covered by a mocked provider test that checks
+  the requested output and decodes the calculated source amount.
 - Route attempts are idempotent and persisted for restart-safe polling.
-  Unknown provider state remains pending; only an exact expected output
-  advances the trade, and a confirmed refund permits retry.
+  Unknown provider state remains pending; only an amount at or above the
+  expected net output advances the trade, and a confirmed refund permits retry.
 - For identical source and destination assets, the ordinary direct payment
   path is used without a provider quote only when the exact catalog asset IDs
   match and two independent observers are configured for that receiving

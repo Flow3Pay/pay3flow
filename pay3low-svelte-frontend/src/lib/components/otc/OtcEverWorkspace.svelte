@@ -172,7 +172,13 @@
   function openOffer(offer: PublicOffer) { void tick().then(() => offerBook?.openOffer(offer)); }
   async function acceptOffer(
     id: string,
-    destination?: { stablecoin_network: string; stablecoin_asset_id: string; stablecoin_address: string },
+    destination?: {
+      stablecoin_network?: string;
+      stablecoin_asset_id?: string | null;
+      stablecoin_address?: string;
+      payment_source?: string;
+      payment_source_asset_id?: string;
+    },
     paymentSource?: string,
   ) {
     const owner = session;

@@ -372,13 +372,18 @@ impl NearIntentsProvider {
             .json::<Value>()
             .await
             .context("decode NEAR Intents status")?;
+        // 1Click reports the delivered amount under `swapDetails`, not at the
+        // top level. Reading only the old shape made a SUCCESS swap look pending
+        // forever and kept the other deal leg locked.
+        let details = raw.get("swapDetails").unwrap_or(&Value::Null);
         Ok(NearSwapStatus {
             status: raw
                 .get("status")
                 .and_then(Value::as_str)
                 .unwrap_or("UNKNOWN")
                 .to_string(),
-            output_amount: first_string(&raw, &["amountOut", "amount_out"]),
+            output_amount: first_string(details, &["amountOut", "amount_out"])
+                .or_else(|| first_string(&raw, &["amountOut", "amount_out"])),
             raw,
         })
     }

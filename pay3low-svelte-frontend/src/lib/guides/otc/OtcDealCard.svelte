@@ -35,7 +35,13 @@
     } catch { return null; }
   }
   function toTerminal() { location.hash = otcTerminalHash(step).replace(/^#/, ""); }
-  async function accept(id: string, destination?: { stablecoin_network: string; stablecoin_asset_id: string | null; stablecoin_address: string }) {
+  async function accept(id: string, destination?: {
+    stablecoin_network?: string;
+    stablecoin_asset_id?: string | null;
+    stablecoin_address?: string;
+    payment_source?: string;
+    payment_source_asset_id?: string;
+  }) {
     const owner = signedIn();
     if (!owner) { toTerminal(); return; }
     busy = true; failure = ""; notice = "";

@@ -7,7 +7,7 @@
   import { identiconDataUri } from "$lib/otc/identicon";
   import OtcChatModal from "./OtcChatModal.svelte";
   import {
-    p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+    p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDefaultSourceAsset, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
     p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
     type P2pDeal, type P2pLeg,
   } from "$lib/otc/p2p";
@@ -257,16 +257,12 @@
   }
 
   function defaultSourceAsset(current: P2pDeal) {
-    // Honour the network the taker picked when accepting the offer.
-    const preferred = preferredSources[current.id];
-    if (preferred && sourceAssets.some(item => item.asset === preferred)) return preferred;
-    const destination = `${current.terms.stablecoin || "USDT"}@${current.terms.stablecoin_network || "ethereum"}`;
-    const destinationId = current.terms.stablecoin_asset_id
-      || destinationAssets.find(item => item.asset === destination)?.asset_id
-      || "";
-    return sourceAssets.find(item => item.asset === destination && item.asset_id === destinationId)?.asset
-      || sourceAssets.find(item => item.destination_asset_ids.includes(destinationId))?.asset
-      || "";
+    return p2pDefaultSourceAsset(current, sourceAssets, destinationAssets, preferredSources[current.id]);
+  }
+
+  $: if (routePickerOpen && deal && compatibleSourceAssets.length
+    && !compatibleSourceAssets.some(item => item.asset === selectedSourceAsset)) {
+    selectedSourceAsset = defaultSourceAsset(deal);
   }
 
   export async function refresh() {

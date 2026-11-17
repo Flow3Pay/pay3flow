@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+  p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDefaultSourceAsset, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
   p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
   type P2pDeal,
 } from "../src/lib/otc/p2p.ts";
@@ -74,6 +74,68 @@ function deal(overrides: Partial<P2pDeal> = {}): P2pDeal {
 function attempt(state: string, kind = "payment") {
   return { id: `${kind}-${state}`, kind, state, instructions: {}, reference: null } as any;
 }
+
+const sources = [
+  { asset: "USDT@ethereum", symbol: "USDT", network: "ethereum", asset_id: "eth-usdt", destination_asset_ids: ["near-usdt", "eth-usdt"] },
+  { asset: "USDT@tron", symbol: "USDT", network: "tron", asset_id: "tron-usdt", destination_asset_ids: ["near-usdt", "sol-usdt"] },
+  { asset: "USDT@near", symbol: "USDT", network: "near", asset_id: "near-usdt", destination_asset_ids: [] },
+];
+const destinations = [
+  { asset: "USDT@near", asset_id: "near-usdt" },
+  { asset: "USDT@ethereum", asset_id: "eth-usdt" },
+];
+
+test("the deal modal never defaults to a source that cannot be routed", () => {
+  const nearDeal = deal({
+    terms: {
+      ...deal().terms,
+      stablecoin: "USDT",
+      stablecoin_network: "near",
+      stablecoin_asset_id: "near-usdt",
+      payer_network: undefined,
+      payer_asset_id: null,
+    },
+  });
+  // Same-network NEAR is not a route: the fallback must be a routable source.
+  assert.equal(p2pDefaultSourceAsset(nearDeal, sources, destinations), "USDT@ethereum");
+  // The source the payer picked when accepting wins over everything.
+  assert.equal(
+    p2pDefaultSourceAsset(nearDeal, sources, destinations, "USDT@tron"),
+    "USDT@tron",
+  );
+  // A stale preference that no longer routes is ignored.
+  assert.equal(
+    p2pDefaultSourceAsset(nearDeal, sources, destinations, "USDT@near"),
+    "USDT@ethereum",
+  );
+  // The source booked with the deal is honoured without an in-memory pick.
+  assert.equal(
+    p2pDefaultSourceAsset(
+      { ...nearDeal, terms: { ...nearDeal.terms, payer_network: "tron", payer_asset_id: "tron-usdt" } },
+      sources,
+      destinations,
+    ),
+    "USDT@tron",
+  );
+  // An EVM destination can still default to its own network.
+  const evmDeal = deal({
+    terms: {
+      ...deal().terms,
+      stablecoin: "USDT",
+      stablecoin_network: "ethereum",
+      stablecoin_asset_id: "eth-usdt",
+      payer_network: undefined,
+      payer_asset_id: null,
+    },
+  });
+  assert.equal(p2pDefaultSourceAsset(evmDeal, sources, destinations), "USDT@ethereum");
+  // No compatible source means no default at all.
+  assert.equal(p2pDefaultSourceAsset(nearDeal, [], destinations), "");
+  assert.equal(
+    p2pDefaultSourceAsset({ ...nearDeal, terms: { ...nearDeal.terms, stablecoin_asset_id: "missing" } }, sources, []),
+    "",
+  );
+});
 
 test("each party confirms once and the payment payer waits for the counterparty", () => {
   assert.equal(p2pAction(deal()), "confirm");

@@ -96,7 +96,10 @@ the stablecoin wallet is labelled with the network the offer is actually
 published for, the supported receiving networks are offered as a picker instead
 of a raw option list, and where the verified EVM address is valid on the chosen
 network it is prefilled and remains editable; other formats must be entered by
-hand and are validated before the button enables. When the leg the taker has to
+hand and are validated before the button enables. The accept request carries the
+stablecoin source network and asset ID chosen on that card (`payment_source`,
+`payment_source_asset_id`), so the server can freeze a routable payer source and
+the deal window opens on it after confirmation. When the leg the taker has to
 send is larger than the balance the server reads for that wallet, a warning
 appears beside the button and blocks the booking, so no deal is created that
 cannot be paid. A rejected acceptance is reported on the page instead of closing
@@ -173,7 +176,23 @@ reference is mandatory for these non-EVM observers; an attempt without one
 remains prepared rather than guessing from a scan. Direct non-EVM payment signs
 from the booked stablecoin payer; a sell offer books the taker's Ethereum login
 wallet, so a taker paying on a non-EVM network uses the routed flow even when
-the source and destination networks match.
+the source and destination networks match. Acceptance also stores the source
+network and exact asset ID the taker picked (`payer_network`/`payer_asset_id`,
+validated against the deal stablecoin and an executor-capable network), and the
+deal window opens on that source instead of falling back to the seller's
+receiving network, which would offer a direct transfer where only a route
+exists. Older clients that accept without naming a source keep the Ethereum
+default.
+
+Routed payments settle from the provider's swap status. Current 1Click responses
+report the delivered amount in `swapDetails.amountOut` (atomic units) or
+`swapDetails.amountOutFormatted`; the previous top-level field is still read. A
+`SUCCESS` status credits the leg when the delivered amount is at least the
+agreed net output, because an exact-output fill may overshoot when the market
+moves in the trader's favour, while a real shortfall stays pending. `REFUNDED`
+releases the attempt for an explicit retry, `FAILED` closes that attempt as
+failed, and any unreadable status keeps polling instead of failing a payment
+that may already be on chain.
 
 ### Desk settlement setup
 

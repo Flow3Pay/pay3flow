@@ -44,6 +44,14 @@ pub(crate) struct AcceptOfferRequest {
     pub stablecoin_asset_id: Option<String>,
     #[serde(default)]
     pub stablecoin_address: Option<String>,
+    /// Source the stablecoin payer intends to spend, in `SYMBOL@network` form.
+    /// A sell offer lets the taker pick any network that can reach the seller,
+    /// and the choice has to survive a page reload so the deal does not fall
+    /// back to a direct transfer on the seller's network.
+    #[serde(default)]
+    pub payment_source: Option<String>,
+    #[serde(default)]
+    pub payment_source_asset_id: Option<String>,
 }
 
 impl From<&str> for DealPrepareRequest {
@@ -114,6 +122,38 @@ fn accepted_destination(
         return Err(invalid("stablecoin asset identity is required"));
     }
     Ok((network, asset_id, address))
+}
+
+/// The source network a stablecoin payer picked when accepting a sell offer.
+/// Returning `None` keeps the historical Ethereum default for older clients.
+fn accepted_payer_source(
+    destination: &AcceptOfferRequest,
+    stablecoin: &super::public_offers::Stablecoin,
+) -> Result<Option<(String, Option<String>)>> {
+    let Some(source) = destination.payment_source.as_deref() else {
+        return Ok(None);
+    };
+    let asset = Asset::parse(source).map_err(|_| invalid("unsupported payment source"))?;
+    if !asset.symbol.eq_ignore_ascii_case(stablecoin.symbol()) {
+        return Err(invalid("payment source must use the deal stablecoin"));
+    }
+    let network = asset
+        .location
+        .as_deref()
+        .ok_or_else(|| invalid("payment source must include its network"))?;
+    if !crate::route_execution::supports_otc_wallet_network(network) {
+        return Err(invalid("payment source network has no OTC wallet executor"));
+    }
+    let asset_id = destination
+        .payment_source_asset_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    if network != "ethereum" && asset_id.is_none() {
+        return Err(invalid("payment source asset identity is required"));
+    }
+    Ok(Some((network.to_string(), asset_id)))
 }
 
 #[derive(Deserialize)]
@@ -278,6 +318,9 @@ impl Service {
             Direction::Sell => (taker_eth, usdt_address.clone(), seller_ever, taker_ever),
             Direction::Buy => (usdt_address, taker_eth, taker_ever, seller_ever),
         };
+        // Read the payer's chosen source before the destination request is
+        // consumed below.
+        let payer_source = accepted_payer_source(&destination, &stablecoin)?;
         let (output_network, output_asset_id, usdt_payee) =
             accepted_destination(direction, &terms, &default_usdt_payee, destination)?;
         let (payer_network, payer_asset_id) = if direction == Direction::Buy {
@@ -286,7 +329,11 @@ impl Service {
                 terms["stablecoin_asset_id"].as_str().map(str::to_string),
             )
         } else {
-            ("ethereum".to_string(), None)
+            payer_source.unwrap_or_else(|| {
+                // Older clients accepted without naming a source; keep the
+                // original Ethereum default so they keep working.
+                ("ethereum".to_string(), None)
+            })
         };
         let mut output_contract = token_contract.to_string();
         let mut fee_usdt_contract = if output_network == "ethereum" {
@@ -1584,9 +1631,17 @@ impl Service {
                         )
                         .await?;
                     }
+                    NearStatusOutcome::Failed => {
+                        repo::p2p::fail_polled_attempt(
+                            &client,
+                            &attempt,
+                            &json!({"provider":"near-intents","status":status.raw,"outcome":"failed"}),
+                        )
+                        .await?;
+                    }
                     NearStatusOutcome::Pending => {
                         if status.status.eq_ignore_ascii_case("SUCCESS") {
-                            tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success has no valid exact output amount");
+                            tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success output is missing or below the deal minimum");
                         }
                         repo::p2p::confirm_polled_attempt(
                             &client,
@@ -1956,27 +2011,54 @@ fn fee_preflight_matches(
 enum NearStatusOutcome {
     Success(u128),
     Refunded,
+    Failed,
     Pending,
 }
 
 fn near_status_outcome(
     status: &crate::route_engine::NearSwapStatus,
-    expected: u128,
+    minimum: u128,
 ) -> NearStatusOutcome {
     match status.status.to_ascii_uppercase().as_str() {
         "REFUNDED" => NearStatusOutcome::Refunded,
+        "FAILED" => NearStatusOutcome::Failed,
         "SUCCESS" => {
-            let output = status.output_amount.clone().or_else(|| {
-                crate::route_engine::first_string(
-                    &status.raw,
-                    &["amountOut", "amount_out", "outputAmount"],
-                )
-            });
+            // The delivered amount lives in `swapDetails` on current 1Click
+            // responses. Older responses used a top-level field, and formatted
+            // decimals appear when the atomic value is absent.
+            let details = status
+                .raw
+                .get("swapDetails")
+                .unwrap_or(&serde_json::Value::Null);
+            let output = status
+                .output_amount
+                .clone()
+                .or_else(|| {
+                    crate::route_engine::first_string(
+                        details,
+                        &["amountOut", "amount_out", "outputAmount"],
+                    )
+                })
+                .or_else(|| {
+                    crate::route_engine::first_string(
+                        &status.raw,
+                        &["amountOut", "amount_out", "outputAmount"],
+                    )
+                })
+                .or_else(|| {
+                    crate::route_engine::first_string(
+                        details,
+                        &["amountOutFormatted", "amount_out_formatted"],
+                    )
+                });
+            // A fill may deliver slightly more than the quoted minimum when the
+            // market moves in the trader's favour. Anything at or above the
+            // agreed net amount settles the leg; a real shortfall must not.
             match output
                 .as_deref()
                 .and_then(|value| provider_amount_units(value, 6))
             {
-                Some(units) if units == expected => NearStatusOutcome::Success(units),
+                Some(units) if units >= minimum => NearStatusOutcome::Success(units),
                 _ => NearStatusOutcome::Pending,
             }
         }
@@ -2032,6 +2114,38 @@ mod route_status_tests {
     }
 
     #[test]
+    fn accepted_payer_source_binds_the_network_the_taker_chose() {
+        let usdt = super::super::public_offers::Stablecoin::Usdt;
+        let source = AcceptOfferRequest {
+            payment_source: Some("USDT@NEAR".into()),
+            payment_source_asset_id: Some("nep141:usdt.near".into()),
+            ..AcceptOfferRequest::default()
+        };
+        assert_eq!(
+            accepted_payer_source(&source, &usdt).unwrap(),
+            Some(("near".into(), Some("nep141:usdt.near".into())))
+        );
+        // A non-Ethereum source must name its exact catalog asset.
+        let missing_id = AcceptOfferRequest {
+            payment_source: Some("USDT@near".into()),
+            ..AcceptOfferRequest::default()
+        };
+        assert!(accepted_payer_source(&missing_id, &usdt).is_err());
+        // The source must be the deal token, not an arbitrary asset.
+        let wrong_token = AcceptOfferRequest {
+            payment_source: Some("USDC@near".into()),
+            payment_source_asset_id: Some("nep141:usdc.near".into()),
+            ..AcceptOfferRequest::default()
+        };
+        assert!(accepted_payer_source(&wrong_token, &usdt).is_err());
+        // Older clients that do not send a source keep the Ethereum default.
+        assert_eq!(
+            accepted_payer_source(&AcceptOfferRequest::default(), &usdt).unwrap(),
+            None
+        );
+    }
+
+    #[test]
     fn buy_offer_acceptance_binds_a_valid_destination_and_exact_asset() {
         let destination = accepted_destination(
             Direction::Buy,
@@ -2041,6 +2155,7 @@ mod route_status_tests {
                 stablecoin_network: Some("NEAR".into()),
                 stablecoin_asset_id: Some("nep141:usdt.near".into()),
                 stablecoin_address: Some("alice.near".into()),
+                ..AcceptOfferRequest::default()
             },
         )
         .unwrap();
@@ -2190,16 +2305,21 @@ mod route_status_tests {
     }
 
     #[test]
-    fn provider_status_only_credits_exact_success_and_keeps_unknown_pending() {
-        let expected = 10_000_001;
+    fn provider_status_credits_success_at_or_above_the_deal_minimum() {
+        let minimum = 10_000_001;
         let status = |state: &str, output: Option<&str>| crate::route_engine::NearSwapStatus {
             status: state.into(),
             output_amount: output.map(str::to_string),
             raw: json!({}),
         };
         assert!(matches!(
-            near_status_outcome(&status("SUCCESS", Some("10000001")), expected),
+            near_status_outcome(&status("SUCCESS", Some("10000001")), minimum),
             NearStatusOutcome::Success(10_000_001)
+        ));
+        // A fill above the quoted minimum still settles the leg.
+        assert!(matches!(
+            near_status_outcome(&status("SUCCESS", Some("10000005")), minimum),
+            NearStatusOutcome::Success(10_000_005)
         ));
         let with_raw_amount = crate::route_engine::NearSwapStatus {
             status: "SUCCESS".into(),
@@ -2207,27 +2327,56 @@ mod route_status_tests {
             raw: json!({"outputAmount":"10000001"}),
         };
         assert!(matches!(
-            near_status_outcome(&with_raw_amount, expected),
+            near_status_outcome(&with_raw_amount, minimum),
             NearStatusOutcome::Success(10_000_001)
         ));
         assert!(matches!(
-            near_status_outcome(&status("SUCCESS", Some("10")), expected),
+            near_status_outcome(&status("SUCCESS", Some("10")), minimum),
             NearStatusOutcome::Pending
         ));
         assert!(matches!(
-            near_status_outcome(&status("SUCCESS", None), expected),
+            near_status_outcome(&status("SUCCESS", None), minimum),
             NearStatusOutcome::Pending
         ));
         assert!(matches!(
-            near_status_outcome(&status("REFUNDED", None), expected),
+            near_status_outcome(&status("REFUNDED", None), minimum),
             NearStatusOutcome::Refunded
         ));
-        for state in ["FAILED", "PENDING", "UNKNOWN"] {
+        assert!(matches!(
+            near_status_outcome(&status("FAILED", Some("10000001")), minimum),
+            NearStatusOutcome::Failed
+        ));
+        for state in ["PENDING", "UNKNOWN"] {
             assert!(matches!(
-                near_status_outcome(&status(state, Some("10000001")), expected),
+                near_status_outcome(&status(state, Some("10000001")), minimum),
                 NearStatusOutcome::Pending
             ));
         }
+    }
+
+    #[test]
+    fn provider_status_reads_the_nested_swap_details_shape() {
+        let minimum = 10_000_001;
+        // Current 1Click responses put the delivered amount in `swapDetails`.
+        let atomic = crate::route_engine::NearSwapStatus {
+            status: "SUCCESS".into(),
+            output_amount: None,
+            raw: json!({"status":"SUCCESS","swapDetails":{"amountOut":"10000001"}}),
+        };
+        assert!(matches!(
+            near_status_outcome(&atomic, minimum),
+            NearStatusOutcome::Success(10_000_001)
+        ));
+        // A formatted decimal is enough when the atomic field is absent.
+        let formatted = crate::route_engine::NearSwapStatus {
+            status: "SUCCESS".into(),
+            output_amount: None,
+            raw: json!({"status":"SUCCESS","swapDetails":{"amountOutFormatted":"10.000001"}}),
+        };
+        assert!(matches!(
+            near_status_outcome(&formatted, minimum),
+            NearStatusOutcome::Success(10_000_001)
+        ));
     }
 }
 

@@ -30,6 +30,48 @@ export function p2pCompatibleSources<T extends { destination_asset_ids: string[]
     : [];
 }
 
+export interface P2pSourceAsset {
+  asset: string;
+  symbol: string;
+  network: string;
+  asset_id: string;
+  destination_asset_ids: string[];
+}
+
+/**
+ * Pick the payment network a deal modal opens on.
+ *
+ * Only the sources that can actually be routed to the destination token are
+ * considered: the same-network source of a non-EVM destination is not a route
+ * and must never become the default, otherwise the payer lands on a disabled
+ * direct-transfer button. The source the payer chose when accepting the offer
+ * wins, then the source booked with the deal. The destination network itself is
+ * only a last resort before the first compatible source.
+ */
+export function p2pDefaultSourceAsset(
+  deal: Pick<P2pDeal, "id" | "terms">,
+  sources: P2pSourceAsset[],
+  destinations: Array<{ asset: string; asset_id: string }>,
+  preferred?: string | null,
+): string {
+  const symbol = deal.terms.stablecoin || "USDT";
+  const destination = `${symbol}@${deal.terms.stablecoin_network || "ethereum"}`;
+  const destinationId = deal.terms.stablecoin_asset_id
+    || destinations.find(item => item.asset === destination)?.asset_id
+    || "";
+  const compatible = p2pCompatibleSources(sources, destinationId);
+  const byNetwork = (network?: string, assetId?: string | null) => compatible.find(item =>
+    item.symbol === symbol
+    && item.network === network
+    && (!assetId || item.asset_id === assetId)
+  );
+  return compatible.find(item => item.asset === preferred)?.asset
+    || byNetwork(deal.terms.payer_network, deal.terms.payer_asset_id)?.asset
+    || compatible.find(item => item.asset === destination)?.asset
+    || compatible[0]?.asset
+    || "";
+}
+
 export function p2pDirectAssetMatch(
   source: { asset: string; asset_id: string } | null,
   destinationAsset: string,
