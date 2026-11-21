@@ -23,7 +23,10 @@ const SET_STATE: &str =
 const SET_PAYOUT_REFERENCE: &str = "UPDATE otc_temp_settlements SET reference=$2,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
 const SET_FEE_REFERENCE: &str = "UPDATE otc_temp_settlements SET fee_reference=$2,state='fee_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('payout_submitted','intents_submitted')";
 const SET_INTENTS_QUOTE: &str = "UPDATE otc_temp_settlements SET reference=$2,deposit_address=$3,deposit_memo=$4,quote_id=$5,source_units=$6,minimum_units=$7,state='intents_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
-const NOTE_ERROR: &str = "UPDATE otc_temp_settlements SET attempts=attempts+1,last_error=$2,updated_at=now() WHERE trade_id=$1";
+/// A row that keeps failing stops being selected at ten attempts, so the tenth
+/// failure moves it to an explicit terminal state instead of freezing in a live
+/// one that still looks actionable.
+const NOTE_ERROR: &str = "UPDATE otc_temp_settlements SET attempts=attempts+1,last_error=$2,state=CASE WHEN attempts+1>=10 THEN 'stalled' ELSE state END,updated_at=now() WHERE trade_id=$1";
 
 #[derive(Clone, Debug)]
 pub(crate) struct TempWallet {
@@ -276,7 +279,13 @@ pub(crate) async fn recycle(client: &(impl GenericClient + Sync), id: &Uuid) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::COLUMNS;
+    use super::{COLUMNS, NOTE_ERROR};
+
+    #[test]
+    fn the_attempt_cap_becomes_a_terminal_stalled_state() {
+        assert!(NOTE_ERROR.contains("THEN 'stalled'"));
+        assert!(NOTE_ERROR.contains("attempts+1>=10"));
+    }
 
     #[test]
     fn selects_every_field_the_view_reads() {

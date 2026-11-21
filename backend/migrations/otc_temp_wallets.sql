@@ -31,3 +31,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS otc_temp_wallets_child
 ALTER TABLE otc_p2p_attempts ADD COLUMN IF NOT EXISTS temp_wallet_id UUID REFERENCES otc_temp_wallets(id);
 CREATE INDEX IF NOT EXISTS otc_p2p_attempts_temp_wallet
  ON otc_p2p_attempts(temp_wallet_id) WHERE temp_wallet_id IS NOT NULL;
+-- Attempts created before the column existed still name the temp address in
+-- their leg; link those rows once so the join works for historical deals too.
+UPDATE otc_p2p_attempts a SET temp_wallet_id = w.id
+ FROM otc_temp_wallets w
+ WHERE a.temp_wallet_id IS NULL AND a.kind = 'payment'
+   AND a.trade_id = w.trade_id
+   AND a.instructions->'leg'->>'sender' = w.address;

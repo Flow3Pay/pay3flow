@@ -64,6 +64,7 @@ The settlement worker (`otc::temp_settle`) only picks rows whose trade is
 `delivery_pending` or `completed`, whose state is one of `awaiting_payment`,
 `payout_submitted`, `intents_submitted`, `fee_submitted`, and whose
 `attempts < 10`. A stale `payout_claim` older than two minutes is reclaimed.
+`stalled` is terminal until an operator hands the row back (§4.7).
 
 | State | Meaning | Next automatic step |
 | --- | --- | --- |
@@ -74,6 +75,7 @@ The settlement worker (`otc::temp_settle`) only picks rows whose trade is
 | `fee_submitted` | Fee sweep sent; receipt polled by hash | `settled` on status 1, `fee_retained` on revert |
 | `fee_retained` | Net paid, fee left on the temporary address | Manual sweep or ops write-off |
 | `intents_refunded` | Deposit returned to the temporary address | Manual retry or manual return |
+| `stalled` | Ten failed attempts; the worker no longer selects the row | Operator recovery (§4.7) |
 | `settled` / `failed` | Terminal for the worker | None |
 
 ## 4. Triage
@@ -157,11 +159,22 @@ Funds remain on the temporary address:
   resetting the row to `awaiting_payment` is **not** safe here because that
   would pay the net again. Manual sweep or write-off only.
 
-### 4.7 `attempts >= 10`
+### 4.7 `stalled` (ten attempts)
 
-`due_settlements` stops selecting the row. The last `state` and `last_error` are
-frozen. Diagnose the blocking condition first, then reset `attempts` as in §4.2
-(only from `awaiting_payment`) and let the worker resume.
+The worker increments `attempts` on every failure and moves the row to `stalled`
+when the count reaches ten, so it stops being selected instead of freezing in a
+live state. `last_error` names the last failure. Diagnose and fix the blocker
+first, then hand the row back to the worker:
+
+```sql
+UPDATE otc_temp_settlements
+SET state = 'awaiting_payment', attempts = 0, last_error = NULL, updated_at = now()
+WHERE trade_id = '<trade-uuid>' AND state = 'stalled';
+```
+
+Only do this when no payout or fee transaction is in flight (`reference` and
+`fee_reference` are null, or already confirmed absent on chain); otherwise treat
+the row as §4.3 or §4.5.
 
 ## 5. Recycle pool and dust
 

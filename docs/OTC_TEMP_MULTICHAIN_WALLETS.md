@@ -438,7 +438,10 @@ defined verification path before marking funded.
 - [ ] Same-chain reserve pay (v1 pays the net from the funded temp instead)
 - [x] Attempts link `temp_wallet_id`: a custodial payment attempt stores the
       wallet row that received the deposit (`otc_p2p_attempts.temp_wallet_id`,
-      nullable for legacy and non-custodial attempts)
+      nullable for legacy and non-custodial attempts; existing rows are
+      backfilled from the payment leg address)
+- [x] A row that fails ten attempts moves to terminal `stalled` instead of
+      freezing in a live state; manual recovery is in the runbook
 
 ### Phase E — Lifecycle
 
@@ -494,8 +497,9 @@ recipient on that network must be configured, and the flag must be on.
 - Not implemented: non-EVM sources, Ever temporary wallets, a separate
   `usd_out` custody wallet (Intents pays the payee directly and refunds to the
   source temp), gas top-up from a reserve (the worker waits for native gas and
-  records the need), quote/status expiry or an attempts cap for a permanently
-  pending Intents swap, stale-claim operator tooling, and TON addresses.
+  records the need), quote/status expiry for a permanently pending Intents swap
+  (the ten-attempt cap now ends in terminal `stalled`), stale-claim operator
+  tooling, and TON addresses.
 - Settlement for Solana, NEAR, TON, TRON and Aptos still has no transaction
   builder or broadcaster, so those sources keep the legacy direct/routed flow.
 - Phase G: demo/live enablement, end-to-end runs and the incident runbook are not done.
@@ -512,6 +516,7 @@ recipient on that network must be configured, and the flag must be on.
 | Table | `backend/migrations/otc_temp_wallets.sql` |
 | Repository helpers | `backend/src/otc/repo/temp_wallets.rs` |
 | Attempt-to-wallet link | `otc_p2p_attempts.temp_wallet_id` (migration `otc_temp_wallets.sql`) |
+| Attempt cap / terminal state | `backend/src/otc/repo/temp_wallets.rs` (`NOTE_ERROR` → `stalled`) |
 | Incident recovery | [`docs/otc-temp-wallet-runbook.md`](otc-temp-wallet-runbook.md) |
 | Feature flag | `otc::config::Config::temp_wallets` (`OTC_TEMP_WALLETS`) |
 
