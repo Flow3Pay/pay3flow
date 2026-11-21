@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS otc_temp_settlements (
  quote_id TEXT,
  source_units TEXT,
  minimum_units TEXT,
+ -- Net paid from the platform reserve instead of the temporary wallet; the
+ -- withheld deposit is then swept in full to the fee recipient.
+ reserve_units TEXT,
  attempts INTEGER NOT NULL DEFAULT 0,
  last_error TEXT,
  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -22,6 +25,7 @@ ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS deposit_memo TEXT;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS quote_id TEXT;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS source_units TEXT;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS minimum_units TEXT;
+ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS reserve_units TEXT;
 -- Earlier builds had a narrower state check; widen it in place.
 ALTER TABLE otc_temp_settlements DROP CONSTRAINT IF EXISTS otc_temp_settlements_state_check;
 ALTER TABLE otc_temp_settlements ADD CONSTRAINT otc_temp_settlements_state_check

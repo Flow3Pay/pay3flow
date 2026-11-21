@@ -21,7 +21,10 @@ Do not enable the flag until every item holds on the target deployment:
 - `near_intents` is configured for every cross-network deal; without it Accept
   does not create a temporary wallet for that route.
 - `temp_gas_reserve` (default `0.0005`) is below the native gas kept on each
-  temporary address. The worker waits instead of signing when gas is short.
+  temporary address and on the `reserve` wallet. The worker waits instead of
+  signing when gas is short.
+- With `OTC_TEMP_RESERVE_PAYOUT=1`, the `reserve` address for every settling
+  network holds enough stablecoin to front one net payout plus gas.
 - `SECRETS_KEY` is stable. Rotating it breaks decryption of every active row
   (see §6).
 - Demo and live databases are separate; never point a demo worker at live rows.
@@ -32,7 +35,8 @@ Do not enable the flag until every item holds on the target deployment:
 | --- | --- |
 | `otc_p2p_trades.body.temp_wallet` | Address, chain, token and asset id shown to both parties |
 | `otc_temp_wallets` | Role, chain, address, derivation index, salt, ciphertext, status |
-| `otc_temp_settlements` | Payout state machine, tx hashes, Intents quote id and deposit details, attempt count |
+| `otc_temp_settlements` | Payout state machine, tx hashes, Intents quote id and deposit details, attempt count, `reserve_units` when the net came from the platform reserve |
+| `otc_temp_wallets` (`role = 'reserve'`) | One platform reserve wallet per chain when `OTC_TEMP_RESERVE_PAYOUT=1` |
 | `otc_p2p_attempts.temp_wallet_id` | Links a payment attempt to the custody row that received the deposit |
 
 Inspect one deal:
@@ -76,7 +80,7 @@ The settlement worker (`otc::temp_settle`) only picks rows whose trade is
 | `fee_retained` | Net paid, fee left on the temporary address | Manual sweep or ops write-off |
 | `intents_refunded` | Deposit returned to the temporary address | Manual retry or manual return |
 | `stalled` | Ten failed attempts; the worker no longer selects the row | Operator recovery (§4.7) |
-| `settled` / `failed` | Terminal for the worker | None |
+| `settled` / `failed` | Terminal for the worker; the deal's `ever` row is marked `deleted` | None |
 
 ## 4. Triage
 
@@ -199,11 +203,28 @@ value. There is no re-encryption job yet, so:
 
 ## 7. Reserve and gas
 
-v1 pays the net from the funded temporary address, so the desk reserve is only
-used to top up native gas. Keep a documented per-network gas buffer and alert
-when it drops below one week of expected settlements. Same-chain reserve payout
-and automatic gas top-up are not implemented; a depleted reserve blocks
-settlement until an operator funds gas.
+`OTC_TEMP_RESERVE_PAYOUT=1` pays a same-network net from one platform `reserve`
+wallet per chain instead of from the funded temporary address. The row is
+created on the first settlement and holds role `reserve`, `trade_id = NULL`:
+
+```sql
+SELECT chain, address, status FROM otc_temp_wallets
+WHERE role = 'reserve' ORDER BY chain;
+```
+
+Fund that address with the stablecoin and a native-gas buffer before enabling
+the flag. While the balance is short, the worker keeps the row in
+`awaiting_payment` and `last_error` names the shortfall; top up and the next
+tick pays. The withheld deposit then belongs to the desk, so the sweep sends the
+whole temporary-wallet balance to the fee recipient and the reserve is
+reimbursed from there — a settlement with a non-null `reserve_units` was paid
+from inventory.
+
+With the flag off, the net is paid from the funded temporary address and the
+desk reserve only tops up native gas. Keep a documented per-network gas buffer
+and alert when it drops below one week of expected settlements. Automatic gas
+top-up is not implemented; a depleted reserve blocks settlement until an
+operator funds gas.
 
 ## 8. Evidence to collect for an incident
 

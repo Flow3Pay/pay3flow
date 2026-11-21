@@ -110,6 +110,11 @@ pub(crate) struct Config {
     /// Native gas a temporary wallet must hold before a sweep is signed.
     #[serde(default = "default_temp_gas_reserve")]
     pub temp_gas_reserve: String,
+    /// Pay a same-network payout from the platform reserve on the payout
+    /// network and keep the payer's whole deposit withheld. Off by default:
+    /// the net is then paid from the funded temporary wallet instead.
+    #[serde(default)]
+    pub temp_reserve_payout: bool,
     pub demo: bool,
     #[serde(default = "default_evm_chain")]
     pub ethereum_chain_id: u64,
@@ -176,6 +181,7 @@ impl Default for Config {
             p2p_enabled: false,
             temp_wallets: false,
             temp_gas_reserve: default_temp_gas_reserve(),
+            temp_reserve_payout: false,
             demo: false,
             ethereum_chain_id: default_evm_chain(),
             usdt_contract: default_usdt_contract(),
@@ -240,6 +246,11 @@ impl Config {
         cfg.temp_wallets = match std::env::var("OTC_TEMP_WALLETS") {
             Ok(value) => parse_flag("OTC_TEMP_WALLETS", &value)?,
             Err(std::env::VarError::NotPresent) => cfg.temp_wallets,
+            Err(error) => return Err(error.into()),
+        };
+        cfg.temp_reserve_payout = match std::env::var("OTC_TEMP_RESERVE_PAYOUT") {
+            Ok(value) => parse_flag("OTC_TEMP_RESERVE_PAYOUT", &value)?,
+            Err(std::env::VarError::NotPresent) => cfg.temp_reserve_payout,
             Err(error) => return Err(error.into()),
         };
         cfg.usdt_contract = cfg.usdt_contract.to_ascii_lowercase();
@@ -544,6 +555,7 @@ mod config_tests {
     #[test]
     fn temporary_wallets_are_off_until_an_explicit_flag() {
         assert!(!Config::default().temp_wallets);
+        assert!(!Config::default().temp_reserve_payout);
         assert!(parse_flag("OTC_TEMP_WALLETS", "1").unwrap());
         assert!(!parse_flag("OTC_TEMP_WALLETS", "0").unwrap());
         assert!(parse_flag("OTC_TEMP_WALLETS", "maybe").is_err());

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS otc_temp_wallets (
  -- P2P acceptance is the only deal flow that will create temps in this codebase,
  -- so the deal reference points at otc_p2p_trades rather than otc_trades.
  trade_id UUID REFERENCES otc_p2p_trades(id),
- role TEXT NOT NULL CHECK(role IN ('ever','usd','usd_in','usd_out')),
+ role TEXT NOT NULL CHECK(role IN ('ever','usd','usd_in','usd_out','reserve')),
  chain TEXT NOT NULL,
  address TEXT NOT NULL,
  derivation_index INTEGER NOT NULL CHECK(derivation_index >= 0),
@@ -26,6 +26,13 @@ CREATE INDEX IF NOT EXISTS otc_temp_wallets_pool
  ON otc_temp_wallets(chain, status) WHERE trade_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS otc_temp_wallets_child
  ON otc_temp_wallets(parent_wallet_id, role) WHERE parent_wallet_id IS NOT NULL;
+-- Same-network payouts can be fronted from one platform reserve per chain. A
+-- previous build restricted the role list, so widen it in place.
+ALTER TABLE otc_temp_wallets DROP CONSTRAINT IF EXISTS otc_temp_wallets_role_check;
+ALTER TABLE otc_temp_wallets ADD CONSTRAINT otc_temp_wallets_role_check
+ CHECK(role IN ('ever','usd','usd_in','usd_out','reserve'));
+CREATE UNIQUE INDEX IF NOT EXISTS otc_temp_wallets_reserve
+ ON otc_temp_wallets(chain) WHERE role='reserve' AND trade_id IS NULL;
 -- Attempt rows link the custody row that received the deposit (spec §6.1 step
 -- 12). Nullable: legacy and non-custodial attempts have no temporary wallet.
 ALTER TABLE otc_p2p_attempts ADD COLUMN IF NOT EXISTS temp_wallet_id UUID REFERENCES otc_temp_wallets(id);

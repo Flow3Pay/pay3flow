@@ -14,14 +14,17 @@ const BY_ADDRESS: &str = "SELECT id,trade_id,role,chain,address,derivation_index
 const SET_STATUS: &str = "UPDATE otc_temp_wallets SET status=$2,updated_at=now() WHERE id=$1";
 const RECYCLE: &str =
     "UPDATE otc_temp_wallets SET trade_id=NULL,status='recycled',updated_at=now() WHERE id=$1";
+const RESERVE: &str = "SELECT id,chain,address,derivation_index,salt,key_ciphertext FROM otc_temp_wallets WHERE role='reserve' AND trade_id IS NULL AND chain=$1 AND status='active' ORDER BY created_at LIMIT 1";
+const DELETE_ROLE: &str = "UPDATE otc_temp_wallets SET status='deleted',updated_at=now() WHERE trade_id=$1 AND role=$2 AND status<>'deleted'";
 const INSERT_SETTLEMENT: &str = "INSERT INTO otc_temp_settlements(trade_id,wallet_id) VALUES($1,$2) ON CONFLICT (trade_id) DO NOTHING";
 const SETTLEMENT_STATE: &str = "SELECT state FROM otc_temp_settlements WHERE trade_id=$1";
-const DUE_SETTLEMENTS: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.state,s.reference,s.fee_reference,s.attempts,s.deposit_address,s.deposit_memo,s.quote_id,s.source_units,s.minimum_units FROM otc_temp_settlements s JOIN otc_temp_wallets w ON w.id=s.wallet_id JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE t.state IN ('delivery_pending','completed') AND (s.state IN ('awaiting_payment','payout_submitted','intents_submitted','fee_submitted') OR (s.state='payout_claim' AND s.updated_at<now()-interval '2 minutes')) AND s.attempts<10 ORDER BY s.updated_at LIMIT 20";
+const DUE_SETTLEMENTS: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.state,s.reference,s.fee_reference,s.attempts,s.deposit_address,s.deposit_memo,s.quote_id,s.source_units,s.minimum_units,s.reserve_units FROM otc_temp_settlements s JOIN otc_temp_wallets w ON w.id=s.wallet_id JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE t.state IN ('delivery_pending','completed') AND (s.state IN ('awaiting_payment','payout_submitted','intents_submitted','fee_submitted') OR (s.state='payout_claim' AND s.updated_at<now()-interval '2 minutes')) AND s.attempts<10 ORDER BY s.updated_at LIMIT 20";
 const CLAIM: &str = "UPDATE otc_temp_settlements SET state='payout_claim',updated_at=now() WHERE trade_id=$1 AND state='awaiting_payment'";
 const SET_STATE: &str =
     "UPDATE otc_temp_settlements SET state=$2,last_error=$3,updated_at=now() WHERE trade_id=$1";
 const SET_PAYOUT_REFERENCE: &str = "UPDATE otc_temp_settlements SET reference=$2,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
 const SET_FEE_REFERENCE: &str = "UPDATE otc_temp_settlements SET fee_reference=$2,state='fee_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('payout_submitted','intents_submitted')";
+const SET_RESERVE_PAYMENT: &str = "UPDATE otc_temp_settlements SET reference=$2,reserve_units=$3,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
 const SET_INTENTS_QUOTE: &str = "UPDATE otc_temp_settlements SET reference=$2,deposit_address=$3,deposit_memo=$4,quote_id=$5,source_units=$6,minimum_units=$7,state='intents_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
 /// A row that keeps failing stops being selected at ten attempts, so the tenth
 /// failure moves it to an explicit terminal state instead of freezing in a live
@@ -106,6 +109,20 @@ pub(crate) struct SettlementRow {
     pub quote_id: Option<String>,
     pub source_units: Option<String>,
     pub minimum_units: Option<String>,
+    /// Net fronted from the platform reserve when this is set.
+    pub reserve_units: Option<String>,
+}
+
+/// One platform reserve wallet for a chain (spec §5.4). It is stored like a
+/// temporary wallet so the same per-row salted encryption applies.
+#[derive(Clone)]
+pub(crate) struct ReserveWallet {
+    pub id: Uuid,
+    pub chain: String,
+    pub address: String,
+    pub derivation_index: i32,
+    pub salt: Vec<u8>,
+    pub key_ciphertext: Vec<u8>,
 }
 
 pub(crate) async fn insert_settlement(
@@ -163,6 +180,7 @@ pub(crate) async fn due_settlements(
             quote_id: row.get(14),
             source_units: row.get(15),
             minimum_units: row.get(16),
+            reserve_units: row.get(17),
         })
         .collect())
 }
@@ -229,6 +247,19 @@ pub(crate) async fn set_intents_quote(
     Ok(())
 }
 
+/// Marks the net as fronted from the reserve and records the payout hash.
+pub(crate) async fn set_reserve_payment(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    reference: &str,
+    units: &str,
+) -> Result<()> {
+    client
+        .execute(SET_RESERVE_PAYMENT, &[trade_id, &reference, &units])
+        .await?;
+    Ok(())
+}
+
 pub(crate) async fn note_error(
     client: &(impl GenericClient + Sync),
     trade_id: &Uuid,
@@ -277,14 +308,53 @@ pub(crate) async fn recycle(client: &(impl GenericClient + Sync), id: &Uuid) -> 
     Ok(())
 }
 
+/// The active platform reserve for a chain, if it has been provisioned.
+pub(crate) async fn reserve(
+    client: &(impl GenericClient + Sync),
+    chain: &str,
+) -> Result<Option<ReserveWallet>> {
+    Ok(client
+        .query_opt(RESERVE, &[&chain])
+        .await?
+        .map(|row| ReserveWallet {
+            id: row.get("id"),
+            chain: row.get("chain"),
+            address: row.get("address"),
+            derivation_index: row.get("derivation_index"),
+            salt: row.get("salt"),
+            key_ciphertext: row.get("key_ciphertext"),
+        }))
+}
+
+/// Soft-deletes every wallet row of one role for a deal (the Ever temp after
+/// its payout). Rows are kept for forensics, never hard-deleted.
+pub(crate) async fn delete_role(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    role: &str,
+) -> Result<()> {
+    client.execute(DELETE_ROLE, &[trade_id, &role]).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{COLUMNS, NOTE_ERROR};
+    use super::{COLUMNS, DELETE_ROLE, NOTE_ERROR, RESERVE, SET_RESERVE_PAYMENT};
 
     #[test]
     fn the_attempt_cap_becomes_a_terminal_stalled_state() {
         assert!(NOTE_ERROR.contains("THEN 'stalled'"));
         assert!(NOTE_ERROR.contains("attempts+1>=10"));
+    }
+
+    #[test]
+    fn reserve_rows_are_pool_wallets_and_payouts_record_their_amount() {
+        assert!(RESERVE.contains("role='reserve'"));
+        assert!(RESERVE.contains("trade_id IS NULL"));
+        assert!(RESERVE.contains("status='active'"));
+        assert!(SET_RESERVE_PAYMENT.contains("reserve_units=$3"));
+        assert!(SET_RESERVE_PAYMENT.contains("state='payout_submitted'"));
+        assert!(DELETE_ROLE.contains("status='deleted'"));
     }
 
     #[test]
