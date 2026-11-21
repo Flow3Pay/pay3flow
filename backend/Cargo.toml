@@ -56,6 +56,17 @@ salsa20 = "0.10"
 argon2 = { version = "0.5", features = ["password-hash"] }
 zeroize = "1"
 alloy = { version = "1", default-features = false, features = ["consensus", "signer-local", "network", "eips", "sol-types"] }
+# Chain SDKs for temporary-wallet signing (spec §5.1.1). Each family builds and
+# signs its transaction with the maintained SDK instead of hand-rolled encoding.
+solana-sdk = "4"
+spl-token = "9"
+bincode = "1.3"
+near-api-types = "0.8.7"
+borsh = "1"
+anychain-core = "0.1.8"
+anychain-tron = "0.2.15"
+anychain-ton = "0.1.23"
+aptos-sdk = { version = "0.8", default-features = false, features = ["ed25519"] }
 
 [dev-dependencies]
 bip39 = "2"

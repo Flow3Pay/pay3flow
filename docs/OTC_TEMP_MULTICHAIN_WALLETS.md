@@ -18,8 +18,11 @@ Status: **partially implemented**. Phases A–E are implemented for EVM stableco
 sources behind the off-by-default `OTC_TEMP_WALLETS` flag. A same-network payout
 is a direct ERC-20 transfer from the temporary wallet, or from the platform
 `reserve` when `OTC_TEMP_RESERVE_PAYOUT=1`; a cross-network payout is an
-exact-output NEAR Intents quote signed from the temporary wallet. Non-EVM sources, the Ever
-temporary leg, same-chain reserve payout and TON addresses are not implemented.
+exact-output NEAR Intents quote signed from the temporary wallet. Phase B key
+material and signed transaction builders exist for every chain family through
+the maintained SDKs, but only the EVM source can be broadcast today. Non-EVM settlement (broadcasting) and the Ever
+temporary leg are not implemented; the non-EVM SDK signers exist but no worker
+calls them yet.
 Operational recovery is in [the runbook](otc-temp-wallet-runbook.md). See §10 for
 the checklist and §10.1 for the shipped code paths and deviations.
 
@@ -170,7 +173,11 @@ RLP/BCS/protobuf/cell encoders are not acceptable for a custodial path.
 | Aptos | official Aptos Rust SDK | ed25519 account, BCS transaction, FA transfer |
 
 Pin versions in `backend/Cargo.toml` and cover each family with the round-trip
-sign/verify tests in Phase B. The generator API above stays chain-neutral; the
+sign/verify tests in Phase B. The wired crates are `solana-sdk` + `spl-token`,
+`near-api-types` (the types crate of near-api-rs; the `near-api` RPC client
+needs OpenSSL/pkg-config, which the build image does not provide),
+`anychain-tron`, `anychain-ton` (which wraps tonlib-rs cells), `aptos-sdk` and
+`alloy` for EVM. The generator API above stays chain-neutral; the
 SDK lives behind it so callers never depend on a concrete chain crate.
 
 ### 5.2 Encryption at rest
@@ -414,11 +421,15 @@ defined verification path before marking funded.
 ### Phase B — Generator crate/module
 
 - [x] `generate` / `derive_next` / address helpers for EVM, TRON, Solana, NEAR,
-      Aptos and Everscale (`otc::temp_wallet`); TON key generation works but its
-      address still needs the TON wallet SDK
-- [ ] Chain SDKs from §5.1.1 wired in; no hand-rolled RLP/BCS/protobuf/cell encoding
-      (EVM signing uses `alloy` consensus/signer; Solana, NEAR, TON, TRON and
-      Aptos settlement SDKs and transaction builders are not wired)
+      TON, Aptos and Everscale (`otc::temp_wallet`)
+- [x] Chain SDKs from §5.1.1 wired in; no hand-rolled RLP/BCS/protobuf/cell
+      encoding. EVM uses `alloy`; Solana uses `solana-sdk` + `spl-token`; NEAR
+      uses `near-api-types` (`ft_transfer` Borsh transaction); TRON uses
+      `anychain-tron` (TRC-20 trigger contract); TON uses `anychain-ton` (the
+      tonlib-rs cell stack and wallet V4R2 external message); Aptos uses
+      `aptos-sdk` (fungible-asset entry function and signed BCS transaction)
+- [ ] Non-EVM broadcasters: the SDK signers return signed bytes, but no worker
+      reads nonces/seqnos from those chains yet, so only EVM sources settle
 - [x] Unit tests: BIP39/BIP44 vector, sign/verify round trip, salt round trip
 - [x] Zeroize + no Debug on secret types
 
@@ -508,8 +519,9 @@ recipient on that network must be configured, and the flag must be on.
   records the need), quote/status expiry for a permanently pending Intents swap
   (the ten-attempt cap now ends in terminal `stalled`), stale-claim operator
   tooling, and TON addresses.
-- Settlement for Solana, NEAR, TON, TRON and Aptos still has no transaction
-  builder or broadcaster, so those sources keep the legacy direct/routed flow.
+- Settlement for Solana, NEAR, TON, TRON and Aptos has SDK-built signed
+  transactions but still no nonce/seqno reader or broadcaster, so those sources
+  keep the legacy direct/routed flow.
 - The reserve is generated and sealed on the first same-network settlement; the
   contract has no Accept-time inventory preflight, so a short reserve surfaces as
   `awaiting_payment` with `last_error` instead of an Accept conflict. The three
@@ -520,6 +532,11 @@ recipient on that network must be configured, and the flag must be on.
 | Piece | Location |
 | --- | --- |
 | Key generation, derivation, addresses | `backend/src/otc/temp_wallet.rs` |
+| Solana address and SPL transfer signing | `backend/src/otc/temp_wallet/solana.rs` |
+| NEAR implicit address and NEP-141 signing | `backend/src/otc/temp_wallet/near.rs` |
+| TRON address and TRC-20 signing | `backend/src/otc/temp_wallet/tron.rs` |
+| TON wallet-V4R2 address and transfer signing | `backend/src/otc/temp_wallet/ton.rs` |
+| Aptos address and fungible-asset signing | `backend/src/otc/temp_wallet/aptos.rs` |
 | Salted AES-256-GCM seed storage | `backend/src/otc/temp_wallet.rs` (`seal` / `open`) |
 | EVM EIP-1559 signing and ERC-20 calldata | `backend/src/otc/temp_wallet.rs` |
 | EVM nonce/gas/fee reads and broadcast | `backend/src/otc/chain/mod.rs` |

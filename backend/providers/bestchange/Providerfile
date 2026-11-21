@@ -90,11 +90,35 @@ struct ApiRate {
     inmax: Option<ApiNumber>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 enum ApiNumber {
     Number(f64),
     Text(String),
+}
+
+// The rate fields arrive as JSON numbers or decimal strings. A plain untagged
+// enum is not enough: a dependency of the token-wallet signers turns on
+// serde_json's `arbitrary_precision`, under which numbers no longer deserialize
+// through `deserialize_any` into an untagged float. Reading the value first
+// keeps both representations working.
+impl<'de> Deserialize<'de> for ApiNumber {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        match serde_json::Value::deserialize(deserializer)? {
+            serde_json::Value::Number(number) => number
+                .to_string()
+                .replace(',', ".")
+                .parse::<f64>()
+                .map(Self::Number)
+                .map_err(serde::de::Error::custom),
+            serde_json::Value::String(value) => Ok(Self::Text(value)),
+            _ => Err(serde::de::Error::custom(
+                "a rate must be a number or a decimal string",
+            )),
+        }
+    }
 }
 
 impl ApiNumber {

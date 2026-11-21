@@ -23,9 +23,15 @@ use hmac::{Hmac, Mac};
 use k256::ecdsa::SigningKey;
 use rand::{rngs::OsRng, RngCore};
 use sha2::{Digest, Sha256, Sha512};
-use sha3::{Keccak256, Sha3_256};
+use sha3::Keccak256;
 use std::str::FromStr;
 use zeroize::Zeroizing;
+
+mod aptos;
+mod near;
+mod solana;
+mod ton;
+mod tron;
 
 const INFO: &[u8] = b"otc-temp-wallet-v1";
 const NONCE_LEN: usize = 12;
@@ -241,6 +247,12 @@ impl WalletMaterial {
         self.seed.as_slice()
     }
 
+    /// The derived ed25519 secret that the chain SDKs sign with. Zeroized on
+    /// drop; never logged.
+    pub(crate) fn ed25519_secret(&self) -> Result<Zeroizing<[u8; 32]>> {
+        Ok(Zeroizing::new(self.ed25519()?.to_bytes()))
+    }
+
     fn secp256k1(&self) -> Result<SigningKey> {
         let coin = self
             .chain
@@ -287,24 +299,15 @@ impl WalletMaterial {
             Chain::Ethereum | Chain::PolygonPos | Chain::AvalancheC => {
                 Ok(evm_address(&self.secp256k1()?.verifying_key()))
             }
-            Chain::Tron => {
-                let point = self.secp256k1()?.verifying_key().to_encoded_point(false);
-                Ok(tron_address(&point.as_bytes()[1..]))
-            }
-            Chain::Solana => Ok(bs58::encode(self.public_key()?).into_string()),
-            Chain::Near => Ok(hex(&self.public_key()?)),
-            Chain::Aptos => {
-                let mut bytes = self.public_key()?;
-                bytes.push(0);
-                Ok(format!("0x{}", hex(&Sha3_256::digest(&bytes))))
-            }
+            Chain::Tron => tron::address(&self.public_key()?),
+            Chain::Solana => solana::address(&self.public_key()?),
+            Chain::Near => near::address(&self.public_key()?),
+            Chain::Aptos => aptos::address(&self.public_key()?),
             Chain::Everscale => {
                 let key: [u8; 32] = self.ed25519()?.verifying_key().to_bytes();
                 super::everwallet::address(&key)
             }
-            Chain::Ton => Err(invalid(
-                "TON temporary wallet address requires the TON wallet SDK",
-            )),
+            Chain::Ton => ton::address(&self.public_key()?),
         }
     }
 
@@ -378,17 +381,6 @@ fn evm_address(key: &k256::ecdsa::VerifyingKey) -> String {
     let point = key.to_encoded_point(false);
     let hash = Keccak256::digest(&point.as_bytes()[1..]);
     format!("0x{}", hex(&hash[12..]))
-}
-
-fn tron_address(public: &[u8]) -> String {
-    let hash = Keccak256::digest(public);
-    let mut payload = [0u8; 21];
-    payload[0] = 0x41;
-    payload[1..].copy_from_slice(&hash[12..]);
-    let checksum = Sha256::digest(Sha256::digest(payload));
-    let mut encoded = payload.to_vec();
-    encoded.extend_from_slice(&checksum[..4]);
-    bs58::encode(encoded).into_string()
 }
 
 /// One encrypted seed with its own salt (spec §5.2).
@@ -512,15 +504,10 @@ mod tests {
     }
 
     #[test]
-    fn tron_address_is_base58check_with_the_0x41_prefix() {
+    fn tron_address_comes_from_the_sdk() {
         let address = vector_material(Chain::Tron).address().unwrap();
         assert_eq!(address.len(), 34);
         assert!(address.starts_with('T'));
-        let bytes = bs58::decode(&address).into_vec().unwrap();
-        assert_eq!(bytes.len(), 25);
-        assert_eq!(bytes[0], 0x41);
-        let checksum = Sha256::digest(Sha256::digest(&bytes[..21]));
-        assert_eq!(&bytes[21..], &checksum[..4]);
         // A second derivation is stable but different.
         let next = vector_material(Chain::Tron).derive_next().unwrap();
         assert_ne!(next.address().unwrap(), address);
@@ -528,12 +515,22 @@ mod tests {
 
     #[test]
     fn ed25519_families_sign_and_verify_with_chain_format_addresses() {
-        for chain in [Chain::Solana, Chain::Near, Chain::Aptos, Chain::Everscale] {
+        for chain in [
+            Chain::Solana,
+            Chain::Near,
+            Chain::Aptos,
+            Chain::Ton,
+            Chain::Everscale,
+        ] {
             let material = vector_material(chain);
             let address = material.address().unwrap();
             match chain {
                 Chain::Solana => {
                     assert_eq!(bs58::decode(&address).into_vec().unwrap().len(), 32)
+                }
+                Chain::Ton => {
+                    assert_eq!(address.len(), 48);
+                    assert!(address.starts_with('U'), "{address}");
                 }
                 Chain::Near => {
                     assert_eq!(address.len(), 64);
@@ -578,7 +575,7 @@ mod tests {
             let verifying =
                 VerifyingKey::recover_from_prehash(&digest, &signature, recovery).unwrap();
             let recovered = if chain == Chain::Tron {
-                tron_address(&verifying.to_encoded_point(false).as_bytes()[1..])
+                tron::address(&verifying.to_encoded_point(false).as_bytes()[1..]).unwrap()
             } else {
                 evm_address(&verifying)
             };
@@ -691,10 +688,12 @@ mod tests {
     }
 
     #[test]
-    fn ton_needs_the_wallet_sdk_before_it_can_produce_an_address() {
+    fn ton_address_is_a_mainnet_non_bounceable_wallet_v4_address() {
         let material = WalletMaterial::generate(Chain::Ton).unwrap();
-        assert!(material.public_key().is_ok());
-        assert!(material.address().is_err());
+        let address = material.address().unwrap();
+        assert_eq!(address.len(), 48);
+        assert!(address.starts_with('U'));
+        assert_ne!(material.derive_next().unwrap().address().unwrap(), address);
     }
 
     #[test]
