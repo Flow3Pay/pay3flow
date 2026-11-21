@@ -70,6 +70,9 @@ const VERIFY_ATTEMPT: &str =
     "UPDATE otc_p2p_attempts SET state='verified',evidence=$2,updated_at=now() WHERE id=$1";
 const ADVANCE_TRADE: &str =
     "UPDATE otc_p2p_trades SET state=$2,payout_by=$3,updated_at=now() WHERE id=$1";
+/// Finishes a deal from the EVER worker without overwriting the payout deadline.
+const COMPLETE_TRADE: &str =
+    "UPDATE otc_p2p_trades SET state='completed',updated_at=now() WHERE id=$1 AND state='delivery_pending'";
 const INSERT_FEE: &str = "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,basis_asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,$5,6,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9::text::numeric,$10,'accrued',$11) ON CONFLICT (trade_id) DO NOTHING";
 const SETTLE_OFFER: &str =
     "UPDATE otc_public_offers SET state='settled' WHERE id=$1 AND state='taken'";
@@ -576,6 +579,11 @@ pub(crate) async fn advance_trade(
     client
         .execute(ADVANCE_TRADE, &[id, &state, &payout_by])
         .await?;
+    Ok(())
+}
+
+pub(crate) async fn complete_trade(client: &(impl GenericClient + Sync), id: &Uuid) -> Result<()> {
+    client.execute(COMPLETE_TRADE, &[id]).await?;
     Ok(())
 }
 

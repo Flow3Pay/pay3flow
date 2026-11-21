@@ -245,7 +245,8 @@ FROM otc_temp_settlements WHERE ever_state IS NOT NULL ORDER BY updated_at DESC;
 ```
 
 `ever_state = 'pending'` with "not funded enough" means the temp holds less than
-`ever_units + ever_gas_reserve`; top it up and the next tick retries.
+`ever_units + p2p_ever_fee_reserve` (the buffer the payout handoff adds); top it
+up and the next tick retries.
 `submitted` means the signed external message was accepted; the worker polls
 `transactions(in_msg: reference)` until it is included. `failed` means the
 message aborted or 60 attempts elapsed; inspect the temp address and the

@@ -2135,6 +2135,11 @@ impl Service {
             )
         };
         repo::p2p::advance_trade(&tx, &id, next, &payout_by).await?;
+        if kind == "payout" && next == "completed" {
+            // Legacy direct payout: no EVER worker is involved, so retire the
+            // reserved row here.
+            repo::temp_wallets::delete_role(&tx, &id, "ever").await?;
+        }
         if kind == "payment" {
             // Accrue the fee once payment is verified, before the seller can
             // release EVER. This lets the fee be collected before payout.

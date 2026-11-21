@@ -533,7 +533,7 @@ impl Service {
                 return Ok(());
             }
             repo::temp_wallets::delete_role(&client, &row.trade_id, "ever").await?;
-            repo::p2p::advance_trade(&client, &row.trade_id, "completed", &None).await?;
+            repo::p2p::complete_trade(&client, &row.trade_id).await?;
             repo::temp_wallets::set_ever_state(&client, &row.trade_id, "paid", None, None).await?;
             tracing::info!(trade=%row.trade_id, reference, "otc.temp.ever_paid");
             return Ok(());
@@ -550,7 +550,9 @@ impl Service {
             .as_str()
             .ok_or_else(|| invalid("deal EVER payee is missing"))?;
         let balance = super::chain::number(&self.ever_account(&row.address).await?["balance"])?;
-        let gas = amount::units(&self.cfg.ever_gas_reserve, 9)?;
+        // The payout handoff adds exactly `p2p_ever_fee_reserve` on top of the
+        // booked amount, so that is the gas buffer this address can rely on.
+        let gas = amount::units(&self.cfg.p2p_ever_fee_reserve, 9)?;
         let needed = units
             .checked_add(gas)
             .ok_or_else(|| invalid("EVER payout amount overflow"))?;
