@@ -65,8 +65,9 @@ near-api-types = "0.8.7"
 borsh = "1"
 anychain-core = "0.1.8"
 anychain-tron = "0.2.15"
-anychain-ton = "0.1.23"
-aptos-sdk = { version = "0.8", default-features = false, features = ["ed25519"] }
+tonlib-core = "0.26.11"
+num-bigint = "0.4"
+aptos-bcs = "0.1.4"
 
 [dev-dependencies]
 bip39 = "2"

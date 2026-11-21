@@ -170,14 +170,20 @@ RLP/BCS/protobuf/cell encoders are not acceptable for a custodial path.
 | TON | [`tonlib-rs`](https://github.com/ston-fi/tonlib-rs) | wallet contracts, cells/BoC, external messages, signing |
 | TRON | [`anychain-tron`](https://crates.io/crates/anychain-tron) | Tron address encoding, TRX/TRC-20 transactions, signing |
 | Everscale | existing `evernode-multisig` + `everscale-types` | EverWallet address and contract messages |
-| Aptos | official Aptos Rust SDK | ed25519 account, BCS transaction, FA transfer |
+| Aptos | [`aptos-bcs`](https://crates.io/crates/aptos-bcs) | ed25519 account, BCS transaction, FA transfer (the SDK's own codec; see the note below on `aptos-sdk`) |
 
 Pin versions in `backend/Cargo.toml` and cover each family with the round-trip
 sign/verify tests in Phase B. The wired crates are `solana-sdk` + `spl-token`,
 `near-api-types` (the types crate of near-api-rs; the `near-api` RPC client
 needs OpenSSL/pkg-config, which the build image does not provide),
-`anychain-tron`, `anychain-ton` (which wraps tonlib-rs cells), `aptos-sdk` and
-`alloy` for EVM. The generator API above stays chain-neutral; the
+`anychain-tron`, `tonlib-core` (the pure-Rust part of tonlib-rs), `aptos-bcs`
+and `alloy` for EVM. Avoid the native `tonlib` crate: it needs cmake and a
+compiled tonlib, and the pure-Rust core builds everywhere the backend does.
+`aptos-sdk` is not linked: every 0.4–0.8 release force-enables
+`serde_json/arbitrary_precision`, which changes `serde_json::Value` and breaks
+the BestChange provider's untagged number parsing. The Aptos module encodes the
+canonical BCS layout with `aptos-bcs` (the SDK's own codec) and pins it with an
+`aptos-sdk`-produced golden vector. The generator API above stays chain-neutral; the
 SDK lives behind it so callers never depend on a concrete chain crate.
 
 ### 5.2 Encryption at rest
@@ -425,9 +431,13 @@ defined verification path before marking funded.
 - [x] Chain SDKs from §5.1.1 wired in; no hand-rolled RLP/BCS/protobuf/cell
       encoding. EVM uses `alloy`; Solana uses `solana-sdk` + `spl-token`; NEAR
       uses `near-api-types` (`ft_transfer` Borsh transaction); TRON uses
-      `anychain-tron` (TRC-20 trigger contract); TON uses `anychain-ton` (the
-      tonlib-rs cell stack and wallet V4R2 external message); Aptos uses
-      `aptos-sdk` (fungible-asset entry function and signed BCS transaction)
+      `anychain-tron` (TRC-20 trigger contract); TON uses `tonlib-core`, the
+      pure-Rust cell/wallet V4R2 library of tonlib-rs (the native `tonlib` crate
+      needs cmake and a tonlib build, so it is not linked); Aptos uses
+      `aptos-bcs` (fungible-asset entry function and signed BCS transaction);
+      `aptos-sdk` itself is not linked because it force-enables
+      `serde_json/arbitrary_precision` and breaks provider parsing, so an
+      SDK-generated golden vector pins the byte layout
 - [ ] Non-EVM broadcasters: the SDK signers return signed bytes, but no worker
       reads nonces/seqnos from those chains yet, so only EVM sources settle
 - [x] Unit tests: BIP39/BIP44 vector, sign/verify round trip, salt round trip
