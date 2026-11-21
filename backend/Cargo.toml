@@ -55,6 +55,7 @@ blake2 = "0.10"
 salsa20 = "0.10"
 argon2 = { version = "0.5", features = ["password-hash"] }
 zeroize = "1"
+alloy = { version = "1", default-features = false, features = ["consensus", "signer-local", "network", "eips", "sol-types"] }
 
 [dev-dependencies]
 bip39 = "2"

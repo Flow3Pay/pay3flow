@@ -11,6 +11,12 @@ use super::{
 };
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
+use alloy::consensus::{SignableTransaction, TxEip1559, TxEnvelope};
+use alloy::eips::eip2718::Encodable2718;
+use alloy::network::TxSignerSync;
+use alloy::primitives::{Address, TxKind, U256};
+use alloy::signers::local::PrivateKeySigner;
+use alloy::sol_types::SolCall;
 use bip32::{DerivationPath, XPrv};
 use ed25519_dalek::{Signer, SigningKey as EdSigningKey};
 use hmac::{Hmac, Mac};
@@ -24,6 +30,10 @@ use zeroize::Zeroizing;
 const INFO: &[u8] = b"otc-temp-wallet-v1";
 const NONCE_LEN: usize = 12;
 const SALT_LEN: usize = 32;
+
+alloy::sol! {
+    function transfer(address to, uint256 amount) external returns (bool);
+}
 /// BIP32 non-hardened child indexes stop one below this value.
 const MAX_INDEX: u32 = 0x7fff_ffff;
 
@@ -132,6 +142,29 @@ pub(crate) fn roles(send_chain_usd: &str, get_chain_usd: &str) -> Result<Vec<(Ro
         roles.push((Role::UsdOut, get));
     }
     Ok(roles)
+}
+
+/// Values a caller must read from the chain before signing. RPC reads stay in
+/// `otc::chain`; this type is chain-neutral so settlement never depends on an
+/// alloy type.
+pub(crate) struct EvmTransfer {
+    pub chain_id: u64,
+    pub nonce: u64,
+    pub gas_limit: u64,
+    pub max_fee_per_gas: u128,
+    pub max_priority_fee_per_gas: u128,
+    pub to: [u8; 20],
+    pub value: u128,
+    pub calldata: Vec<u8>,
+}
+
+/// Standard ERC-20 `transfer` calldata, encoded by alloy's ABI codec.
+pub(crate) fn erc20_transfer_calldata(to: [u8; 20], amount: u128) -> Vec<u8> {
+    transferCall {
+        to: Address::from(to),
+        amount: U256::from(amount),
+    }
+    .abi_encode()
 }
 
 /// Key material for one temporary wallet row. Deliberately no `Debug`.
@@ -278,6 +311,40 @@ impl WalletMaterial {
                 recovery: None,
             })
         }
+    }
+
+    /// Signs an EIP-1559 transaction and returns the network envelope
+    /// (`0x02 || rlp(...)`). Broadcasting is a separate, retry-safe step, so a
+    /// caller persists the envelope before sending it.
+    pub(crate) fn sign_evm_transfer(&self, transfer: &EvmTransfer) -> Result<Vec<u8>> {
+        if !self.chain.is_evm() {
+            return Err(invalid("EVM transfers require an EVM temporary wallet"));
+        }
+        if transfer.chain_id == 0
+            || transfer.gas_limit == 0
+            || transfer.to == [0u8; 20]
+            || transfer.max_priority_fee_per_gas > transfer.max_fee_per_gas
+        {
+            return Err(invalid("invalid EVM transfer parameters"));
+        }
+        let key = self.secp256k1()?.to_bytes();
+        let signer = PrivateKeySigner::from_slice(&key)
+            .map_err(|_| invalid("temporary wallet key is invalid"))?;
+        let mut transaction = TxEip1559 {
+            chain_id: transfer.chain_id,
+            nonce: transfer.nonce,
+            gas_limit: transfer.gas_limit,
+            max_fee_per_gas: transfer.max_fee_per_gas,
+            max_priority_fee_per_gas: transfer.max_priority_fee_per_gas,
+            to: TxKind::Call(Address::from(transfer.to)),
+            value: U256::from(transfer.value),
+            access_list: Default::default(),
+            input: transfer.calldata.clone().into(),
+        };
+        let signature = signer
+            .sign_transaction_sync(&mut transaction)
+            .map_err(|_| invalid("temporary wallet signing failed"))?;
+        Ok(TxEnvelope::from(transaction.into_signed(signature)).encoded_2718())
     }
 
     /// Signs a 32-byte prehash. This is the primitive a transaction builder
@@ -545,6 +612,72 @@ mod tests {
         assert!(open("unit-test-secret", &first.salt, &tampered).is_err());
         assert!(open("unit-test-secret", &[0u8; 8], &first.ciphertext).is_err());
         assert!(open("unit-test-secret", &first.salt, &[]).is_err());
+    }
+
+    fn evm_plan() -> EvmTransfer {
+        EvmTransfer {
+            chain_id: 1,
+            nonce: 6,
+            gas_limit: 65_000,
+            max_fee_per_gas: 20_000_000_000,
+            max_priority_fee_per_gas: 1_000_000_000,
+            to: [0x11; 20],
+            value: 0,
+            calldata: erc20_transfer_calldata([0x22; 20], 1_000_000),
+        }
+    }
+
+    #[test]
+    fn evm_transfer_encodes_and_signs_for_the_wallet_address() {
+        use alloy::eips::eip2718::Decodable2718;
+        let material = vector_material(Chain::Ethereum);
+        let raw = material.sign_evm_transfer(&evm_plan()).unwrap();
+        assert_eq!(raw[0], 0x02);
+        let mut encoded = raw.as_slice();
+        let envelope = TxEnvelope::decode_2718(&mut encoded).unwrap();
+        let signed = envelope.as_eip1559().unwrap();
+        assert_eq!(signed.tx().chain_id, 1);
+        assert_eq!(signed.tx().nonce, 6);
+        assert_eq!(signed.tx().gas_limit, 65_000);
+        assert_eq!(signed.tx().max_fee_per_gas, 20_000_000_000);
+        assert_eq!(signed.tx().value, U256::ZERO);
+        assert_eq!(signed.tx().input[..4], [0xa9, 0x05, 0x9c, 0xbb]);
+        let recovered = signed
+            .signature()
+            .recover_address_from_prehash(&signed.tx().signature_hash())
+            .unwrap();
+        assert_eq!(
+            format!("0x{}", hex(recovered.as_slice())),
+            material.address().unwrap()
+        );
+    }
+
+    #[test]
+    fn erc20_calldata_carries_the_padded_address_and_amount() {
+        let data = erc20_transfer_calldata([0x22; 20], 1_000_000);
+        assert_eq!(data.len(), 68);
+        assert_eq!(&data[..4], &[0xa9, 0x05, 0x9c, 0xbb]);
+        assert_eq!(&data[4..16], &[0u8; 12]);
+        assert_eq!(&data[16..36], &[0x22; 20]);
+        assert_eq!(&data[36..68], &U256::from(1_000_000u64).to_be_bytes::<32>());
+    }
+
+    #[test]
+    fn evm_signing_rejects_non_evm_wallets_and_impossible_fees() {
+        let plan = evm_plan();
+        assert!(vector_material(Chain::Solana)
+            .sign_evm_transfer(&plan)
+            .is_err());
+        let mut bad = plan;
+        bad.max_priority_fee_per_gas = bad.max_fee_per_gas + 1;
+        assert!(vector_material(Chain::Ethereum)
+            .sign_evm_transfer(&bad)
+            .is_err());
+        let mut zero = evm_plan();
+        zero.to = [0u8; 20];
+        assert!(vector_material(Chain::Ethereum)
+            .sign_evm_transfer(&zero)
+            .is_err());
     }
 
     #[test]

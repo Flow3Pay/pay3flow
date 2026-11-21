@@ -404,8 +404,8 @@ defined verification path before marking funded.
       Aptos and Everscale (`otc::temp_wallet`); TON key generation works but its
       address still needs the TON wallet SDK
 - [ ] Chain SDKs from §5.1.1 wired in; no hand-rolled RLP/BCS/protobuf/cell encoding
-      (only `bip32` + `k256` + `ed25519-dalek` are in the tree; settlement SDKs
-      and transaction builders are not)
+      (EVM signing uses `alloy` consensus/signer; Solana, NEAR, TON, TRON and
+      Aptos settlement SDKs and transaction builders are not wired)
 - [x] Unit tests: BIP39/BIP44 vector, sign/verify round trip, salt round trip
 - [x] Zeroize + no Debug on secret types
 
@@ -457,9 +457,9 @@ following remain open:
 
 - Phase D: Accept does not create rows and the deal payload has no `temp_wallets`.
 - Phase E: no `create_based_on`, commission sweep or recycle runs.
-- Settlement: no chain transaction is assembled, signed or broadcast; the
-  spec’s `sign_transfer` is represented only by the `sign_digest` / `sign_message`
-  primitives in `otc::temp_wallet`.
+- Settlement: EVM envelopes can be built, signed and broadcast
+  (`sign_evm_transfer`, `evm_temp_token_transfer`), but no deal calls them;
+  Solana, NEAR, TON, TRON and Aptos have no transaction builder or broadcaster.
 - TON: `address()` returns an error until the TON wallet SDK is wired.
 - Phase G: demo/live enablement, end-to-end runs and the incident runbook are not done.
 
@@ -467,6 +467,8 @@ following remain open:
 | --- | --- |
 | Key generation, derivation, addresses | `backend/src/otc/temp_wallet.rs` |
 | Salted AES-256-GCM seed storage | `backend/src/otc/temp_wallet.rs` (`seal` / `open`) |
+| EVM EIP-1559 signing and ERC-20 calldata | `backend/src/otc/temp_wallet.rs` |
+| EVM nonce/gas/fee reads and broadcast | `backend/src/otc/chain/mod.rs` |
 | Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`roles`) |
 | Table | `backend/migrations/otc_temp_wallets.sql` |
 | Repository helpers | `backend/src/otc/repo/temp_wallets.rs` |

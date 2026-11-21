@@ -5,9 +5,25 @@ pub(crate) mod ton;
 pub(crate) mod tron;
 use super::{
     error::{invalid, Result},
-    Service,
+    temp_wallet::{self, EvmTransfer, WalletMaterial},
+    wallet, Service,
 };
 use serde_json::{json, Value};
+
+/// Doubles the base fee and adds the tip, which survives about six full blocks
+/// of base-fee growth before the transaction is underpriced.
+fn fee_cap(base: u128, priority: u128) -> Result<u128> {
+    base.checked_mul(2)
+        .and_then(|fee| fee.checked_add(priority))
+        .ok_or_else(|| invalid("Ethereum fee cap overflow"))
+}
+
+fn address_bytes(value: &str) -> Result<[u8; 20]> {
+    wallet::unhex(value)?
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid("invalid Ethereum address"))
+}
 
 pub(crate) fn number(value: &Value) -> Result<u128> {
     if let Some(n) = value.as_u64() {
@@ -131,6 +147,112 @@ impl Service {
         }
         nonce.ok_or_else(|| invalid("no Ethereum RPC endpoint configured"))
     }
+    /// Broadcasts one already-signed EVM envelope to the first RPC. Sending is
+    /// kept separate from signing so a caller persists the envelope before it
+    /// can be retried.
+    pub(crate) async fn evm_send_raw(&self, net: &EvmNet, raw: &[u8]) -> Result<String> {
+        let url = net
+            .rpcs
+            .first()
+            .ok_or_else(|| invalid("no Ethereum RPC endpoint configured"))?;
+        let sent = self
+            .evm_read(
+                url,
+                "eth_sendRawTransaction",
+                json!([format!("0x{}", wallet::hex(raw))]),
+            )
+            .await?;
+        let hash = sent
+            .as_str()
+            .filter(|hash| {
+                hash.len() == 66
+                    && hash.starts_with("0x")
+                    && hash[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+            .ok_or_else(|| invalid("Ethereum RPC returned no transaction hash"))?;
+        Ok(hash.to_ascii_lowercase())
+    }
+
+    pub(crate) async fn evm_base_fee(&self, net: &EvmNet) -> Result<u128> {
+        let block = self
+            .evm_agree(net, "eth_getBlockByNumber", json!(["latest", false]))
+            .await?;
+        number(&block["baseFeePerGas"])
+    }
+
+    pub(crate) async fn evm_max_priority_fee(&self, net: &EvmNet) -> Result<u128> {
+        number(
+            &self
+                .evm_agree(net, "eth_maxPriorityFeePerGas", json!([]))
+                .await?,
+        )
+    }
+
+    pub(crate) async fn evm_estimate_gas(
+        &self,
+        net: &EvmNet,
+        from: &str,
+        to: &str,
+        data: &[u8],
+        value: u128,
+    ) -> Result<u128> {
+        number(
+            &self
+                .evm_agree(
+                    net,
+                    "eth_estimateGas",
+                    json!([{
+                        "from": from,
+                        "to": to,
+                        "data": format!("0x{}", wallet::hex(data)),
+                        "value": format!("0x{value:x}"),
+                    }]),
+                )
+                .await?,
+        )
+    }
+
+    /// Signs and broadcasts a stablecoin transfer from a temporary wallet.
+    /// Fee, gas and nonce are read from both configured RPCs before signing.
+    pub(crate) async fn evm_temp_token_transfer(
+        &self,
+        material: &WalletMaterial,
+        net: &EvmNet,
+        token: &str,
+        to: &str,
+        amount: u128,
+    ) -> Result<String> {
+        if amount == 0 {
+            return Err(invalid("EVM transfer amount must be positive"));
+        }
+        self.evm_chain_matches(net).await?;
+        let from = material.address()?;
+        let token = wallet::address("ethereum", token)?;
+        let to = wallet::address("ethereum", to)?;
+        let calldata = temp_wallet::erc20_transfer_calldata(address_bytes(&to)?, amount);
+        let gas = self
+            .evm_estimate_gas(net, &from, &token, &calldata, 0)
+            .await?;
+        let gas_limit = gas.saturating_add(gas / 4);
+        let priority = self.evm_max_priority_fee(net).await?;
+        let max_fee = fee_cap(self.evm_base_fee(net).await?, priority)?;
+        let nonce = self.evm_pending_nonce(net, &from).await?;
+        let transfer = EvmTransfer {
+            chain_id: net.chain_id,
+            nonce: u64::try_from(nonce)
+                .map_err(|_| invalid("Ethereum nonce exceeds the signing range"))?,
+            gas_limit: u64::try_from(gas_limit)
+                .map_err(|_| invalid("Ethereum gas estimate exceeds the signing range"))?,
+            max_fee_per_gas: max_fee,
+            max_priority_fee_per_gas: priority,
+            to: address_bytes(&token)?,
+            value: 0,
+            calldata,
+        };
+        let raw = material.sign_evm_transfer(&transfer)?;
+        self.evm_send_raw(net, &raw).await
+    }
+
     pub(crate) async fn ever_agree(&self, query: &str, variables: Value) -> Result<Value> {
         if self.cfg.everscale_graphql.len() < 2 {
             return Err(invalid("two independent Everscale endpoints required"));
@@ -155,5 +277,27 @@ impl Service {
             return Err(invalid("independent Everscale readings disagree"));
         }
         Ok(values.remove(0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fee_cap_leaves_room_for_base_fee_growth() {
+        assert_eq!(fee_cap(10, 2).unwrap(), 22);
+        assert_eq!(fee_cap(0, 0).unwrap(), 0);
+        assert!(fee_cap(u128::MAX, 1).is_err());
+    }
+
+    #[test]
+    fn addresses_are_exactly_twenty_bytes() {
+        assert_eq!(
+            address_bytes(&format!("0x{}", "a".repeat(40))).unwrap(),
+            [0xaa; 20]
+        );
+        assert!(address_bytes(&format!("0x{}", "a".repeat(38))).is_err());
+        assert!(address_bytes("0xzz").is_err());
     }
 }
