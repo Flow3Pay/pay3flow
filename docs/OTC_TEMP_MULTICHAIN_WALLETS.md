@@ -12,13 +12,15 @@ Related baselines:
 - [OTC multi-chain stablecoin requirements](OTC_MULTI_CHAIN_REQUIREMENTS.md)
 - [OTC service](otc-service.md)
 - [NEAR Intents routes](near-intents-routes.md)
+- [Temporary wallet incident runbook](otc-temp-wallet-runbook.md)
 
 Status: **partially implemented**. Phases A–E are implemented for EVM stablecoin
 sources behind the off-by-default `OTC_TEMP_WALLETS` flag. A same-network payout
 is a direct ERC-20 transfer; a cross-network payout is an exact-output NEAR
 Intents quote signed from the temporary wallet. Non-EVM sources, the Ever
-temporary leg and TON addresses are not implemented. See §10 for the checklist
-and §10.1–§10.2 for the shipped code paths and deviations.
+temporary leg, same-chain reserve payout and TON addresses are not implemented.
+Operational recovery is in [the runbook](otc-temp-wallet-runbook.md). See §10 for
+the checklist and §10.1 for the shipped code paths and deviations.
 
 ---
 
@@ -434,7 +436,9 @@ defined verification path before marking funded.
 - [x] Cross-chain: exact-output Intents quote, signed deposit from the temp,
       status polling, fee withhold/recycle on success
 - [ ] Same-chain reserve pay (v1 pays the net from the funded temp instead)
-- [ ] Attempts link `temp_wallet_id`
+- [x] Attempts link `temp_wallet_id`: a custodial payment attempt stores the
+      wallet row that received the deposit (`otc_p2p_attempts.temp_wallet_id`,
+      nullable for legacy and non-custodial attempts)
 
 ### Phase E — Lifecycle
 
@@ -458,7 +462,10 @@ defined verification path before marking funded.
 
 - [x] Flag off by default (`OTC_TEMP_WALLETS`, default `0`)
 - [ ] Demo enablement + E2E on two-wallet and three-wallet paths
-- [ ] Incident runbook: stuck temp, Intents refund, reserve depletion
+- [x] Incident runbook: stuck temp, Intents refund, reserve depletion
+      ([`otc-temp-wallet-runbook.md`](otc-temp-wallet-runbook.md)); there is no
+      operator CLI, so recovery is by fixing the blocker and letting the worker
+      resume from a safe state
 - [ ] Live enablement only with dual RPC, fee recipients, and reserve balances
 
 ---
@@ -504,6 +511,8 @@ recipient on that network must be configured, and the flag must be on.
 | Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`roles`) |
 | Table | `backend/migrations/otc_temp_wallets.sql` |
 | Repository helpers | `backend/src/otc/repo/temp_wallets.rs` |
+| Attempt-to-wallet link | `otc_p2p_attempts.temp_wallet_id` (migration `otc_temp_wallets.sql`) |
+| Incident recovery | [`docs/otc-temp-wallet-runbook.md`](otc-temp-wallet-runbook.md) |
 | Feature flag | `otc::config::Config::temp_wallets` (`OTC_TEMP_WALLETS`) |
 
 `trade_id` references `otc_p2p_trades` because P2P acceptance is the flow that
@@ -542,6 +551,8 @@ would create temps here; the spec’s `otc_trades` predates that table.
 ## 13. Doc ownership
 
 When behavior ships, keep this file as the behavioral source of truth for temp
-wallets. Narrower API field lists belong in OpenAPI; ops secrets handling belongs
-in the deployment runbook. If product changes the 2/3 rule, $30 floor, or
+wallets. Narrower API field lists belong in OpenAPI; step-by-step incident and
+secrets handling belongs in
+[`otc-temp-wallet-runbook.md`](otc-temp-wallet-runbook.md) and the deployment
+runbook. If product changes the 2/3 rule, $30 floor, or
 custody model, update this document in the same change set as the code.

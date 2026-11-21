@@ -1,6 +1,7 @@
--- Custodial temporary intermediaries for OTC deals (spec §5.3). The generator
--- and encryption helpers exist; deal wiring and settlement signing do not, so
--- the feature flag stays off and no row is created by a live deal yet.
+-- Custodial temporary intermediaries for OTC deals (spec §5.3). Key material,
+-- salted encryption, EVM deal wiring and settlement signing live in
+-- `otc::temp_wallet` / `otc::temp_settle`; no row exists while
+-- `OTC_TEMP_WALLETS` is off.
 CREATE TABLE IF NOT EXISTS otc_temp_wallets (
  id UUID PRIMARY KEY,
  -- P2P acceptance is the only deal flow that will create temps in this codebase,
@@ -25,3 +26,8 @@ CREATE INDEX IF NOT EXISTS otc_temp_wallets_pool
  ON otc_temp_wallets(chain, status) WHERE trade_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS otc_temp_wallets_child
  ON otc_temp_wallets(parent_wallet_id, role) WHERE parent_wallet_id IS NOT NULL;
+-- Attempt rows link the custody row that received the deposit (spec §6.1 step
+-- 12). Nullable: legacy and non-custodial attempts have no temporary wallet.
+ALTER TABLE otc_p2p_attempts ADD COLUMN IF NOT EXISTS temp_wallet_id UUID REFERENCES otc_temp_wallets(id);
+CREATE INDEX IF NOT EXISTS otc_p2p_attempts_temp_wallet
+ ON otc_p2p_attempts(temp_wallet_id) WHERE temp_wallet_id IS NOT NULL;

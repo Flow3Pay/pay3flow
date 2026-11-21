@@ -1067,9 +1067,24 @@ impl Service {
         };
         let fee_source_address = (kind == "payment").then(|| leg.sender.clone());
         let fee_source_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
+        // Link a custodial payment to the wallet row that will hold the deposit,
+        // so staff can find the address, its ciphertext row and settlement state
+        // from the attempt alone (spec §6.1 step 12).
+        let temp_wallet_id = if kind == "payment" {
+            repo::temp_wallets::for_trade(&tx, &id)
+                .await?
+                .into_iter()
+                .find(|wallet| {
+                    wallet.chain == leg.chain && matches!(wallet.role.as_str(), "usd" | "usd_in")
+                })
+                .map(|wallet| wallet.id)
+        } else {
+            None
+        };
         let attempt = Uuid::new_v4();
         let instructions = json!({
             "leg": leg, "call": call, "checkpoint": checkpoint,
+            "temp_wallet_id": temp_wallet_id,
             "stablecoin": if kind == "fee" { json!("USDT") } else { body.get("stablecoin").cloned().unwrap_or(json!("USDT")) },
             "fee_source_asset": if kind == "payment" { Some(format!("{}@{fee_source_network}", body["stablecoin"].as_str().unwrap_or("USDT"))) } else { None },
             "fee_source_asset_id": if kind == "payment" { body.get("stablecoin_asset_id").cloned() } else { None },
@@ -1089,6 +1104,7 @@ impl Service {
             &leg.chain,
             &instructions,
             key,
+            temp_wallet_id.as_ref(),
         )
         .await?;
         tracing::info!(trade=%id, attempt=%attempt, kind, actor, "otc.p2p.handoff");

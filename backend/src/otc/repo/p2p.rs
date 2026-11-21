@@ -19,7 +19,7 @@ const LOCK_TRADE_BY_ACTOR: &str =
     "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2) FOR UPDATE";
 const CONFIRM_OWNER: &str = "UPDATE otc_p2p_trades SET owner_confirmed_at=COALESCE(owner_confirmed_at,now()),updated_at=now() WHERE id=$1 RETURNING *";
 const CONFIRM_TAKER: &str = "UPDATE otc_p2p_trades SET taker_confirmed_at=COALESCE(taker_confirmed_at,now()),updated_at=now() WHERE id=$1 RETURNING *";
-const ATTEMPTS_BY_TRADES: &str = "SELECT id,trade_id,kind,state,instructions,reference FROM otc_p2p_attempts WHERE trade_id = ANY($1) ORDER BY created_at";
+const ATTEMPTS_BY_TRADES: &str = "SELECT id,trade_id,kind,state,instructions,reference,temp_wallet_id FROM otc_p2p_attempts WHERE trade_id = ANY($1) ORDER BY created_at";
 const ATTEMPT_BY_KEY: &str =
     "SELECT id,instructions,state FROM otc_p2p_attempts WHERE trade_id=$1 AND kind=$2 AND idempotency_key=$3";
 const FEE_COLLECTED: &str = "SELECT id FROM otc_p2p_fees WHERE trade_id=$1 AND state='collected'";
@@ -28,7 +28,7 @@ const LOCK_ACCRUED_FEE_PAYER_FIRST: &str = "SELECT payer_actor,fee_units::text,a
 const VERIFIED_PAYMENT_INSTRUCTIONS: &str = "SELECT instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state='verified' ORDER BY updated_at DESC LIMIT 1";
 const UNRESOLVED_ATTEMPT: &str =
     "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind=$2 AND state!='failed'";
-const INSERT_ATTEMPT: &str = "INSERT INTO otc_p2p_attempts(id,trade_id,kind,payer_actor,chain,state,instructions,idempotency_key) VALUES($1,$2,$3,$4,$5,'prepared',$6,$7)";
+const INSERT_ATTEMPT: &str = "INSERT INTO otc_p2p_attempts(id,trade_id,kind,payer_actor,chain,state,instructions,idempotency_key,temp_wallet_id) VALUES($1,$2,$3,$4,$5,'prepared',$6,$7,$8)";
 const TRADE_BODY_BY_ACTOR: &str =
     "SELECT body FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2)";
 const PAYMENT_ATTEMPT_BY_KEY: &str = "SELECT id,state,instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND idempotency_key=$2";
@@ -179,7 +179,8 @@ pub(crate) async fn attempts_by_trades(
                 serde_json::json!({"id": row.get::<_, Uuid>("id"), "kind": row.get::<_, String>("kind"),
                     "state": row.get::<_, String>("state"),
                     "instructions": row.get::<_, Value>("instructions"),
-                    "reference": row.get::<_, Option<String>>("reference")}),
+                    "reference": row.get::<_, Option<String>>("reference"),
+                    "temp_wallet_id": row.get::<_, Option<Uuid>>("temp_wallet_id")}),
             )
         })
         .collect())
@@ -257,11 +258,21 @@ pub(crate) async fn insert_attempt(
     chain: &str,
     instructions: &Value,
     key: &str,
+    temp_wallet_id: Option<&Uuid>,
 ) -> Result<()> {
     client
         .execute(
             INSERT_ATTEMPT,
-            &[&attempt, &id, &kind, &actor, &chain, &instructions, &key],
+            &[
+                &attempt,
+                &id,
+                &kind,
+                &actor,
+                &chain,
+                &instructions,
+                &key,
+                &temp_wallet_id,
+            ],
         )
         .await?;
     Ok(())
@@ -609,4 +620,16 @@ pub(crate) async fn settle_offer(
 ) -> Result<()> {
     client.execute(SETTLE_OFFER, &[offer_id]).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ATTEMPTS_BY_TRADES, INSERT_ATTEMPT};
+
+    #[test]
+    fn attempts_carry_the_temporary_wallet_that_receives_the_deposit() {
+        assert!(ATTEMPTS_BY_TRADES.contains("temp_wallet_id"));
+        assert!(INSERT_ATTEMPT.contains("temp_wallet_id"));
+        assert!(INSERT_ATTEMPT.ends_with("$8)"));
+    }
 }
