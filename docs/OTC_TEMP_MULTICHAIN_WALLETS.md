@@ -15,14 +15,17 @@ Related baselines:
 - [Temporary wallet incident runbook](otc-temp-wallet-runbook.md)
 
 Status: **partially implemented**. Phases A–E are implemented for EVM stablecoin
-sources behind the off-by-default `OTC_TEMP_WALLETS` flag. A same-network payout
-is a direct ERC-20 transfer from the temporary wallet, or from the platform
-`reserve` when `OTC_TEMP_RESERVE_PAYOUT=1`; a cross-network payout is an
-exact-output NEAR Intents quote signed from the temporary wallet. Phase B key
-material and signed transaction builders exist for every chain family through
-the maintained SDKs, but only the EVM source can be broadcast today. Non-EVM settlement (broadcasting) and the Ever
-temporary leg are not implemented; the non-EVM SDK signers exist but no worker
-calls them yet.
+sources behind the off-by-default `OTC_TEMP_WALLETS` flag. Accept creates the
+planned 2–3 rows (`ever` + `usd`, or `ever` + `usd_in` + `usd_out`). A
+same-network payout is a direct ERC-20 transfer from the USD input wallet, or
+from the platform `reserve` when `OTC_TEMP_RESERVE_PAYOUT=1` (preflighted at
+Accept); a cross-network payout is an exact-output NEAR Intents quote signed
+from that wallet. Phase B key material and signed transaction builders exist for
+every chain family through the maintained SDKs, but only the EVM source can be
+broadcast today. Only the USD input row is funded: the EVER leg and non-EVM
+sources stay on the legacy direct/routed path, so `ever` and `usd_out` are
+reserved addresses retired at settlement. Non-EVM settlement (broadcasting) is
+not implemented; the non-EVM SDK signers exist but no worker calls them yet.
 Operational recovery is in [the runbook](otc-temp-wallet-runbook.md). See §10 for
 the checklist and §10.1 for the shipped code paths and deviations.
 
@@ -265,9 +268,10 @@ delete(ever temp)
 
 ### 6.1 Cross-network USD (`send_chain_usd != get_chain_usd`) — 3 wallets
 
-> Shipped v1 creates only the source USD temporary wallet. Everscale settlement
-> stays on the legacy path and Intents pays the payee's main USD wallet
-> directly, so no separate `usd_out` custody wallet exists yet.
+> Accept persists the full planned set (`ever`, `usd_in`, `usd_out`). Only
+> `usd_in` is funded and settled: the EVER leg stays on the legacy direct path
+> and Intents pays the payee's main USD wallet, so `ever` and `usd_out` are
+> reserved addresses retired at settlement.
 
 Step-by-step:
 
@@ -304,9 +308,10 @@ Step-by-step:
 
 ### 6.2 Same-network USD (`send_chain_usd == get_chain_usd`) — 2 wallets
 
-> Shipped v1 creates only the `usd` temporary wallet; the EVER leg and its
-> `ever` temporary wallet are not created yet. With `OTC_TEMP_RESERVE_PAYOUT=1`
-> the net is paid from the `reserve` wallet row instead of the funded temp.
+> Accept persists `ever` + `usd`. The EVER leg still uses the legacy direct
+> path, so the `ever` row is a reserved address retired at settlement. With
+> `OTC_TEMP_RESERVE_PAYOUT=1` the net is paid from the `reserve` wallet row
+> instead of the funded temp, and Accept preflights that reserve.
 
 1. Accept creates `ever` + `usd` on that single USD network.
 2. Users fund `temp_ever` and `temp_usd` as above.
@@ -452,8 +457,9 @@ defined verification path before marking funded.
 
 ### Phase D — Deal wiring
 
-- [x] Accept creates the USD row for EVM stablecoin sources, same-network or
-      cross-network through Intents (flag on, idempotent)
+- [x] Accept creates the planned 2–3 rows (`ever` + `usd`, or `ever` +
+      `usd_in` + `usd_out`) for EVM stablecoin sources (flag on, idempotent);
+      only the USD input row is funded by the current settlement paths
 - [x] Deal payload exposes `temp_wallets`
 - [x] The existing EVM observer verifies the transfer into the temp address
 - [x] Cross-chain: exact-output Intents quote, signed deposit from the temp,
@@ -461,7 +467,9 @@ defined verification path before marking funded.
 - [x] Same-chain reserve pay behind `OTC_TEMP_RESERVE_PAYOUT`: the net is paid
       from one `reserve` wallet per chain, the payer's whole deposit stays
       withheld, and the sweep in §7 sends that deposit to the fee recipient.
-      With the flag off the net is paid from the funded temp as before
+      Accept preflights the reserve balance and native gas and returns a 409
+      before creating an address when the reserve cannot front the net. With
+      the flag off the net is paid from the funded temp as before
 - [x] Attempts link `temp_wallet_id`: a custodial payment attempt stores the
       wallet row that received the deposit (`otc_p2p_attempts.temp_wallet_id`,
       nullable for legacy and non-custodial attempts; existing rows are
@@ -476,8 +484,8 @@ defined verification path before marking funded.
       whatever is left, including a partial fee after cross-network route cost)
 - [x] The withheld 3% is sent to the configured fee recipient; without one it is
       marked `fee_retained` for ops
-- [x] Every terminal payout state marks the deal's `ever` role row `deleted`
-      (§7 rule 4). v1 creates no Ever temp, so the update is a no-op today
+- [x] Every terminal payout state marks the deal's reserved `ever` and
+      `usd_out` rows `deleted` (§7 rule 4); the funded input row is recycled
 
 ### Phase F — Product floor + docs/API
 
@@ -502,11 +510,15 @@ defined verification path before marking funded.
 
 ### 10.1 Implementation status (2026-11-21)
 
-The custody layer only creates a temp wallet when an EVM signer can sweep it:
+The custody layer only creates temp wallets when an EVM signer can sweep them:
 the payer must be on Ethereum/Polygon/Avalanche, two RPC endpoints and a fee
 recipient on that network must be configured, and the flag must be on.
 
-- Accept creates one source `usd` wallet for an EVM payer. A same-network payout
+- Accept creates the planned set for an EVM payer: `ever` + `usd` when both
+  stablecoin legs share a network, `ever` + `usd_in` + `usd_out` when they
+  differ (a payout network outside the custody set gets `ever` + `usd_in`).
+  Only the input row (`usd`/`usd_in`) is funded and settled today, so `ever`
+  and `usd_out` are reserved addresses retired at settlement. A same-network payout
   pays the payee directly from the temp wallet, or from the platform `reserve`
   when `OTC_TEMP_RESERVE_PAYOUT=1` (the payer's whole deposit is then swept to
   the fee recipient and `otc_temp_settlements.reserve_units` records the fronted
@@ -532,12 +544,13 @@ recipient on that network must be configured, and the flag must be on.
 - Settlement for Solana, NEAR, TON, TRON and Aptos has SDK-built signed
   transactions but still no nonce/seqno reader or broadcaster, so those sources
   keep the legacy direct/routed flow.
-- The reserve is generated and sealed on the first same-network settlement; the
-  contract has no Accept-time inventory preflight, so a short reserve surfaces as
-  `awaiting_payment` with `last_error` instead of an Accept conflict. The three
-  percent fee is recorded as collected once the net is delivered, and the sweep
-  of the withheld deposit reimburses the reserve.
-- Phase G: demo/live enablement, end-to-end runs and the incident runbook are not done.
+- The reserve is generated and sealed on first use. With
+  `OTC_TEMP_RESERVE_PAYOUT=1`, Accept preflights the reserve balance and native
+  gas for a same-network deal and returns a 409 before creating an address when
+  it cannot front the net. The three percent fee is recorded as collected once
+  the net is delivered, and the sweep reimburses the reserve.
+- Phase G: demo/live enablement and end-to-end runs are not done; the incident
+  runbook exists at [`otc-temp-wallet-runbook.md`](otc-temp-wallet-runbook.md).
 
 | Piece | Location |
 | --- | --- |
@@ -554,8 +567,8 @@ recipient on that network must be configured, and the flag must be on.
 | Settlement state table | `backend/migrations/otc_temp_settlements.sql` |
 | Same-network reserve payout | `backend/src/otc/temp_settle.rs` (`temp_reserve_payout`, `ensure_reserve`) |
 | Reserve wallet rows | `otc_temp_wallets` (`role = 'reserve'`, one per chain) |
-| Ever temp retirement | `repo::temp_wallets::delete_role` on every terminal payout state |
-| Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`roles`) |
+| Reserved-role retirement (Accept-time `ever`/`usd_out`) | `repo::temp_wallets::delete_role` on every terminal payout state |
+| Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`plan`, gated on an EVM payer) |
 | Table | `backend/migrations/otc_temp_wallets.sql` |
 | Repository helpers | `backend/src/otc/repo/temp_wallets.rs` |
 | Attempt-to-wallet link | `otc_p2p_attempts.temp_wallet_id` (migration `otc_temp_wallets.sql`) |

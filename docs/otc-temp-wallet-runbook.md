@@ -5,9 +5,11 @@ is [`OTC_TEMP_MULTICHAIN_WALLETS.md`](OTC_TEMP_MULTICHAIN_WALLETS.md); this file
 covers what an operator does when a settlement stops moving.
 
 Scope: `OTC_TEMP_WALLETS=1` and an EVM stablecoin source
-(Ethereum/Polygon/Avalanche). Non-EVM sources, the Ever temporary leg and the
-same-chain reserve payout do not create temporary wallets, so the legacy
-direct/routed flow applies to them.
+(Ethereum/Polygon/Avalanche). Accept reserves the planned 2–3 rows, but only the
+USD input wallet is funded and settled: the Ever leg and non-EVM sources stay
+on the legacy direct/routed flow, and `ever`/`usd_out` are retired at
+settlement. With `OTC_TEMP_RESERVE_PAYOUT=1` a same-chain reserve payout still
+uses the deal's USD input wallet.
 
 ## 1. Enablement prerequisites
 
@@ -33,7 +35,8 @@ Do not enable the flag until every item holds on the target deployment:
 
 | Source of truth | Contents |
 | --- | --- |
-| `otc_p2p_trades.body.temp_wallet` | Address, chain, token and asset id shown to both parties |
+| `otc_p2p_trades.body.temp_wallet` | Funded USD input address, chain, token and asset id shown to both parties |
+| `otc_p2p_trades.body.temp_wallets` | Full planned set (`ever`, `usd`, or `usd_in` + `usd_out`) with status |
 | `otc_temp_wallets` | Role, chain, address, derivation index, salt, ciphertext, status |
 | `otc_temp_settlements` | Payout state machine, tx hashes, Intents quote id and deposit details, attempt count, `reserve_units` when the net came from the platform reserve |
 | `otc_temp_wallets` (`role = 'reserve'`) | One platform reserve wallet per chain when `OTC_TEMP_RESERVE_PAYOUT=1` |
@@ -213,9 +216,9 @@ WHERE role = 'reserve' ORDER BY chain;
 ```
 
 Fund that address with the stablecoin and a native-gas buffer before enabling
-the flag. While the balance is short, the worker keeps the row in
-`awaiting_payment` and `last_error` names the shortfall; top up and the next
-tick pays. The withheld deposit then belongs to the desk, so the sweep sends the
+the flag. With the flag on, Accept preflights this balance and gas and returns a
+409 naming the reserve address when it cannot front a same-network net; top up
+and retry the Accept. The withheld deposit then belongs to the desk, so the sweep sends the
 whole temporary-wallet balance to the fee recipient and the reserve is
 reimbursed from there — a settlement with a non-null `reserve_units` was paid
 from inventory.
