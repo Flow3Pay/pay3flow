@@ -124,6 +124,15 @@ impl Role {
 ///
 /// Everscale is only ever the EVER leg; it is not a stablecoin network in this
 /// product, so a caller that asks for it as a USD destination is rejected.
+/// Networks eligible for the v1 temporary-wallet flow: one EVM network on both
+/// stablecoin legs. Anything else keeps the legacy direct/routed path.
+pub(crate) fn same_chain_evm(send_chain_usd: &str, get_chain_usd: &str) -> Result<Option<Chain>> {
+    let (Ok(send), Ok(get)) = (Chain::parse(send_chain_usd), Chain::parse(get_chain_usd)) else {
+        return Ok(None);
+    };
+    Ok((send == get && send.is_evm()).then_some(send))
+}
+
 pub(crate) fn roles(send_chain_usd: &str, get_chain_usd: &str) -> Result<Vec<(Role, Chain)>> {
     let send = Chain::parse(send_chain_usd)?;
     let get = Chain::parse(get_chain_usd)?;
@@ -685,6 +694,21 @@ mod tests {
         let material = WalletMaterial::generate(Chain::Ton).unwrap();
         assert!(material.public_key().is_ok());
         assert!(material.address().is_err());
+    }
+
+    #[test]
+    fn only_same_network_evm_deals_use_temporary_wallets() {
+        assert_eq!(
+            same_chain_evm("ethereum", "ethereum").unwrap(),
+            Some(Chain::Ethereum)
+        );
+        assert_eq!(
+            same_chain_evm("polygon", "polygon-pos").unwrap(),
+            Some(Chain::PolygonPos)
+        );
+        assert_eq!(same_chain_evm("ethereum", "solana").unwrap(), None);
+        assert_eq!(same_chain_evm("base", "base").unwrap(), None);
+        assert_eq!(same_chain_evm("tron", "tron").unwrap(), None);
     }
 
     #[test]

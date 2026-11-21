@@ -410,7 +410,7 @@ impl Service {
             ));
         }
         let pay_by = Utc::now() + Duration::hours(DEAL_LIFETIME_HOURS);
-        let body = json!({
+        let mut body = json!({
             "direction": direction,
             "stablecoin": stablecoin.symbol(),
             "ever_amount": terms["ever_amount"], "usdt_amount": terms["usdt_amount"],
@@ -430,9 +430,48 @@ impl Service {
             "ever_network_id": 42,
             "fee_policy": fee_policy,
         });
+        let temp_wallet = if self.cfg.temp_wallets {
+            match super::temp_wallet::same_chain_evm(&payer_network, &output_network)? {
+                Some(chain)
+                    if self.p2p_direct_network_available(&payer_network)
+                        && self.cfg.fee_recipients.contains_key(payer_network.as_str()) =>
+                {
+                    let material = super::temp_wallet::WalletMaterial::generate(chain)?;
+                    let sealed = super::temp_wallet::seal(&self.secrets_key, material.seed())?;
+                    let address = material.address()?;
+                    body["temp_wallet"] = json!({
+                        "role": "usd",
+                        "chain": chain.id(),
+                        "address": address,
+                        "status": "awaiting_payment",
+                    });
+                    Some((chain, address, sealed, material))
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
         let id = Uuid::new_v4();
         repo::p2p::mark_offer_taken(&tx, &offer_id).await?;
         repo::p2p::insert_trade(&tx, &id, &offer_id, &owner, actor, &body, key, &pay_by).await?;
+        if let Some((chain, address, sealed, material)) = temp_wallet {
+            let wallet_id = Uuid::new_v4();
+            repo::temp_wallets::insert(
+                &tx,
+                &wallet_id,
+                Some(&id),
+                "usd",
+                chain.id(),
+                &address,
+                material.derivation_index(),
+                &sealed.salt,
+                &sealed.ciphertext,
+                None,
+            )
+            .await?;
+            repo::temp_wallets::insert_settlement(&tx, &id, &wallet_id).await?;
+        }
         tracing::info!(trade=%id, offer=%offer_id, taker=actor, "otc.p2p.accepted");
         let row = repo::p2p::trade_by_id(&tx, &id).await?;
         let result = deal(&row, actor);
@@ -481,6 +520,15 @@ impl Service {
             .await?
             .ok_or(Error::NotFound)?;
         let state: String = row.get("state");
+        if matches!(state.as_str(), "delivery_pending" | "completed") {
+            if let Some(temp_state) = repo::temp_wallets::settlement_state(&tx, &id).await? {
+                if !matches!(temp_state.as_str(), "settled" | "fee_retained") {
+                    return Err(Error::Conflict(
+                        "the temporary wallet payout is still processing".into(),
+                    ));
+                }
+            }
+        }
         if state == "payment_pending" || state == "delivery_pending" {
             let owner: String = row.get("owner_actor");
             let row = if owner == actor {
@@ -510,15 +558,25 @@ impl Service {
     fn deal_leg(&self, body: &Value, kind: &str) -> Result<Leg> {
         let text = |key: &str| body[key].as_str().unwrap_or_default().to_string();
         let (chain, amount, sender, recipient) = match kind {
-            "payment" => (
-                body["stablecoin_network"].as_str().unwrap_or("ethereum"),
-                body["fee_policy"]["net_units"]
-                    .as_str()
-                    .unwrap_or_else(|| body["usdt_units"].as_str().unwrap_or_default())
-                    .to_string(),
-                text("usdt_payer"),
-                text("usdt_payee"),
-            ),
+            "payment" => {
+                let temp = body["temp_wallet"]["address"].as_str();
+                (
+                    body["stablecoin_network"].as_str().unwrap_or("ethereum"),
+                    if temp.is_some() {
+                        // The temporary wallet receives the gross amount; the
+                        // worker withholds the fee and pays the net onward.
+                        text("usdt_units")
+                    } else {
+                        body["fee_policy"]["net_units"]
+                            .as_str()
+                            .unwrap_or_else(|| body["usdt_units"].as_str().unwrap_or_default())
+                            .to_string()
+                    },
+                    text("usdt_payer"),
+                    temp.map(str::to_string)
+                        .unwrap_or_else(|| text("usdt_payee")),
+                )
+            }
             "payout" => (
                 "everscale",
                 text("ever_units"),
@@ -593,6 +651,17 @@ impl Service {
     ) -> Result<Value> {
         let request = request.into();
         let _ = request.source_amount.as_deref();
+        if request.kind == "fee" {
+            let client = self.pool.get().await?;
+            if repo::p2p::trade_body_by_actor(&client, &id, actor)
+                .await
+                .is_ok_and(|body| body.get("temp_wallet").is_some())
+            {
+                return Err(Error::Conflict(
+                    "the service fee is withheld on the temporary wallet".into(),
+                ));
+            }
+        }
         if request.kind == "near-intents-fee" {
             return self.p2p_prepare_near_intents_fee(actor, id, key).await;
         }
@@ -846,7 +915,7 @@ impl Service {
             }
             None => Value::Null,
         };
-        let fee_preflight = if kind == "payment" {
+        let fee_preflight = if kind == "payment" && body.get("temp_wallet").is_none() {
             let source_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
             let source_symbol = body["stablecoin"].as_str().unwrap_or("USDT");
             let source_asset = Asset::new(source_symbol, Some(source_network))?;
@@ -1810,6 +1879,9 @@ impl Service {
                 }
             }
         }
+        if let Err(error) = self.temp_settlement_tick().await {
+            tracing::warn!(error=%error, "otc.p2p.temp_settlement_failed");
+        }
         // Unpaid deals expire; the offer may return to the book.
         let stale = repo::p2p::stale_trades(&client).await?;
         for (id, offer_id) in stale {
@@ -2607,6 +2679,7 @@ fn deal(row: &Row, actor: &str) -> Value {
         })
         .unwrap_or(Value::Null);
     let fee_accrued = matches!(state.as_str(), "delivery_pending" | "completed");
+    let temp_wallets: Vec<Value> = body.get("temp_wallet").cloned().into_iter().collect();
     json!({
         "id": row.get::<_, Uuid>("id"),
         "offer_id": row.get::<_, Uuid>("offer_id"),
@@ -2624,6 +2697,7 @@ fn deal(row: &Row, actor: &str) -> Value {
         "owner_confirmed": owner_confirmed,
         "taker_confirmed": taker_confirmed,
         "terms": body,
+        "temp_wallets": temp_wallets,
         "fee_policy": fee_policy,
         "fee_accrued": fee_accrued,
         "pay_by": row.get::<_, DateTime<Utc>>("pay_by"),

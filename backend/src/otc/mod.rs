@@ -29,6 +29,7 @@ pub(crate) mod repo;
 mod reporting;
 mod review;
 mod route_provider;
+mod temp_settle;
 mod temp_wallet;
 #[cfg(test)]
 mod tests;
@@ -54,6 +55,7 @@ pub struct Service {
     pub(crate) pool: DbPool,
     pub(crate) cfg: Arc<Config>,
     pub(crate) secrets: SecretBox,
+    pub(crate) secrets_key: Arc<str>,
     pub(crate) jwt: Jwt,
     pub(crate) http: reqwest::Client,
     pub(crate) near_intents: Option<NearIntentsProvider>,
@@ -80,6 +82,7 @@ impl Service {
             pool,
             cfg: Arc::new(cfg),
             secrets: SecretBox::new(secrets_key),
+            secrets_key: Arc::from(secrets_key),
             jwt: Jwt::new(&format!("otc:{jwt_secret}")),
             near_intents: None,
             http: reqwest::Client::builder()

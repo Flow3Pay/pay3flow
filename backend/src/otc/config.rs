@@ -93,6 +93,9 @@ fn default_usdt_contract() -> String {
 fn default_ever_fee_reserve() -> String {
     "0.05".into()
 }
+fn default_temp_gas_reserve() -> String {
+    "0.0005".into()
+}
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Config {
@@ -104,6 +107,9 @@ pub(crate) struct Config {
     /// layer exists but deals do not create wallets until settlement ships.
     #[serde(default)]
     pub temp_wallets: bool,
+    /// Native gas a temporary wallet must hold before a sweep is signed.
+    #[serde(default = "default_temp_gas_reserve")]
+    pub temp_gas_reserve: String,
     pub demo: bool,
     #[serde(default = "default_evm_chain")]
     pub ethereum_chain_id: u64,
@@ -169,6 +175,7 @@ impl Default for Config {
             public_offers_enabled: false,
             p2p_enabled: false,
             temp_wallets: false,
+            temp_gas_reserve: default_temp_gas_reserve(),
             demo: false,
             ethereum_chain_id: default_evm_chain(),
             usdt_contract: default_usdt_contract(),
@@ -467,6 +474,7 @@ impl Config {
         }
         super::amount::units(&self.ever_gas_reserve, 9)?;
         super::amount::units(&self.eth_gas_reserve, 18)?;
+        super::amount::units(&self.temp_gas_reserve, 18)?;
         if !self.demo {
             for endpoints in [&self.ethereum_rpc, &self.everscale_graphql] {
                 if endpoints.len() < 2 || endpoints[0] == endpoints[1] {

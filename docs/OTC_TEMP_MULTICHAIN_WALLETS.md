@@ -13,10 +13,10 @@ Related baselines:
 - [OTC service](otc-service.md)
 - [NEAR Intents routes](near-intents-routes.md)
 
-Status: **partially implemented**. Phases A–C are in the tree; Phase D/E deal
-wiring and settlement signing are not, and the feature flag stays off. See §10
-for the checklist and §10.1 for the shipped code paths. No live deal creates a
-temporary wallet yet.
+Status: **partially implemented**. Phases A–E are implemented for same-network
+EVM deals behind the off-by-default `OTC_TEMP_WALLETS` flag. Cross-network
+payouts, non-EVM sources, the Ever temporary leg and TON addresses are not.
+See §10 for the checklist and §10.1 for the shipped code paths.
 
 ---
 
@@ -418,18 +418,20 @@ defined verification path before marking funded.
 
 ### Phase D — Deal wiring
 
-- [ ] Accept creates 2 or 3 rows idempotently
-- [ ] Deal payload exposes temp addresses
-- [ ] Observers mark funded
+- [x] Accept creates the USD row for same-network EVM deals (flag on, idempotent)
+- [x] Deal payload exposes `temp_wallets`
+- [x] The existing EVM observer verifies the transfer into the temp address
 - [ ] Cross-chain: sign temp → Intents; poll; EVER payout from temp
-- [ ] Same-chain: reserve pay + withhold
+- [ ] Same-chain reserve pay (v1 pays the net from the funded temp instead)
 - [ ] Attempts link `temp_wallet_id`
 
 ### Phase E — Lifecycle
 
-- [ ] Balance < $1 → `create_based_on` + delete old
-- [ ] Balance ≥ $1 → `sendcommission` + delete
-- [ ] Always delete ever temp after payout
+- [x] After a settled sweep, `create_based_on` creates the next address and the
+      old wallet is marked `recycled` (dust is left behind; no balance probe yet)
+- [x] The withheld 3% is sent to the configured fee recipient; without one it is
+      marked `fee_retained` for ops
+- [ ] Always delete the Ever temp after payout (v1 does not create an Ever temp)
 
 ### Phase F — Product floor + docs/API
 
@@ -455,12 +457,18 @@ The custody layer is deliberately inert. Wiring it into Accept before a signer
 exists would give users deposit addresses the platform cannot sweep, so the
 following remain open:
 
-- Phase D: Accept does not create rows and the deal payload has no `temp_wallets`.
-- Phase E: no `create_based_on`, commission sweep or recycle runs.
-- Settlement: EVM envelopes can be built, signed and broadcast
-  (`sign_evm_transfer`, `evm_temp_token_transfer`), but no deal calls them;
-  Solana, NEAR, TON, TRON and Aptos have no transaction builder or broadcaster.
-- TON: `address()` returns an error until the TON wallet SDK is wired.
+- Phase D (EVM same-network only): Accept creates the USD wallet when the flag
+  is on, the payer and payout networks are the same, both RPC endpoints and a
+  fee recipient are configured. The deal payload exposes it and the existing EVM
+  observer verifies the deposit.
+- Phase E (EVM same-network only): `otc::temp_settle` pays the net to the payee,
+  withholds and sweeps the 3%, then creates the next `create_based_on` address
+  and marks the old wallet `recycled`.
+- Not implemented: cross-network payouts through NEAR Intents, non-EVM sources,
+  Ever temporary wallets, gas top-up from a reserve (the worker waits for native
+  gas and records the need), stale-claim operator tooling, and TON addresses.
+- Settlement for Solana, NEAR, TON, TRON and Aptos still has no transaction
+  builder or broadcaster.
 - Phase G: demo/live enablement, end-to-end runs and the incident runbook are not done.
 
 | Piece | Location |
@@ -469,6 +477,8 @@ following remain open:
 | Salted AES-256-GCM seed storage | `backend/src/otc/temp_wallet.rs` (`seal` / `open`) |
 | EVM EIP-1559 signing and ERC-20 calldata | `backend/src/otc/temp_wallet.rs` |
 | EVM nonce/gas/fee reads and broadcast | `backend/src/otc/chain/mod.rs` |
+| Payout worker, 3% withhold, fee sweep, recycle | `backend/src/otc/temp_settle.rs` |
+| Settlement state table | `backend/migrations/otc_temp_settlements.sql` |
 | Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`roles`) |
 | Table | `backend/migrations/otc_temp_wallets.sql` |
 | Repository helpers | `backend/src/otc/repo/temp_wallets.rs` |

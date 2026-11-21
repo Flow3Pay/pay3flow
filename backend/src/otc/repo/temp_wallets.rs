@@ -8,12 +8,21 @@ use tokio_postgres::Row;
 use uuid::Uuid;
 
 const COLUMNS: &str = "id,trade_id,role,chain,address,derivation_index,status";
-const INSERT: &str = "INSERT INTO otc_temp_wallets(id,trade_id,role,chain,address,derivation_index,salt,key_ciphertext,parent_wallet_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (trade_id,role) WHERE trade_id IS NOT NULL DO NOTHING";
+const INSERT: &str = "INSERT INTO otc_temp_wallets(id,trade_id,role,chain,address,derivation_index,salt,key_ciphertext,parent_wallet_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING";
 const FOR_TRADE: &str = "SELECT id,trade_id,role,chain,address,derivation_index,status FROM otc_temp_wallets WHERE trade_id=$1 ORDER BY created_at";
 const BY_ADDRESS: &str = "SELECT id,trade_id,role,chain,address,derivation_index,status FROM otc_temp_wallets WHERE chain=$1 AND address=$2 AND status='active' ORDER BY created_at DESC LIMIT 1";
 const SET_STATUS: &str = "UPDATE otc_temp_wallets SET status=$2,updated_at=now() WHERE id=$1";
 const RECYCLE: &str =
     "UPDATE otc_temp_wallets SET trade_id=NULL,status='recycled',updated_at=now() WHERE id=$1";
+const INSERT_SETTLEMENT: &str = "INSERT INTO otc_temp_settlements(trade_id,wallet_id) VALUES($1,$2) ON CONFLICT (trade_id) DO NOTHING";
+const SETTLEMENT_STATE: &str = "SELECT state FROM otc_temp_settlements WHERE trade_id=$1";
+const DUE_SETTLEMENTS: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.state,s.reference,s.fee_reference,s.attempts FROM otc_temp_settlements s JOIN otc_temp_wallets w ON w.id=s.wallet_id JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE t.state IN ('delivery_pending','completed') AND (s.state IN ('awaiting_payment','payout_submitted','fee_submitted') OR (s.state='payout_claim' AND s.updated_at<now()-interval '2 minutes')) AND s.attempts<10 ORDER BY s.updated_at LIMIT 20";
+const CLAIM: &str = "UPDATE otc_temp_settlements SET state='payout_claim',updated_at=now() WHERE trade_id=$1 AND state='awaiting_payment'";
+const SET_STATE: &str =
+    "UPDATE otc_temp_settlements SET state=$2,last_error=$3,updated_at=now() WHERE trade_id=$1";
+const SET_PAYOUT_REFERENCE: &str = "UPDATE otc_temp_settlements SET reference=$2,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
+const SET_FEE_REFERENCE: &str = "UPDATE otc_temp_settlements SET fee_reference=$2,state='fee_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state='payout_submitted'";
+const NOTE_ERROR: &str = "UPDATE otc_temp_settlements SET attempts=attempts+1,last_error=$2,updated_at=now() WHERE trade_id=$1";
 
 #[derive(Clone, Debug)]
 pub(crate) struct TempWallet {
@@ -72,6 +81,119 @@ pub(crate) async fn insert(
         )
         .await?;
     Ok(inserted == 1)
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SettlementRow {
+    pub trade_id: Uuid,
+    pub wallet_id: Uuid,
+    pub chain: String,
+    pub address: String,
+    pub derivation_index: i32,
+    pub salt: Vec<u8>,
+    pub key_ciphertext: Vec<u8>,
+    pub body: serde_json::Value,
+    pub state: String,
+    pub reference: Option<String>,
+    pub fee_reference: Option<String>,
+    pub attempts: i32,
+}
+
+pub(crate) async fn insert_settlement(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    wallet_id: &Uuid,
+) -> Result<()> {
+    client
+        .execute(INSERT_SETTLEMENT, &[trade_id, wallet_id])
+        .await?;
+    Ok(())
+}
+
+/// Atomically takes the right to sign one payout. A second worker sees `false`
+/// and leaves the row to the winner.
+pub(crate) async fn claim_awaiting(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+) -> Result<bool> {
+    Ok(client.execute(CLAIM, &[trade_id]).await? == 1)
+}
+
+pub(crate) async fn settlement_state(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+) -> Result<Option<String>> {
+    Ok(client
+        .query_opt(SETTLEMENT_STATE, &[trade_id])
+        .await?
+        .map(|row| row.get(0)))
+}
+
+pub(crate) async fn due_settlements(
+    client: &(impl GenericClient + Sync),
+) -> Result<Vec<SettlementRow>> {
+    Ok(client
+        .query(DUE_SETTLEMENTS, &[])
+        .await?
+        .iter()
+        .map(|row| SettlementRow {
+            trade_id: row.get(0),
+            wallet_id: row.get(1),
+            chain: row.get(2),
+            address: row.get(3),
+            derivation_index: row.get(4),
+            salt: row.get(5),
+            key_ciphertext: row.get(6),
+            body: row.get(7),
+            state: row.get(8),
+            reference: row.get(9),
+            fee_reference: row.get(10),
+            attempts: row.get(11),
+        })
+        .collect())
+}
+
+pub(crate) async fn set_state(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    state: &str,
+    error: Option<&str>,
+) -> Result<()> {
+    client
+        .execute(SET_STATE, &[trade_id, &state, &error])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn set_payout_reference(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    reference: &str,
+) -> Result<()> {
+    client
+        .execute(SET_PAYOUT_REFERENCE, &[trade_id, &reference])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn set_fee_reference(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    reference: &str,
+) -> Result<()> {
+    client
+        .execute(SET_FEE_REFERENCE, &[trade_id, &reference])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn note_error(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    error: &str,
+) -> Result<()> {
+    client.execute(NOTE_ERROR, &[trade_id, &error]).await?;
+    Ok(())
 }
 
 pub(crate) async fn for_trade(

@@ -23,3 +23,5 @@ CREATE INDEX IF NOT EXISTS otc_temp_wallets_address
  ON otc_temp_wallets(chain, address);
 CREATE INDEX IF NOT EXISTS otc_temp_wallets_pool
  ON otc_temp_wallets(chain, status) WHERE trade_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS otc_temp_wallets_child
+ ON otc_temp_wallets(parent_wallet_id, role) WHERE parent_wallet_id IS NOT NULL;
