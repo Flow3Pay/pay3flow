@@ -140,6 +140,33 @@ pub(crate) fn evm_temp_source(send_chain_usd: &str) -> Result<Option<Chain>> {
     Ok(send.is_evm().then_some(send))
 }
 
+/// The concrete wallet set Accept creates for one deal.
+///
+/// The Ever leg always reserves an `ever` row. When both stablecoin legs share
+/// a network the deal gets one `usd` wallet; otherwise it gets `usd_in` on the
+/// payer network and `usd_out` on the payout network. A payout network outside
+/// the custody set (Base, Sui, ...) still gets the `usd_in` wallet because
+/// NEAR Intents delivers straight to the payee. `None` keeps the legacy
+/// direct/routed flow for a payer network we cannot sign for.
+pub(crate) fn plan(
+    payer_network: &str,
+    payout_network: &str,
+) -> Result<Option<Vec<(Role, Chain)>>> {
+    let Some(send) = evm_temp_source(payer_network)? else {
+        return Ok(None);
+    };
+    let mut wallets = vec![(Role::Ever, Chain::Everscale)];
+    match Chain::parse(payout_network) {
+        Ok(get) if get == send => wallets.push((Role::Usd, send)),
+        Ok(get) if get != Chain::Everscale => {
+            wallets.push((Role::UsdIn, send));
+            wallets.push((Role::UsdOut, get));
+        }
+        _ => wallets.push((Role::UsdIn, send)),
+    }
+    Ok(Some(wallets))
+}
+
 pub(crate) fn roles(send_chain_usd: &str, get_chain_usd: &str) -> Result<Vec<(Role, Chain)>> {
     let send = Chain::parse(send_chain_usd)?;
     let get = Chain::parse(get_chain_usd)?;
@@ -726,6 +753,34 @@ mod tests {
             vec![(Role::Ever, Chain::Everscale), (Role::Usd, Chain::Solana)]
         );
         assert!(roles("everscale", "ethereum").is_err());
+    }
+
+    #[test]
+    fn deal_plan_reserves_two_or_three_wallets() {
+        assert_eq!(
+            plan("ethereum", "polygon").unwrap().unwrap(),
+            vec![
+                (Role::Ever, Chain::Everscale),
+                (Role::UsdIn, Chain::Ethereum),
+                (Role::UsdOut, Chain::PolygonPos),
+            ]
+        );
+        assert_eq!(
+            plan("ethereum", "ethereum").unwrap().unwrap(),
+            vec![(Role::Ever, Chain::Everscale), (Role::Usd, Chain::Ethereum)]
+        );
+        // A payout network outside the custody set still needs the input row;
+        // Intents delivers to the payee directly.
+        assert_eq!(
+            plan("ethereum", "base").unwrap().unwrap(),
+            vec![
+                (Role::Ever, Chain::Everscale),
+                (Role::UsdIn, Chain::Ethereum)
+            ]
+        );
+        // A non-EVM payer keeps the legacy flow.
+        assert!(plan("tron", "ethereum").unwrap().is_none());
+        assert!(plan("solana", "solana").unwrap().is_none());
     }
 
     #[test]

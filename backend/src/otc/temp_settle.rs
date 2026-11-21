@@ -243,7 +243,7 @@ impl Service {
                 }
                 self.recycle(&client, row).await?;
                 repo::temp_wallets::set_state(&client, &row.trade_id, "settled", None).await?;
-                self.retire_ever(&client, &row.trade_id).await?;
+                self.retire_reserved_roles(&client, &row.trade_id).await?;
                 tracing::info!(trade=%row.trade_id, "otc.temp.settled");
             }
             _ => {}
@@ -407,6 +407,56 @@ impl Service {
             .ok_or_else(|| invalid("the reserve wallet could not be provisioned"))
     }
 
+    /// Accept-time guard for `OTC_TEMP_RESERVE_PAYOUT` (spec §6.3): a
+    /// same-network deal that the reserve cannot front must fail before any
+    /// address exists instead of parking in `awaiting_payment`. The reserve row
+    /// is provisioned on first use so the conflict names the address to fund.
+    pub(crate) async fn temp_reserve_preflight(
+        &self,
+        chain: &str,
+        token: &str,
+        payout: u128,
+    ) -> Result<()> {
+        let chain_id = super::config::evm_chain_id(chain)
+            .ok_or_else(|| invalid("temporary wallet network is not EVM"))?;
+        let rpcs = self
+            .cfg
+            .p2p_evm_rpcs(chain)
+            .filter(|endpoints| endpoints.len() >= 2)
+            .ok_or_else(|| invalid("two independent OTC EVM endpoints are required"))?;
+        let net = super::chain::EvmNet {
+            rpcs: rpcs.to_vec(),
+            chain_id,
+            usdt: token.to_string(),
+        };
+        let client = self.pool.get().await?;
+        let reserve = self.ensure_reserve(&client, chain).await?;
+        let latest = json!("latest");
+        let balance = self
+            .erc20_balance_of(&net, &reserve.address, &latest)
+            .await?;
+        if balance < payout {
+            return Err(super::error::Error::Conflict(format!(
+                "the {chain} reserve wallet {} holds {} but the deal needs {}; fund it before accepting",
+                reserve.address,
+                amount::decimal(balance, 6),
+                amount::decimal(payout, 6)
+            )));
+        }
+        let gas = super::chain::number(
+            &self
+                .evm_agree(&net, "eth_getBalance", json!([reserve.address, latest]))
+                .await?,
+        )?;
+        if gas < amount::units(&self.cfg.temp_gas_reserve, 18)? {
+            return Err(super::error::Error::Conflict(format!(
+                "the {chain} reserve wallet {} needs native gas before accepting reserve-payout deals",
+                reserve.address
+            )));
+        }
+        Ok(())
+    }
+
     fn reserve_material(
         &self,
         reserve: &repo::temp_wallets::ReserveWallet,
@@ -418,15 +468,19 @@ impl Service {
         WalletMaterial::from_seed(chain, &seed[..], index)
     }
 
-    /// A terminal payout state means no EVER leg is pending, so any Ever
-    /// temporary row for the deal is marked deleted (spec §7 rule 4). v1 does
-    /// not create one, so this is a no-op until that leg exists.
-    async fn retire_ever(
+    /// A terminal payout state retires the roles that were reserved at Accept
+    /// but never funded: the EVER leg stays on the legacy direct path and
+    /// Intents pays the payee directly, so neither `ever` nor `usd_out` should
+    /// keep an active status once the deal is done (spec §7 rule 4).
+    async fn retire_reserved_roles(
         &self,
         client: &deadpool_postgres::Client,
         trade_id: &uuid::Uuid,
     ) -> Result<()> {
-        repo::temp_wallets::delete_role(client, trade_id, "ever").await
+        for role in ["ever", "usd_out"] {
+            repo::temp_wallets::delete_role(client, trade_id, role).await?;
+        }
+        Ok(())
     }
 
     /// The net reached the payee: record the fee as collected, sweep the desk's
@@ -447,13 +501,13 @@ impl Service {
                 Some("no fee recipient configured; fee stays on the temporary wallet"),
             )
             .await?;
-            self.retire_ever(client, &row.trade_id).await?;
+            self.retire_reserved_roles(client, &row.trade_id).await?;
             return Ok(());
         };
         if fee == 0 && !from_reserve {
             self.recycle(client, row).await?;
             repo::temp_wallets::set_state(client, &row.trade_id, "settled", None).await?;
-            self.retire_ever(client, &row.trade_id).await?;
+            self.retire_reserved_roles(client, &row.trade_id).await?;
             return Ok(());
         }
         let net = self.temp_net(&row.chain, &row.body)?;
@@ -474,7 +528,7 @@ impl Service {
                 Some("nothing is left on the temporary wallet for the service fee"),
             )
             .await?;
-            self.retire_ever(client, &row.trade_id).await?;
+            self.retire_reserved_roles(client, &row.trade_id).await?;
             return Ok(());
         }
         if !from_reserve && balance < fee {
@@ -497,7 +551,7 @@ impl Service {
                     Some(&error.to_string()),
                 )
                 .await?;
-                self.retire_ever(client, &row.trade_id).await?;
+                self.retire_reserved_roles(client, &row.trade_id).await?;
             }
         }
         Ok(())
@@ -516,7 +570,7 @@ impl Service {
             client,
             &uuid::Uuid::new_v4(),
             None,
-            "usd",
+            row.role.as_str(),
             &row.chain,
             &child.address()?,
             child.derivation_index(),

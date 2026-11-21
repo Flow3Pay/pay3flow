@@ -18,7 +18,7 @@ const RESERVE: &str = "SELECT id,chain,address,derivation_index,salt,key_ciphert
 const DELETE_ROLE: &str = "UPDATE otc_temp_wallets SET status='deleted',updated_at=now() WHERE trade_id=$1 AND role=$2 AND status<>'deleted'";
 const INSERT_SETTLEMENT: &str = "INSERT INTO otc_temp_settlements(trade_id,wallet_id) VALUES($1,$2) ON CONFLICT (trade_id) DO NOTHING";
 const SETTLEMENT_STATE: &str = "SELECT state FROM otc_temp_settlements WHERE trade_id=$1";
-const DUE_SETTLEMENTS: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.state,s.reference,s.fee_reference,s.attempts,s.deposit_address,s.deposit_memo,s.quote_id,s.source_units,s.minimum_units,s.reserve_units FROM otc_temp_settlements s JOIN otc_temp_wallets w ON w.id=s.wallet_id JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE t.state IN ('delivery_pending','completed') AND (s.state IN ('awaiting_payment','payout_submitted','intents_submitted','fee_submitted') OR (s.state='payout_claim' AND s.updated_at<now()-interval '2 minutes')) AND s.attempts<10 ORDER BY s.updated_at LIMIT 20";
+const DUE_SETTLEMENTS: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.role,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.state,s.reference,s.fee_reference,s.attempts,s.deposit_address,s.deposit_memo,s.quote_id,s.source_units,s.minimum_units,s.reserve_units FROM otc_temp_settlements s JOIN otc_temp_wallets w ON w.id=s.wallet_id JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE t.state IN ('delivery_pending','completed') AND (s.state IN ('awaiting_payment','payout_submitted','intents_submitted','fee_submitted') OR (s.state='payout_claim' AND s.updated_at<now()-interval '2 minutes')) AND s.attempts<10 ORDER BY s.updated_at LIMIT 20";
 const CLAIM: &str = "UPDATE otc_temp_settlements SET state='payout_claim',updated_at=now() WHERE trade_id=$1 AND state='awaiting_payment'";
 const SET_STATE: &str =
     "UPDATE otc_temp_settlements SET state=$2,last_error=$3,updated_at=now() WHERE trade_id=$1";
@@ -95,6 +95,7 @@ pub(crate) struct SettlementRow {
     pub trade_id: Uuid,
     pub wallet_id: Uuid,
     pub chain: String,
+    pub role: String,
     pub address: String,
     pub derivation_index: i32,
     pub salt: Vec<u8>,
@@ -166,21 +167,22 @@ pub(crate) async fn due_settlements(
             trade_id: row.get(0),
             wallet_id: row.get(1),
             chain: row.get(2),
-            address: row.get(3),
-            derivation_index: row.get(4),
-            salt: row.get(5),
-            key_ciphertext: row.get(6),
-            body: row.get(7),
-            state: row.get(8),
-            reference: row.get(9),
-            fee_reference: row.get(10),
-            attempts: row.get(11),
-            deposit_address: row.get(12),
-            deposit_memo: row.get(13),
-            quote_id: row.get(14),
-            source_units: row.get(15),
-            minimum_units: row.get(16),
-            reserve_units: row.get(17),
+            role: row.get(3),
+            address: row.get(4),
+            derivation_index: row.get(5),
+            salt: row.get(6),
+            key_ciphertext: row.get(7),
+            body: row.get(8),
+            state: row.get(9),
+            reference: row.get(10),
+            fee_reference: row.get(11),
+            attempts: row.get(12),
+            deposit_address: row.get(13),
+            deposit_memo: row.get(14),
+            quote_id: row.get(15),
+            source_units: row.get(16),
+            minimum_units: row.get(17),
+            reserve_units: row.get(18),
         })
         .collect())
 }

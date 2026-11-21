@@ -410,16 +410,25 @@ impl Service {
             ));
         }
         let pay_by = Utc::now() + Duration::hours(DEAL_LIFETIME_HOURS);
-        let temp_source = if self.cfg.temp_wallets {
-            super::temp_wallet::evm_temp_source(&payer_network)?.filter(|_| {
-                self.p2p_direct_network_available(&payer_network)
-                    && self.cfg.fee_recipients.contains_key(payer_network.as_str())
-                    && (payer_network == output_network || self.near_intents.is_some())
-            })
+        let temp_plan = if self.cfg.temp_wallets
+            && self.p2p_direct_network_available(&payer_network)
+            && self.cfg.fee_recipients.contains_key(payer_network.as_str())
+            && (payer_network == output_network || self.near_intents.is_some())
+        {
+            super::temp_wallet::plan(&payer_network, &output_network)?
         } else {
             None
         };
-        let temp_token = match temp_source {
+        // A reserve-payout deal must be frontable before Accept creates an
+        // address; otherwise it would park in `awaiting_payment` (spec §6.3).
+        if self.cfg.temp_reserve_payout && temp_plan.is_some() && payer_network == output_network {
+            let net = fee_policy["net_units"]
+                .as_str()
+                .ok_or_else(|| invalid("deal fee terms are malformed"))?;
+            self.temp_reserve_preflight(&payer_network, &output_contract, amount::integer(net)?)
+                .await?;
+        }
+        let temp_token = match temp_plan {
             Some(_) if payer_network == output_network => {
                 Some((output_contract.clone(), payer_asset_id.clone()))
             }
@@ -473,41 +482,75 @@ impl Service {
             "ever_network_id": 42,
             "fee_policy": fee_policy,
         });
-        let temp_wallet = match (temp_source, temp_token) {
-            (Some(chain), Some((token, asset_id))) => {
-                let material = super::temp_wallet::WalletMaterial::generate(chain)?;
-                let sealed = super::temp_wallet::seal(&self.secrets_key, material.seed())?;
-                let address = material.address()?;
-                body["temp_wallet"] = json!({
-                    "role": "usd",
-                    "chain": chain.id(),
-                    "address": address,
-                    "token": token,
-                    "asset_id": asset_id,
-                    "status": "awaiting_payment",
-                });
-                Some((chain, address, sealed, material))
+        let temp_wallet = match (temp_plan, temp_token) {
+            (Some(plan), Some((token, asset_id))) => {
+                let mut wallets = Vec::with_capacity(plan.len());
+                for (role, chain) in plan {
+                    let material = super::temp_wallet::WalletMaterial::generate(chain)?;
+                    let sealed = super::temp_wallet::seal(&self.secrets_key, material.seed())?;
+                    let address = material.address()?;
+                    let mut wallet = json!({
+                        "role": role.as_str(),
+                        "chain": chain.id(),
+                        "address": address,
+                        "status": "awaiting_payment",
+                    });
+                    if matches!(
+                        role,
+                        super::temp_wallet::Role::Usd | super::temp_wallet::Role::UsdIn
+                    ) {
+                        wallet["token"] = json!(token);
+                        wallet["asset_id"] = json!(asset_id);
+                    }
+                    wallets.push((role, chain, address, sealed, material, wallet));
+                }
+                let primary = wallets
+                    .iter()
+                    .find(|entry| {
+                        matches!(
+                            entry.0,
+                            super::temp_wallet::Role::Usd | super::temp_wallet::Role::UsdIn
+                        )
+                    })
+                    .ok_or_else(|| invalid("temporary wallet plan has no USD wallet"))?;
+                body["temp_wallet"] = primary.5.clone();
+                body["temp_wallets"] = json!(wallets
+                    .iter()
+                    .map(|entry| entry.5.clone())
+                    .collect::<Vec<_>>());
+                Some(wallets)
             }
             _ => None,
         };
         let id = Uuid::new_v4();
         repo::p2p::mark_offer_taken(&tx, &offer_id).await?;
         repo::p2p::insert_trade(&tx, &id, &offer_id, &owner, actor, &body, key, &pay_by).await?;
-        if let Some((chain, address, sealed, material)) = temp_wallet {
-            let wallet_id = Uuid::new_v4();
-            repo::temp_wallets::insert(
-                &tx,
-                &wallet_id,
-                Some(&id),
-                "usd",
-                chain.id(),
-                &address,
-                material.derivation_index(),
-                &sealed.salt,
-                &sealed.ciphertext,
-                None,
-            )
-            .await?;
+        if let Some(wallets) = temp_wallet {
+            let mut primary = None;
+            for (role, chain, address, sealed, material, _) in wallets {
+                let wallet_id = Uuid::new_v4();
+                repo::temp_wallets::insert(
+                    &tx,
+                    &wallet_id,
+                    Some(&id),
+                    role.as_str(),
+                    chain.id(),
+                    &address,
+                    material.derivation_index(),
+                    &sealed.salt,
+                    &sealed.ciphertext,
+                    None,
+                )
+                .await?;
+                if matches!(
+                    role,
+                    super::temp_wallet::Role::Usd | super::temp_wallet::Role::UsdIn
+                ) {
+                    primary = Some(wallet_id);
+                }
+            }
+            let wallet_id =
+                primary.ok_or_else(|| invalid("temporary wallet plan has no USD wallet"))?;
             repo::temp_wallets::insert_settlement(&tx, &id, &wallet_id).await?;
         }
         tracing::info!(trade=%id, offer=%offer_id, taker=actor, "otc.p2p.accepted");
@@ -2759,7 +2802,12 @@ fn deal(row: &Row, actor: &str) -> Value {
         })
         .unwrap_or(Value::Null);
     let fee_accrued = matches!(state.as_str(), "delivery_pending" | "completed");
-    let temp_wallets: Vec<Value> = body.get("temp_wallet").cloned().into_iter().collect();
+    let temp_wallets: Vec<Value> = body
+        .get("temp_wallets")
+        .and_then(Value::as_array)
+        .cloned()
+        .or_else(|| body.get("temp_wallet").cloned().map(|wallet| vec![wallet]))
+        .unwrap_or_default();
     json!({
         "id": row.get::<_, Uuid>("id"),
         "offer_id": row.get::<_, Uuid>("offer_id"),
