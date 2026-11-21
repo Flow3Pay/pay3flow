@@ -146,6 +146,26 @@ sign_transfer(material, instructions) -> SignedTx
 - Secrets only in memory (`zeroize`); never in logs or API responses.
 - Public surface: `id`, `chain`, `address`, `role`, `status`.
 
+#### 5.1.1 Required libraries (do not hand-roll chain crypto)
+
+Implementers must use maintained chain SDKs for key derivation, address
+encoding, transaction serialization, signing, and broadcasting. Hand-written
+RLP/BCS/protobuf/cell encoders are not acceptable for a custodial path.
+
+| Chain family | Required crate / project | Use for |
+| --- | --- | --- |
+| EVM (`ethereum`, `polygon-pos`, `avalanche-c`) | [`alloy`](https://github.com/alloy-rs/alloy) | secp256k1 keys, addresses, EIP-155/EIP-1559 transactions, RPC providers |
+| Solana | [official Solana Rust client](https://solana.com/docs/clients/official/rust) (`solana-sdk`, `solana-client`, `spl-token`) | ed25519 keys, associated token accounts, transaction build/sign |
+| NEAR | [`near-api-rs`](https://github.com/near/near-api-rs) | implicit accounts, Borsh transactions, NEP-141 calls, RPC |
+| TON | [`tonlib-rs`](https://github.com/ston-fi/tonlib-rs) | wallet contracts, cells/BoC, external messages, signing |
+| TRON | [`anychain-tron`](https://crates.io/crates/anychain-tron) | Tron address encoding, TRX/TRC-20 transactions, signing |
+| Everscale | existing `evernode-multisig` + `everscale-types` | EverWallet address and contract messages |
+| Aptos | official Aptos Rust SDK | ed25519 account, BCS transaction, FA transfer |
+
+Pin versions in `backend/Cargo.toml` and cover each family with the round-trip
+sign/verify tests in Phase B. The generator API above stays chain-neutral; the
+SDK lives behind it so callers never depend on a concrete chain crate.
+
 ### 5.2 Encryption at rest
 
 Reuse application `SECRETS_KEY`, but **not** as a single global AES key alone:
@@ -379,6 +399,7 @@ defined verification path before marking funded.
 ### Phase B — Generator crate/module
 
 - [ ] `generate` / `derive_next` / address helpers for all listed chains
+- [ ] Chain SDKs from §5.1.1 wired in; no hand-rolled RLP/BCS/protobuf/cell encoding
 - [ ] Unit tests: deterministic vectors or round-trip sign/verify per family
 - [ ] Zeroize + no Debug on secret types
 
