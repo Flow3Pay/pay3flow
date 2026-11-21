@@ -2,6 +2,12 @@
 
 The backend owns a durable customer-first OTC workflow and the existing `/#/otc` page uses it. It trades native EVER on Everscale mainnet (global ID 42, 9 decimals) against issuer USDT on Ethereum mainnet (chain ID 1, contract `0xdac17f958d2ee523a2206206994597c13d831ec7`, 6 decimals). This is the Ethereum route selected during planning. The platform never signs a blockchain transaction or holds a customer or desk wallet key. Direct settlement uses two independent transfers. The optional per-trade Safe escrow below holds USDT until a two-owner settlement or an expiry refund; native EVER remains a separate Everscale transfer.
 
+Planned exception (not shipped by default): platform **temporary multi-chain
+intermediary wallets** that the backend creates, encrypts at rest with a
+per-row salt, and signs. See
+[OTC_TEMP_MULTICHAIN_WALLETS.md](OTC_TEMP_MULTICHAIN_WALLETS.md). Customer keys
+remain out of scope.
+
 ## Setup
 
 ### Wallet-owned buy and sell advertisements

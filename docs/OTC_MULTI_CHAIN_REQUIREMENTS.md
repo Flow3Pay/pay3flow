@@ -15,6 +15,12 @@ must cover the networks required to pay and receive. Cross-network settlement
 is expected to use NEAR Intents rather than assuming that a wallet address
 identifies a network.
 
+A later product track adds **platform-signed temporary intermediary wallets**
+(custodial temps, ≥ $30 product floor, 2/3 wallets per deal). That design is
+specified in [OTC_TEMP_MULTICHAIN_WALLETS.md](OTC_TEMP_MULTICHAIN_WALLETS.md) and
+does not replace this document’s asset/network identity or Intents catalog
+rules.
+
 ## Goals
 
 1. Let users create and take OTC offers involving **USDT** and **USDC**.
