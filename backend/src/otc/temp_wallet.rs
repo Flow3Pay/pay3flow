@@ -124,13 +124,14 @@ impl Role {
 ///
 /// Everscale is only ever the EVER leg; it is not a stablecoin network in this
 /// product, so a caller that asks for it as a USD destination is rejected.
-/// Networks eligible for the v1 temporary-wallet flow: one EVM network on both
-/// stablecoin legs. Anything else keeps the legacy direct/routed path.
-pub(crate) fn same_chain_evm(send_chain_usd: &str, get_chain_usd: &str) -> Result<Option<Chain>> {
-    let (Ok(send), Ok(get)) = (Chain::parse(send_chain_usd), Chain::parse(get_chain_usd)) else {
+/// The stablecoin payer must be on an EVM network we can sign for. The payout
+/// side may be the same network or any network reachable through NEAR Intents;
+/// non-EVM sources keep the legacy direct/routed path.
+pub(crate) fn evm_temp_source(send_chain_usd: &str) -> Result<Option<Chain>> {
+    let Ok(send) = Chain::parse(send_chain_usd) else {
         return Ok(None);
     };
-    Ok((send == get && send.is_evm()).then_some(send))
+    Ok(send.is_evm().then_some(send))
 }
 
 pub(crate) fn roles(send_chain_usd: &str, get_chain_usd: &str) -> Result<Vec<(Role, Chain)>> {
@@ -697,18 +698,12 @@ mod tests {
     }
 
     #[test]
-    fn only_same_network_evm_deals_use_temporary_wallets() {
-        assert_eq!(
-            same_chain_evm("ethereum", "ethereum").unwrap(),
-            Some(Chain::Ethereum)
-        );
-        assert_eq!(
-            same_chain_evm("polygon", "polygon-pos").unwrap(),
-            Some(Chain::PolygonPos)
-        );
-        assert_eq!(same_chain_evm("ethereum", "solana").unwrap(), None);
-        assert_eq!(same_chain_evm("base", "base").unwrap(), None);
-        assert_eq!(same_chain_evm("tron", "tron").unwrap(), None);
+    fn only_evm_sources_use_temporary_wallets() {
+        assert_eq!(evm_temp_source("ethereum").unwrap(), Some(Chain::Ethereum));
+        assert_eq!(evm_temp_source("polygon").unwrap(), Some(Chain::PolygonPos));
+        assert_eq!(evm_temp_source("base").unwrap(), None);
+        assert_eq!(evm_temp_source("tron").unwrap(), None);
+        assert_eq!(evm_temp_source("solana").unwrap(), None);
     }
 
     #[test]

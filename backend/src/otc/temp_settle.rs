@@ -1,9 +1,10 @@
 //! Settlement of stablecoin temporary wallets.
 //!
-//! Phase D/E, EVM same-network v1: the payer's stablecoin lands on a platform
-//! wallet, the worker pays the agreed net to the real payee and withholds the
-//! service fee, then recycles the address. Cross-network payouts and non-EVM
-//! sources keep the legacy direct/routed flow.
+//! Phase D/E: the payer's EVM stablecoin lands on a platform wallet. The worker
+//! pays the agreed net to the real payee (directly on the same network, or
+//! through an exact-output NEAR Intents route), withholds the service fee, then
+//! recycles the address. Non-EVM sources still use the legacy direct/routed
+//! flow because no temp-wallet signer exists for them.
 use super::{
     amount,
     error::{invalid, Result},
@@ -11,6 +12,7 @@ use super::{
     temp_wallet::{self, WalletMaterial},
     Service,
 };
+use crate::route_engine::{Amount, Asset, NearQuoteRequest, NearSwapStatus};
 use serde_json::{json, Value};
 
 impl Service {
@@ -39,14 +41,10 @@ impl Service {
             .p2p_evm_rpcs(chain)
             .filter(|endpoints| endpoints.len() >= 2)
             .ok_or_else(|| invalid("two independent OTC EVM endpoints are required"))?;
-        let usdt = body["stablecoin_contract"]
-            .as_str()
-            .or_else(|| body["usdt_contract"].as_str())
-            .ok_or_else(|| invalid("temporary wallet token is missing"))?;
         Ok(super::chain::EvmNet {
             rpcs: rpcs.to_vec(),
             chain_id,
-            usdt: usdt.to_string(),
+            usdt: temp_token(body)?.to_string(),
         })
     }
 
@@ -103,18 +101,25 @@ impl Service {
                 let payee = row.body["usdt_payee"]
                     .as_str()
                     .ok_or_else(|| invalid("deal payee is missing"))?;
-                let contract = contract_of(&row.body)?;
-                match self
-                    .evm_temp_token_transfer(&material, &net, contract, payee, payout)
+                let same_network = row.body["stablecoin_network"]
+                    .as_str()
+                    .unwrap_or("ethereum")
+                    == row.chain;
+                let result = if same_network {
+                    self.evm_temp_token_transfer(
+                        &material,
+                        &net,
+                        temp_token(&row.body)?,
+                        payee,
+                        payout,
+                    )
                     .await
-                {
+                } else {
+                    self.temp_intents_payout(&client, row, &material, &net, payee, gross, payout)
+                        .await
+                };
+                match result {
                     Ok(reference) => {
-                        repo::temp_wallets::set_payout_reference(
-                            &client,
-                            &row.trade_id,
-                            &reference,
-                        )
-                        .await?;
                         tracing::info!(trade=%row.trade_id, reference, "otc.temp.payout_sent");
                     }
                     Err(error) => {
@@ -164,35 +169,53 @@ impl Service {
                     .await?;
                     return Ok(());
                 }
-                // The net reached the payee, so the withheld fee can count as
-                // collected even before it is swept to the fee recipient.
-                repo::p2p::collect_fee(&client, &row.trade_id).await?;
-                let Some(recipient) = self.cfg.fee_recipients.get(&row.chain).cloned() else {
-                    repo::temp_wallets::set_state(
-                        &client,
-                        &row.trade_id,
-                        "fee_retained",
-                        Some("no fee recipient configured; fee stays on the temporary wallet"),
-                    )
-                    .await?;
-                    return Ok(());
+                self.after_paid(&client, row, fee).await?;
+            }
+            "intents_submitted" => {
+                let Some(provider) = &self.near_intents else {
+                    return Err(invalid("NEAR Intents is not configured"));
                 };
-                if fee == 0 {
-                    self.recycle(&client, row).await?;
-                    repo::temp_wallets::set_state(&client, &row.trade_id, "settled", None).await?;
-                    return Ok(());
+                let deposit = row
+                    .deposit_address
+                    .as_deref()
+                    .ok_or_else(|| invalid("Intents deposit address is missing"))?;
+                let status = provider
+                    .status_with_memo(deposit, row.deposit_memo.as_deref())
+                    .await
+                    .map_err(|error| {
+                        tracing::warn!(trade=%row.trade_id, error=%error, "otc.temp.intents_status_failed");
+                        super::error::Error::RouteUnavailable
+                    })?;
+                match status.status.to_ascii_uppercase().as_str() {
+                    "SUCCESS" => {
+                        let delivered = intents_output(&status)
+                            .ok_or_else(|| invalid("Intents success has no delivered amount"))?;
+                        if delivered < payout {
+                            tracing::warn!(trade=%row.trade_id, delivered, payout, "otc.temp.intents_shortfall");
+                            return Ok(());
+                        }
+                        self.after_paid(&client, row, fee).await?;
+                    }
+                    "REFUNDED" => {
+                        repo::temp_wallets::set_state(
+                            &client,
+                            &row.trade_id,
+                            "intents_refunded",
+                            Some("Intents refunded the deposit; funds are back on the temporary wallet"),
+                        )
+                        .await?;
+                    }
+                    "FAILED" => {
+                        repo::temp_wallets::set_state(
+                            &client,
+                            &row.trade_id,
+                            "failed",
+                            Some("Intents failed the swap; check the temporary wallet balance"),
+                        )
+                        .await?;
+                    }
+                    _ => {}
                 }
-                let material = self.material(row)?;
-                let reference = self
-                    .evm_temp_token_transfer(
-                        &material,
-                        &net,
-                        contract_of(&row.body)?,
-                        &recipient,
-                        fee,
-                    )
-                    .await?;
-                repo::temp_wallets::set_fee_reference(&client, &row.trade_id, &reference).await?;
             }
             "fee_submitted" => {
                 let reference = row
@@ -224,6 +247,152 @@ impl Service {
         Ok(())
     }
 
+    /// Cross-network payout: exact-output quote to the payee, refund to the
+    /// temp address we control, then a signed deposit from that address.
+    async fn temp_intents_payout(
+        &self,
+        client: &deadpool_postgres::Client,
+        row: &repo::temp_wallets::SettlementRow,
+        material: &WalletMaterial,
+        net: &super::chain::EvmNet,
+        payee: &str,
+        gross: u128,
+        payout: u128,
+    ) -> Result<String> {
+        let provider = self
+            .near_intents
+            .as_ref()
+            .ok_or(super::error::Error::RouteUnavailable)?;
+        let output_network = row.body["stablecoin_network"]
+            .as_str()
+            .ok_or_else(|| invalid("deal network is missing"))?;
+        let symbol = row.body["stablecoin"].as_str().unwrap_or("USDT");
+        let from = Asset::new(symbol, Some(&row.chain))?;
+        let to = Asset::new(symbol, Some(output_network))?;
+        let quote = provider
+            .executable_quote(NearQuoteRequest {
+                from,
+                to,
+                origin_asset_id: row.body["temp_wallet"]["asset_id"]
+                    .as_str()
+                    .map(str::to_string),
+                destination_asset_id: row.body["stablecoin_asset_id"].as_str().map(str::to_string),
+                amount: Amount::new(
+                    amount::decimal(payout, 6),
+                    Asset::new(symbol, Some(output_network))?,
+                )?,
+                recipient: payee.to_string(),
+                refund_to: row.address.clone(),
+                slippage_bps: 100,
+                app_fees: Vec::new(),
+                dry: false,
+            })
+            .await
+            .map_err(|error| {
+                tracing::warn!(trade=%row.trade_id, error=%error, "otc.temp.intents_quote_failed");
+                super::error::Error::RouteUnavailable
+            })?;
+        if amount::units(&quote.output.value, 6)? != payout {
+            return Err(super::error::Error::Conflict(
+                "the cross-network quote does not deliver the exact deal amount".into(),
+            ));
+        }
+        let source_units = amount::units(&quote.input.value, 6)?;
+        if source_units > gross {
+            return Err(super::error::Error::Conflict(
+                "the cross-network route costs exceed the withheld service fee".into(),
+            ));
+        }
+        let deposit = quote
+            .deposit_address
+            .as_deref()
+            .filter(|address| !address.trim().is_empty())
+            .ok_or(super::error::Error::RouteUnavailable)?;
+        let memo = crate::route_engine::first_string(&quote.raw, &["depositMemo", "deposit_memo"]);
+        let reference = self
+            .evm_temp_token_transfer(material, net, temp_token(&row.body)?, deposit, source_units)
+            .await?;
+        repo::temp_wallets::set_intents_quote(
+            client,
+            &row.trade_id,
+            &reference,
+            deposit,
+            memo.as_deref(),
+            &quote.quote_id,
+            &source_units.to_string(),
+            &payout.to_string(),
+        )
+        .await?;
+        Ok(reference)
+    }
+
+    /// The net reached the payee: record the fee as collected, sweep it, then
+    /// recycle the wallet once the sweep settles.
+    async fn after_paid(
+        &self,
+        client: &deadpool_postgres::Client,
+        row: &repo::temp_wallets::SettlementRow,
+        fee: u128,
+    ) -> Result<()> {
+        repo::p2p::collect_fee(client, &row.trade_id).await?;
+        let Some(recipient) = self.cfg.fee_recipients.get(&row.chain).cloned() else {
+            repo::temp_wallets::set_state(
+                client,
+                &row.trade_id,
+                "fee_retained",
+                Some("no fee recipient configured; fee stays on the temporary wallet"),
+            )
+            .await?;
+            return Ok(());
+        };
+        if fee == 0 {
+            self.recycle(client, row).await?;
+            repo::temp_wallets::set_state(client, &row.trade_id, "settled", None).await?;
+            return Ok(());
+        }
+        let net = self.temp_net(&row.chain, &row.body)?;
+        let material = self.material(row)?;
+        // A cross-network route may consume part of the withheld fee; sweep what
+        // is actually left instead of leaving dust that ops has to recover.
+        let balance = self
+            .erc20_balance_of(&net, &row.address, &json!("latest"))
+            .await?;
+        let sweep = fee.min(balance);
+        if sweep == 0 {
+            repo::temp_wallets::set_state(
+                client,
+                &row.trade_id,
+                "fee_retained",
+                Some("nothing is left on the temporary wallet for the service fee"),
+            )
+            .await?;
+            return Ok(());
+        }
+        if balance < fee {
+            tracing::warn!(trade=%row.trade_id, balance, fee, "otc.temp.fee_shortfall");
+        }
+        match self
+            .evm_temp_token_transfer(&material, &net, temp_token(&row.body)?, &recipient, sweep)
+            .await
+        {
+            Ok(reference) => {
+                repo::temp_wallets::set_fee_reference(client, &row.trade_id, &reference).await?;
+            }
+            Err(error) => {
+                // The net is already delivered; keep the fee for ops instead of
+                // retrying a sweep that the chain just rejected.
+                repo::temp_wallets::set_state(
+                    client,
+                    &row.trade_id,
+                    "fee_retained",
+                    Some(&error.to_string()),
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
     /// `create_based_on`: same seed, next index, fresh salt and ciphertext. The
     /// child is kept in the reusable pool until a future deal attaches it.
     async fn recycle(
@@ -250,11 +419,13 @@ impl Service {
     }
 }
 
-fn contract_of(body: &Value) -> Result<&str> {
-    body["stablecoin_contract"]
+/// The source ERC-20 contract of the temporary wallet.
+fn temp_token(body: &Value) -> Result<&str> {
+    body["temp_wallet"]["token"]
         .as_str()
+        .or_else(|| body["stablecoin_contract"].as_str())
         .or_else(|| body["usdt_contract"].as_str())
-        .ok_or_else(|| invalid("deal token is missing"))
+        .ok_or_else(|| invalid("temporary wallet token is missing"))
 }
 
 /// Returns the withheld fee; the net must be positive and never exceed gross.
@@ -265,9 +436,39 @@ fn fee_split(gross: u128, payout: u128) -> Result<u128> {
     Ok(gross - payout)
 }
 
+/// Reads the delivered atomic amount from a 1Click status payload.
+fn intents_output(status: &NearSwapStatus) -> Option<u128> {
+    let details = status.raw.get("swapDetails").unwrap_or(&Value::Null);
+    let value = status
+        .output_amount
+        .clone()
+        .or_else(|| {
+            crate::route_engine::first_string(details, &["amountOut", "amount_out", "outputAmount"])
+        })
+        .or_else(|| {
+            crate::route_engine::first_string(
+                &status.raw,
+                &["amountOut", "amount_out", "outputAmount"],
+            )
+        })
+        .or_else(|| {
+            crate::route_engine::first_string(
+                details,
+                &["amountOutFormatted", "amount_out_formatted"],
+            )
+        })?;
+    if value.contains('.') {
+        amount::units(&value, 6).ok()
+    } else {
+        value.parse().ok()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::fee_split;
+    use super::{fee_split, intents_output};
+    use crate::route_engine::NearSwapStatus;
+    use serde_json::json;
 
     #[test]
     fn fee_is_withheld_from_the_gross_deposit() {
@@ -275,5 +476,27 @@ mod tests {
         assert_eq!(fee_split(30_000_000, 29_100_000).unwrap(), 900_000);
         assert!(fee_split(1_000, 0).is_err());
         assert!(fee_split(1_000, 1_001).is_err());
+    }
+
+    #[test]
+    fn intents_output_reads_atomic_and_formatted_amounts() {
+        let atomic = NearSwapStatus {
+            status: "SUCCESS".into(),
+            output_amount: Some("29000000".into()),
+            raw: json!({}),
+        };
+        assert_eq!(intents_output(&atomic), Some(29_000_000));
+        let formatted = NearSwapStatus {
+            status: "SUCCESS".into(),
+            output_amount: None,
+            raw: json!({"swapDetails":{"amountOutFormatted":"29.0"}}),
+        };
+        assert_eq!(intents_output(&formatted), Some(29_000_000));
+        let details = NearSwapStatus {
+            status: "SUCCESS".into(),
+            output_amount: None,
+            raw: json!({"swapDetails":{"amountOut":"29000000"}}),
+        };
+        assert_eq!(intents_output(&details), Some(29_000_000));
     }
 }

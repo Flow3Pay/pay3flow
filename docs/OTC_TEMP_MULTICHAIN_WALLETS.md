@@ -13,10 +13,12 @@ Related baselines:
 - [OTC service](otc-service.md)
 - [NEAR Intents routes](near-intents-routes.md)
 
-Status: **partially implemented**. Phases A–E are implemented for same-network
-EVM deals behind the off-by-default `OTC_TEMP_WALLETS` flag. Cross-network
-payouts, non-EVM sources, the Ever temporary leg and TON addresses are not.
-See §10 for the checklist and §10.1 for the shipped code paths.
+Status: **partially implemented**. Phases A–E are implemented for EVM stablecoin
+sources behind the off-by-default `OTC_TEMP_WALLETS` flag. A same-network payout
+is a direct ERC-20 transfer; a cross-network payout is an exact-output NEAR
+Intents quote signed from the temporary wallet. Non-EVM sources, the Ever
+temporary leg and TON addresses are not implemented. See §10 for the checklist
+and §10.1–§10.2 for the shipped code paths and deviations.
 
 ---
 
@@ -247,6 +249,10 @@ delete(ever temp)
 
 ### 6.1 Cross-network USD (`send_chain_usd != get_chain_usd`) — 3 wallets
 
+> Shipped v1 creates only the source USD temporary wallet. Everscale settlement
+> stays on the legacy path and Intents pays the payee's main USD wallet
+> directly, so no separate `usd_out` custody wallet exists yet.
+
 Step-by-step:
 
 1. **Offer exists** with destination `(stablecoin, get_chain_usd)` and Ever terms.
@@ -281,6 +287,9 @@ Step-by-step:
 13. **Lifecycle** (§7).
 
 ### 6.2 Same-network USD (`send_chain_usd == get_chain_usd`) — 2 wallets
+
+> Shipped v1 creates only the `usd` temporary wallet; the EVER leg and its
+> `ever` temporary wallet are not created yet.
 
 1. Accept creates `ever` + `usd` on that single USD network.
 2. Users fund `temp_ever` and `temp_usd` as above.
@@ -418,17 +427,20 @@ defined verification path before marking funded.
 
 ### Phase D — Deal wiring
 
-- [x] Accept creates the USD row for same-network EVM deals (flag on, idempotent)
+- [x] Accept creates the USD row for EVM stablecoin sources, same-network or
+      cross-network through Intents (flag on, idempotent)
 - [x] Deal payload exposes `temp_wallets`
 - [x] The existing EVM observer verifies the transfer into the temp address
-- [ ] Cross-chain: sign temp → Intents; poll; EVER payout from temp
+- [x] Cross-chain: exact-output Intents quote, signed deposit from the temp,
+      status polling, fee withhold/recycle on success
 - [ ] Same-chain reserve pay (v1 pays the net from the funded temp instead)
 - [ ] Attempts link `temp_wallet_id`
 
 ### Phase E — Lifecycle
 
 - [x] After a settled sweep, `create_based_on` creates the next address and the
-      old wallet is marked `recycled` (dust is left behind; no balance probe yet)
+      old wallet is marked `recycled` (no $1 balance probe; the fee sweep sends
+      whatever is left, including a partial fee after cross-network route cost)
 - [x] The withheld 3% is sent to the configured fee recipient; without one it is
       marked `fee_retained` for ops
 - [ ] Always delete the Ever temp after payout (v1 does not create an Ever temp)
@@ -453,22 +465,32 @@ defined verification path before marking funded.
 
 ### 10.1 Implementation status (2026-11-21)
 
-The custody layer is deliberately inert. Wiring it into Accept before a signer
-exists would give users deposit addresses the platform cannot sweep, so the
-following remain open:
+The custody layer only creates a temp wallet when an EVM signer can sweep it:
+the payer must be on Ethereum/Polygon/Avalanche, two RPC endpoints and a fee
+recipient on that network must be configured, and the flag must be on.
 
-- Phase D (EVM same-network only): Accept creates the USD wallet when the flag
-  is on, the payer and payout networks are the same, both RPC endpoints and a
-  fee recipient are configured. The deal payload exposes it and the existing EVM
-  observer verifies the deposit.
-- Phase E (EVM same-network only): `otc::temp_settle` pays the net to the payee,
-  withholds and sweeps the 3%, then creates the next `create_based_on` address
-  and marks the old wallet `recycled`.
-- Not implemented: cross-network payouts through NEAR Intents, non-EVM sources,
-  Ever temporary wallets, gas top-up from a reserve (the worker waits for native
-  gas and records the need), stale-claim operator tooling, and TON addresses.
+- Accept creates one source `usd` wallet for an EVM payer. A same-network payout
+  pays the payee directly; a cross-network payout asks NEAR Intents for an
+  exact-output quote and the worker signs the source-token deposit from the temp
+  wallet. The quote is only accepted when the delivered amount equals the deal
+  `net_units` and the required input does not exceed the gross deposit.
+- `otc::temp_settle` claims the payout, checks the source token balance and
+  native gas, then either transfers directly or submits the Intents deposit.
+  The settlement row stores `deposit_address`, `deposit_memo`, `quote_id`,
+  `source_units` and `minimum_units`, so a restart resumes polling
+  (`intents_submitted`) instead of quoting again.
+- On Intents `SUCCESS` the worker records the 3% as collected, sweeps the
+  remaining token balance to the fee recipient, and recycles the address. If a
+  route cost consumed part of the fee, the shortfall is logged and only the
+  remaining balance is swept. `REFUNDED` stops the worker in `intents_refunded`
+  (funds are back on the temp wallet for ops); `FAILED` stops it in `failed`.
+- Not implemented: non-EVM sources, Ever temporary wallets, a separate
+  `usd_out` custody wallet (Intents pays the payee directly and refunds to the
+  source temp), gas top-up from a reserve (the worker waits for native gas and
+  records the need), quote/status expiry or an attempts cap for a permanently
+  pending Intents swap, stale-claim operator tooling, and TON addresses.
 - Settlement for Solana, NEAR, TON, TRON and Aptos still has no transaction
-  builder or broadcaster.
+  builder or broadcaster, so those sources keep the legacy direct/routed flow.
 - Phase G: demo/live enablement, end-to-end runs and the incident runbook are not done.
 
 | Piece | Location |
@@ -477,7 +499,7 @@ following remain open:
 | Salted AES-256-GCM seed storage | `backend/src/otc/temp_wallet.rs` (`seal` / `open`) |
 | EVM EIP-1559 signing and ERC-20 calldata | `backend/src/otc/temp_wallet.rs` |
 | EVM nonce/gas/fee reads and broadcast | `backend/src/otc/chain/mod.rs` |
-| Payout worker, 3% withhold, fee sweep, recycle | `backend/src/otc/temp_settle.rs` |
+| Payout worker, direct/Intents payout, 3% withhold, fee sweep, recycle | `backend/src/otc/temp_settle.rs` |
 | Settlement state table | `backend/migrations/otc_temp_settlements.sql` |
 | Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`roles`) |
 | Table | `backend/migrations/otc_temp_wallets.sql` |

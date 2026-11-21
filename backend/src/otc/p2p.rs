@@ -410,6 +410,49 @@ impl Service {
             ));
         }
         let pay_by = Utc::now() + Duration::hours(DEAL_LIFETIME_HOURS);
+        let temp_source = if self.cfg.temp_wallets {
+            super::temp_wallet::evm_temp_source(&payer_network)?.filter(|_| {
+                self.p2p_direct_network_available(&payer_network)
+                    && self.cfg.fee_recipients.contains_key(payer_network.as_str())
+                    && (payer_network == output_network || self.near_intents.is_some())
+            })
+        } else {
+            None
+        };
+        let temp_token = match temp_source {
+            Some(_) if payer_network == output_network => {
+                Some((output_contract.clone(), payer_asset_id.clone()))
+            }
+            Some(_) => {
+                let provider = self.near_intents.as_ref().ok_or(Error::RouteUnavailable)?;
+                let source_asset = Asset::new(stablecoin.symbol(), Some(&payer_network))
+                    .map_err(|_| invalid("unsupported stablecoin paying network"))?;
+                let token_result = match payer_asset_id.as_deref() {
+                    Some(asset_id) => provider.token_for_asset_id(&source_asset, asset_id).await,
+                    None => provider.token_for_asset(&source_asset).await,
+                };
+                let token = token_result.map_err(|_| Error::RouteUnavailable)?;
+                if token.decimals != Some(6)
+                    || !token.symbol.eq_ignore_ascii_case(stablecoin.symbol())
+                {
+                    return Err(invalid(
+                        "selected paying network token does not match the deal",
+                    ));
+                }
+                let contract = token
+                    .contract_address
+                    .clone()
+                    .filter(|contract| !contract.trim().is_empty())
+                    .ok_or(Error::RouteUnavailable)?;
+                let output_asset = Asset::new(stablecoin.symbol(), Some(&output_network))
+                    .map_err(|_| invalid("unsupported stablecoin receiving network"))?;
+                if !provider.route_available(&source_asset, &output_asset).await {
+                    return Err(Error::RouteUnavailable);
+                }
+                Some((contract, Some(token.asset_id)))
+            }
+            None => None,
+        };
         let mut body = json!({
             "direction": direction,
             "stablecoin": stablecoin.symbol(),
@@ -430,27 +473,22 @@ impl Service {
             "ever_network_id": 42,
             "fee_policy": fee_policy,
         });
-        let temp_wallet = if self.cfg.temp_wallets {
-            match super::temp_wallet::same_chain_evm(&payer_network, &output_network)? {
-                Some(chain)
-                    if self.p2p_direct_network_available(&payer_network)
-                        && self.cfg.fee_recipients.contains_key(payer_network.as_str()) =>
-                {
-                    let material = super::temp_wallet::WalletMaterial::generate(chain)?;
-                    let sealed = super::temp_wallet::seal(&self.secrets_key, material.seed())?;
-                    let address = material.address()?;
-                    body["temp_wallet"] = json!({
-                        "role": "usd",
-                        "chain": chain.id(),
-                        "address": address,
-                        "status": "awaiting_payment",
-                    });
-                    Some((chain, address, sealed, material))
-                }
-                _ => None,
+        let temp_wallet = match (temp_source, temp_token) {
+            (Some(chain), Some((token, asset_id))) => {
+                let material = super::temp_wallet::WalletMaterial::generate(chain)?;
+                let sealed = super::temp_wallet::seal(&self.secrets_key, material.seed())?;
+                let address = material.address()?;
+                body["temp_wallet"] = json!({
+                    "role": "usd",
+                    "chain": chain.id(),
+                    "address": address,
+                    "token": token,
+                    "asset_id": asset_id,
+                    "status": "awaiting_payment",
+                });
+                Some((chain, address, sealed, material))
             }
-        } else {
-            None
+            _ => None,
         };
         let id = Uuid::new_v4();
         repo::p2p::mark_offer_taken(&tx, &offer_id).await?;
@@ -561,7 +599,10 @@ impl Service {
             "payment" => {
                 let temp = body["temp_wallet"]["address"].as_str();
                 (
-                    body["stablecoin_network"].as_str().unwrap_or("ethereum"),
+                    body["temp_wallet"]["chain"]
+                        .as_str()
+                        .or_else(|| body["stablecoin_network"].as_str())
+                        .unwrap_or("ethereum"),
                     if temp.is_some() {
                         // The temporary wallet receives the gross amount; the
                         // worker withholds the fee and pays the net onward.
@@ -856,6 +897,29 @@ impl Service {
         }
         let evm_net = if kind == "payout" || super::config::evm_chain_id(&leg.chain).is_none() {
             None
+        } else if kind == "payment" {
+            match body.get("temp_wallet") {
+                Some(temp) => {
+                    let chain = temp["chain"].as_str().unwrap_or(leg.chain.as_str());
+                    let chain_id = super::config::evm_chain_id(chain).ok_or_else(|| {
+                        invalid("temporary wallet network is not an OTC EVM network")
+                    })?;
+                    let rpcs = self
+                        .cfg
+                        .p2p_evm_rpcs(chain)
+                        .filter(|endpoints| endpoints.len() >= 2)
+                        .ok_or_else(|| invalid("two independent OTC EVM endpoints are required"))?;
+                    let token = temp["token"]
+                        .as_str()
+                        .ok_or_else(|| invalid("temporary wallet token is missing"))?;
+                    Some(super::chain::EvmNet {
+                        rpcs: rpcs.to_vec(),
+                        chain_id,
+                        usdt: token.to_string(),
+                    })
+                }
+                None => Some(self.p2p_net(&body)?),
+            }
         } else if let Some((fee_network, contract)) = &fee_token {
             // The fee is collected on the payer's own EVM network, which is not
             // necessarily the network the deal settles on.

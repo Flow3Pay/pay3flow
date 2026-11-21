@@ -4,12 +4,27 @@ CREATE TABLE IF NOT EXISTS otc_temp_settlements (
  trade_id UUID PRIMARY KEY REFERENCES otc_p2p_trades(id) ON DELETE CASCADE,
  wallet_id UUID NOT NULL REFERENCES otc_temp_wallets(id),
  state TEXT NOT NULL DEFAULT 'awaiting_payment'
-   CHECK(state IN ('awaiting_payment','payout_claim','payout_submitted','fee_submitted','fee_retained','settled','failed')),
+   CHECK(state IN ('awaiting_payment','payout_claim','payout_submitted','intents_submitted','intents_refunded','fee_submitted','fee_retained','settled','failed')),
  reference TEXT,
  fee_reference TEXT,
+ deposit_address TEXT,
+ deposit_memo TEXT,
+ quote_id TEXT,
+ source_units TEXT,
+ minimum_units TEXT,
  attempts INTEGER NOT NULL DEFAULT 0,
  last_error TEXT,
  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Tables created by an earlier build gain the Intents columns in place.
+ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS deposit_address TEXT;
+ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS deposit_memo TEXT;
+ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS quote_id TEXT;
+ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS source_units TEXT;
+ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS minimum_units TEXT;
+-- Earlier builds had a narrower state check; widen it in place.
+ALTER TABLE otc_temp_settlements DROP CONSTRAINT IF EXISTS otc_temp_settlements_state_check;
+ALTER TABLE otc_temp_settlements ADD CONSTRAINT otc_temp_settlements_state_check
+  CHECK(state IN ('awaiting_payment','payout_claim','payout_submitted','intents_submitted','intents_refunded','fee_submitted','fee_retained','settled','failed'));
 CREATE INDEX IF NOT EXISTS otc_temp_settlements_due
  ON otc_temp_settlements(state, updated_at);
