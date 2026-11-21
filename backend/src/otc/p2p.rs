@@ -297,7 +297,7 @@ impl Service {
             Direction::Buy => super::config::StablecoinLeg::Incoming,
             Direction::Sell => super::config::StablecoinLeg::Outgoing,
         };
-        let minimum = super::config::minimum_stablecoin_units(offer_network, leg);
+        let minimum = super::config::required_stablecoin_units(offer_network, leg);
         if usdt_basis < minimum {
             return Err(invalid(&format!(
                 "offer stablecoin amount {} is below the {} settlement minimum {}",

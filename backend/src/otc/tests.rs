@@ -1159,7 +1159,7 @@ fn draft(direction: Direction, usdt_address: &str) -> super::public_offers::Publ
         direction,
         stablecoin: super::public_offers::Stablecoin::Usdt,
         ever_amount: "250".into(),
-        usdt_amount: "11.889".into(),
+        usdt_amount: "30".into(),
         usdt_address: usdt_address.into(),
         stablecoin_network: "ethereum".into(),
         stablecoin_asset_id: None,
@@ -1339,7 +1339,7 @@ async fn p2p_prepare_builds_the_payment_handoff_and_blocks_duplicates() {
         .unwrap();
     let instructions = &prepared["attempt"]["instructions"];
     assert_eq!(prepared["attempt"]["state"], json!("prepared"));
-    assert_eq!(instructions["leg"]["transfer_amount"], json!("11532330"));
+    assert_eq!(instructions["leg"]["transfer_amount"], json!("29100000"));
     assert_eq!(instructions["leg"]["chain"], json!("ethereum"));
     assert_eq!(instructions["call"]["chain_id"], json!(1));
     assert_eq!(instructions["call"]["nonce"], json!("0x3"));
@@ -1391,8 +1391,8 @@ async fn p2p_late_delivery_can_still_prepare_after_the_nominal_deadline() {
         identity: format!("0x{}", "e".repeat(64)),
         leg: super::model::Leg {
             chain: "ethereum".into(),
-            amount: "11889000".into(),
-            transfer_amount: "11889000".into(),
+            amount: "30000000".into(),
+            transfer_amount: "30000000".into(),
             sender: format!("0x{}", "1".repeat(40)),
             recipient: format!("0x{}", "2".repeat(40)),
         },
@@ -1569,9 +1569,9 @@ async fn p2p_payment_verification_accrues_the_service_fee_once() {
     // The deal freezes the policy, so a later offer edit cannot change it.
     assert_eq!(deal["fee_policy"]["version"], json!("p2p-3pct-usdt-v1"));
     assert_eq!(deal["fee_policy"]["rate"], json!("0.03"));
-    assert_eq!(deal["fee_policy"]["basis_units"], json!("11889000"));
-    assert_eq!(deal["fee_policy"]["fee_units"], json!("356670"));
-    assert_eq!(deal["fee_policy"]["net_units"], json!("11532330"));
+    assert_eq!(deal["fee_policy"]["basis_units"], json!("30000000"));
+    assert_eq!(deal["fee_policy"]["fee_units"], json!("900000"));
+    assert_eq!(deal["fee_policy"]["net_units"], json!("29100000"));
     assert_eq!(deal["fee_accrued"], json!(false));
     assert_eq!(deal["fee_policy"]["asset"], json!("USDT"));
     assert_eq!(deal["fee_policy"]["payer"], json!("stablecoin_sender"));
@@ -1625,9 +1625,9 @@ async fn p2p_payment_verification_accrues_the_service_fee_once() {
         )
         .await
         .unwrap();
-    assert_eq!(row.get::<_, String>(0), "11889000");
-    assert_eq!(row.get::<_, String>(1), "356670");
-    assert_eq!(row.get::<_, String>(2), "11532330");
+    assert_eq!(row.get::<_, String>(0), "30000000");
+    assert_eq!(row.get::<_, String>(1), "900000");
+    assert_eq!(row.get::<_, String>(2), "29100000");
     assert_eq!(row.get::<_, String>(3), "0.03");
     assert_eq!(row.get::<_, String>(4), "p2p-3pct-usdt-v1");
     assert_eq!(row.get::<_, String>(5), "accrued");

@@ -134,10 +134,10 @@ impl PublicOfferDraft {
             Direction::Buy => super::config::StablecoinLeg::Incoming,
             Direction::Sell => super::config::StablecoinLeg::Outgoing,
         };
-        let minimum = super::config::minimum_stablecoin_units(&network, leg);
+        let minimum = super::config::required_stablecoin_units(&network, leg);
         if usdt < minimum {
             return Err(invalid(&format!(
-                "stablecoin amount {} is below the {} cross-network minimum {}",
+                "stablecoin amount {} is below the {} deal minimum {}",
                 amount::decimal(usdt, 6),
                 network,
                 amount::decimal(minimum, 6)
@@ -366,7 +366,7 @@ mod tests {
             direction: Direction::Sell,
             stablecoin: Stablecoin::Usdt,
             ever_amount: "250".into(),
-            usdt_amount: "5".into(),
+            usdt_amount: "30".into(),
             usdt_address: format!("0x{}", "a".repeat(40)),
             stablecoin_network: "ethereum".into(),
             stablecoin_asset_id: None,
@@ -377,15 +377,15 @@ mod tests {
         let cfg = super::super::config::Config::default();
         let terms = draft().terms(&cfg).unwrap();
         assert_eq!(terms["ever_units"], "250000000000");
-        assert_eq!(terms["usdt_units"], "5000000");
+        assert_eq!(terms["usdt_units"], "30000000");
         assert_eq!(terms["ethereum_chain_id"], 1);
         assert_eq!(terms["fee_policy"]["version"], P2P_FEE_VERSION);
         assert_eq!(terms["fee_policy"]["rate"], "0.03");
         assert_eq!(terms["fee_policy"]["floor"], "0");
         assert_eq!(terms["fee_policy"]["precision"], 6);
-        assert_eq!(terms["fee_policy"]["basis_units"], "5000000");
-        assert_eq!(terms["fee_policy"]["fee_units"], "150000");
-        assert_eq!(terms["fee_policy"]["net_units"], "4850000");
+        assert_eq!(terms["fee_policy"]["basis_units"], "30000000");
+        assert_eq!(terms["fee_policy"]["fee_units"], "900000");
+        assert_eq!(terms["fee_policy"]["net_units"], "29100000");
         assert_eq!(terms["fee_policy"]["asset"], "USDT");
         assert_eq!(terms["fee_policy"]["basis_asset"], "USDT");
         assert_eq!(terms["fee_policy"]["conversion"]["rate"], "1");
@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(usdc_terms["stablecoin"], "USDC");
         assert_eq!(usdc_terms["fee_policy"]["asset"], "USDT");
         assert_eq!(usdc_terms["fee_policy"]["basis_asset"], "USDC");
-        assert_eq!(usdc_terms["fee_policy"]["fee_units"], "150000");
+        assert_eq!(usdc_terms["fee_policy"]["fee_units"], "900000");
         assert_eq!(usdc_terms["fee_policy"]["conversion"]["rate"], "1");
         assert_eq!(terms["fee_policy"]["asset"], "USDT");
         assert_eq!(terms["fee_policy"]["payer"], "stablecoin_sender");
@@ -462,18 +462,30 @@ mod tests {
     }
 
     #[test]
-    fn offer_minimums_follow_the_cross_network_leg() {
+    fn offer_minimums_follow_the_product_floor_and_cross_network_leg() {
+        use super::super::config::{required_stablecoin_units, StablecoinLeg};
         let cfg = super::super::config::Config::default();
-        // Every cross-network leg has an Ethereum side, so its 0.3 fee is the floor.
+        // The $30 product floor binds long before the 0.3 USDT Ethereum fee.
         let mut item = draft();
-        item.usdt_amount = "0.3".into();
-        assert!(item.terms(&cfg).is_err(), "0.3 is below the Ethereum floor");
-        item.usdt_amount = "0.31".into();
+        item.usdt_amount = "29.999999".into();
+        assert!(
+            item.terms(&cfg).is_err(),
+            "29.999999 is below the $30 product floor"
+        );
+        item.usdt_amount = "30".into();
         assert!(item.terms(&cfg).is_ok());
+        assert_eq!(
+            required_stablecoin_units("ethereum", StablecoinLeg::Outgoing),
+            30_000_000
+        );
+        assert_eq!(
+            required_stablecoin_units("solana", StablecoinLeg::Incoming),
+            30_000_000
+        );
 
-        // TRON as the source keeps 1Click's $100 minimum because the swap starts
-        // there. As a destination only its 0.2 withdrawal fee applies, so the
-        // Ethereum floor still binds and small payouts stay allowed.
+        // TRON as the source keeps 1Click's $100 technical minimum because the
+        // swap starts there. As a destination only the product floor applies,
+        // because the product floor already exceeds its withdrawal fee.
         item.stablecoin_network = "tron".into();
         item.stablecoin_asset_id = Some("nep141:trx-usdt.omft.near".into());
         item.usdt_address = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb".into();
@@ -482,8 +494,14 @@ mod tests {
         assert!(item.terms(&cfg).is_err());
         item.usdt_amount = "100.2".into();
         assert!(item.terms(&cfg).is_ok());
+        assert_eq!(
+            required_stablecoin_units("tron", StablecoinLeg::Incoming),
+            100_100_000
+        );
         item.direction = Direction::Sell;
-        item.usdt_amount = "1".into();
+        item.usdt_amount = "29".into();
+        assert!(item.terms(&cfg).is_err());
+        item.usdt_amount = "30".into();
         assert!(item.terms(&cfg).is_ok());
     }
 
@@ -529,7 +547,7 @@ mod tests {
     #[test]
     fn buy_and_legacy_sell_directions_are_explicit_and_strict() {
         let cfg = super::super::config::Config::default();
-        let body = json!({"ever_amount":"100","usdt_amount":"11.889","usdt_address":format!("0x{}","b".repeat(40))});
+        let body = json!({"ever_amount":"100","usdt_amount":"30","usdt_address":format!("0x{}","b".repeat(40))});
         let legacy: PublicOfferDraft = serde_json::from_value(body.clone()).unwrap();
         assert_eq!(legacy.terms(&cfg).unwrap()["direction"], "sell");
         let mut buy = body.clone();
@@ -556,7 +574,7 @@ mod tests {
         );
         assert_eq!(
             usdc.terms(&cfg).unwrap()["fee_policy"]["fee_units"],
-            "356670"
+            "900000"
         );
         let mut invalid = body;
         invalid["direction"] = json!("anything");
@@ -706,7 +724,7 @@ mod tests {
         );
         let id = Uuid::parse_str(a["id"].as_str().unwrap()).unwrap();
         let mut changed = draft();
-        changed.usdt_amount = "6".into();
+        changed.usdt_amount = "31".into();
         assert!(matches!(
             service
                 .post_public_offer("seller", "retry-key", changed)

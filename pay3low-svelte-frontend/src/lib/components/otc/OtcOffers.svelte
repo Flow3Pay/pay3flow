@@ -25,6 +25,8 @@
   let stablecoinNetwork = "ethereum";
   let stablecoinAssets: Array<{ asset: string; symbol: Stablecoin; network: string; asset_id: string }> = [];
   let swapMinimums: Record<string, { incoming: string; outgoing: string; fee?: { incoming: string; outgoing: string } }> = {};
+  // Server-owned product floor: fees must not dominate a small deal.
+  let minStablecoinAmount = "30";
   let linkingWallet = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
   let marketAbort: AbortController | null = null;
   let balances: WalletBalance[] = [], balanceGeneration = 0;
@@ -104,6 +106,8 @@
     ? say(`Enter a positive ${stablecoin} total.`, `Укажите положительную сумму ${stablecoin}.`)
     : usdtUnits > MAX_OFFER_USDT_UNITS
     ? say(`One offer can total at most 1,000,000 ${stablecoin}.`, `Общая сумма одного предложения не может превышать 1 000 000 ${stablecoin}.`)
+    : usdtUnits !== null && usdtUnits < (offerUnits(minStablecoinAmount,6) ?? 0)
+    ? say(`Minimum offer is ${minStablecoinAmount} ${stablecoin}.`, `Минимальная сумма предложения — ${minStablecoinAmount} ${stablecoin}.`)
     : swapMinimum && usdtUnits !== null && usdtUnits < (offerUnits(swapMinimum,6) ?? 0)
     ? say(`Minimum for the NEAR Intents swap is ${swapMinimum} ${stablecoin}.`, `Минимум для свопа через NEAR Intents — ${swapMinimum} ${stablecoin}.`)
     : !isValidWalletAddress(stablecoinNetwork, receivingAddress)
@@ -265,8 +269,12 @@
   }
   onMount(() => {
     mounted = true;
-    void request<{ destination_assets: typeof stablecoinAssets; swap_minimums?: typeof swapMinimums }>("/p2p/assets")
-      .then(result => { stablecoinAssets = result.destination_assets || []; swapMinimums = result.swap_minimums || {}; })
+    void request<{ destination_assets: typeof stablecoinAssets; swap_minimums?: typeof swapMinimums; min_stablecoin_amount?: string }>("/p2p/assets")
+      .then(result => {
+        stablecoinAssets = result.destination_assets || [];
+        swapMinimums = result.swap_minimums || {};
+        minStablecoinAmount = result.min_stablecoin_amount || "30";
+      })
       .catch(() => { stablecoinAssets = []; });
     const timer = setInterval(() => { if (enabled && !posting && !busy) void refresh(); }, 5000);
     const controller = new AbortController();

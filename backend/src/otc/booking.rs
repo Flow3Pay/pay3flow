@@ -160,9 +160,14 @@ impl Service {
         } else {
             output_units
         };
-        if basis < amount::units(&self.cfg.min_usdt, 6)?
-            || basis > amount::units(&self.cfg.max_usdt, 6)?
-        {
+        // A configured lower floor cannot undercut the product minimum: the
+        // desk would otherwise quote a deal whose 3% fee is eaten by route costs.
+        let minimum =
+            amount::units(&self.cfg.min_usdt, 6)?.max(super::config::MIN_DEAL_STABLECOIN_UNITS);
+        if basis < minimum {
+            return Err(invalid("quote is below the desk stablecoin minimum"));
+        }
+        if basis > amount::units(&self.cfg.max_usdt, 6)? {
             return Err(invalid("quote exceeds desk trade limits"));
         }
         if request.network_costs.trim().is_empty() {

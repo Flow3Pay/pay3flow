@@ -45,7 +45,9 @@ use config::Config;
 use error::{Error, Result};
 use std::sync::Arc;
 
-/// Durable OTC application service. It never holds blockchain signing keys.
+/// Durable OTC application service. It never stores customer or desk login
+/// signing keys; platform temp wallets are a separate, not-yet-enabled custody
+/// boundary documented in `docs/OTC_TEMP_MULTICHAIN_WALLETS.md`.
 #[derive(Clone)]
 pub struct Service {
     pub(crate) pool: DbPool,

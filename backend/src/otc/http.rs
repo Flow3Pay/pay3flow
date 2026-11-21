@@ -538,6 +538,10 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         "assets":assets,
         "destination_assets":destination_assets,
         "buy_destination_assets":buy_destination_assets,
+        "min_stablecoin_amount":super::amount::decimal(
+            super::config::MIN_DEAL_STABLECOIN_UNITS,
+            6
+        ),
         "swap_minimums":swap_minimums
     }))
 }

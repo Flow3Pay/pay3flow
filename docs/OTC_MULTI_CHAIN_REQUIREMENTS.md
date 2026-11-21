@@ -182,12 +182,20 @@ exception — 1Click rejects origin amounts below $100, so collecting USDT from
 TRON needs roughly 100.1 USDT, while delivering to TRON only pays its 0.200451
 withdrawal fee and stays near the Ethereum floor.
 
-The limits live in `otc::config::minimum_stablecoin_units` as six-decimal units
-per network and leg, and are enforced both when an offer is published and when
-it is accepted (older offers can predate the limits). Rejection is a 400 with
-the amount, network, and minimum in the message. `GET /api/otc/p2p/assets`
-returns the same numbers as `swap_minimums`, with the fixed fee per leg, so the
-offer ticket can show its NEAR Intents hint from one server-owned source.
+The technical limits live in `otc::config::minimum_stablecoin_units` as
+six-decimal units per network and leg. They are a lower bound, not the product
+rule: every new P2P offer must also list at least **30 USDT/USDC**
+(`30_000_000` six-decimal units), so the 3% fee is not consumed by route costs.
+`otc::config::required_stablecoin_units` returns
+`max(30 USDT, technical floor)` and is enforced when an offer is published, when
+it is accepted (older offers can predate both floors), and for desk RFQs, whose
+`min_usdt` defaults to `"30"` and cannot be configured below the product floor.
+A deal may therefore clear $30 and still be rejected on a specific route: TRON
+as a source keeps its ~100.1 USDT technical minimum. Rejection is a 400 with the
+amount, network, and minimum in the message. `GET /api/otc/p2p/assets` returns
+the technical numbers as `swap_minimums`, with the fixed fee per leg, and the
+product floor as `min_stablecoin_amount`, so the offer ticket can show both from
+one server-owned source.
 
 | Network | Incoming (source) | Outgoing (destination) |
 | - | - | - |

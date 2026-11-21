@@ -31,7 +31,7 @@
   "usdt_wallet": "",
   "ever_gas_reserve": "1",
   "eth_gas_reserve": "0.01",
-  "min_usdt": "100",
+  "min_usdt": "30",
   "max_usdt": "10000",
   "quote_seconds": 120,
   "payment_seconds": 600,

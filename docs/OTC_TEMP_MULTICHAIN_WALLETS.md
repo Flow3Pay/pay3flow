@@ -426,10 +426,12 @@ defined verification path before marking funded.
 
 ### Phase F — Product floor + docs/API
 
-- [ ] Enforce ≥ 30 USDT/USDC on publish/accept/desk
-- [ ] Keep technical Intents floors; expose via `swap_minimums`
-- [ ] Update `otc-service.md`, `OTC_MULTI_CHAIN_REQUIREMENTS.md`, OpenAPI
-- [ ] Revise “never holds signing keys” wording to the custody boundary in §1
+- [x] Enforce ≥ 30 USDT/USDC on publish/accept/desk
+- [x] Keep technical Intents floors; expose via `swap_minimums`
+- [x] Update `otc-service.md` and `OTC_MULTI_CHAIN_REQUIREMENTS.md`; the assets
+      payload reports the product floor as `min_stablecoin_amount` (OpenAPI has
+      no OTC P2P paths to extend)
+- [x] Revise “never holds signing keys” wording to the custody boundary in §1
 
 ### Phase G — Rollout
 
