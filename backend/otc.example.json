@@ -2,6 +2,7 @@
   "enabled": false,
   "public_offers_enabled": false,
   "p2p_enabled": false,
+  "temp_wallets": false,
   "demo": false,
   "ethereum_chain_id": 1,
   "usdt_contract": "0xdAC17F958D2ee523a2206206994597C13D831ec7",

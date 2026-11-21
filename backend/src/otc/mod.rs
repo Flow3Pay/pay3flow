@@ -29,6 +29,7 @@ pub(crate) mod repo;
 mod reporting;
 mod review;
 mod route_provider;
+mod temp_wallet;
 #[cfg(test)]
 mod tests;
 mod transfers;

@@ -15,6 +15,7 @@ pub(crate) mod public_offers;
 pub(crate) mod reporting;
 pub(crate) mod review;
 pub(crate) mod route_provider;
+pub(crate) mod temp_wallets;
 pub(crate) mod transfers;
 pub(crate) mod volumes;
 pub(crate) mod workers;

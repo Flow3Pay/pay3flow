@@ -13,8 +13,10 @@ Related baselines:
 - [OTC service](otc-service.md)
 - [NEAR Intents routes](near-intents-routes.md)
 
-Status: **spec only**. Code, migrations, and feature flags are out of scope for
-this document’s authoring pass; implementers follow the steps below.
+Status: **partially implemented**. Phases A–C are in the tree; Phase D/E deal
+wiring and settlement signing are not, and the feature flag stays off. See §10
+for the checklist and §10.1 for the shipped code paths. No live deal creates a
+temporary wallet yet.
 
 ---
 
@@ -328,7 +330,7 @@ flowchart TD
 ### Rules
 
 1. Measure USD temp liquid balance in six-decimal stablecoin units.
-2. If **&lt; 1_000_000** (&lt; $1):
+2. If **< 1_000_000** (< $1):
    - `new = create_based_on(old)` → same seed family, `derivation_index + 1`,
      new address, new salt/ciphertext row, `parent_wallet_id = old.id`;
    - mark old `deleted` / `recycled`;
@@ -398,16 +400,21 @@ defined verification path before marking funded.
 
 ### Phase B — Generator crate/module
 
-- [ ] `generate` / `derive_next` / address helpers for all listed chains
+- [x] `generate` / `derive_next` / address helpers for EVM, TRON, Solana, NEAR,
+      Aptos and Everscale (`otc::temp_wallet`); TON key generation works but its
+      address still needs the TON wallet SDK
 - [ ] Chain SDKs from §5.1.1 wired in; no hand-rolled RLP/BCS/protobuf/cell encoding
-- [ ] Unit tests: deterministic vectors or round-trip sign/verify per family
-- [ ] Zeroize + no Debug on secret types
+      (only `bip32` + `k256` + `ed25519-dalek` are in the tree; settlement SDKs
+      and transaction builders are not)
+- [x] Unit tests: BIP39/BIP44 vector, sign/verify round trip, salt round trip
+- [x] Zeroize + no Debug on secret types
 
 ### Phase C — DB + crypto helper
 
-- [ ] Migration `otc_temp_wallets.sql` applied at startup
-- [ ] Encrypt/decrypt helper with per-row salt
-- [ ] Round-trip tests; key mismatch fails closed
+- [x] Migration `otc_temp_wallets.sql` applied at startup
+- [x] Encrypt/decrypt helper with per-row salt (interim `SHA-256(SECRETS_KEY || salt)`
+      KDF, as §5.2 permits, plus AES-256-GCM)
+- [x] Round-trip tests; key mismatch fails closed
 
 ### Phase D — Deal wiring
 
@@ -420,7 +427,7 @@ defined verification path before marking funded.
 
 ### Phase E — Lifecycle
 
-- [ ] Balance &lt; $1 → `create_based_on` + delete old
+- [ ] Balance < $1 → `create_based_on` + delete old
 - [ ] Balance ≥ $1 → `sendcommission` + delete
 - [ ] Always delete ever temp after payout
 
@@ -435,12 +442,38 @@ defined verification path before marking funded.
 
 ### Phase G — Rollout
 
-- [ ] Flag off by default
+- [x] Flag off by default (`OTC_TEMP_WALLETS`, default `0`)
 - [ ] Demo enablement + E2E on two-wallet and three-wallet paths
 - [ ] Incident runbook: stuck temp, Intents refund, reserve depletion
 - [ ] Live enablement only with dual RPC, fee recipients, and reserve balances
 
 ---
+
+### 10.1 Implementation status (2026-11-21)
+
+The custody layer is deliberately inert. Wiring it into Accept before a signer
+exists would give users deposit addresses the platform cannot sweep, so the
+following remain open:
+
+- Phase D: Accept does not create rows and the deal payload has no `temp_wallets`.
+- Phase E: no `create_based_on`, commission sweep or recycle runs.
+- Settlement: no chain transaction is assembled, signed or broadcast; the
+  spec’s `sign_transfer` is represented only by the `sign_digest` / `sign_message`
+  primitives in `otc::temp_wallet`.
+- TON: `address()` returns an error until the TON wallet SDK is wired.
+- Phase G: demo/live enablement, end-to-end runs and the incident runbook are not done.
+
+| Piece | Location |
+| --- | --- |
+| Key generation, derivation, addresses | `backend/src/otc/temp_wallet.rs` |
+| Salted AES-256-GCM seed storage | `backend/src/otc/temp_wallet.rs` (`seal` / `open`) |
+| Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`roles`) |
+| Table | `backend/migrations/otc_temp_wallets.sql` |
+| Repository helpers | `backend/src/otc/repo/temp_wallets.rs` |
+| Feature flag | `otc::config::Config::temp_wallets` (`OTC_TEMP_WALLETS`) |
+
+`trade_id` references `otc_p2p_trades` because P2P acceptance is the flow that
+would create temps here; the spec’s `otc_trades` predates that table.
 
 ## 11. Test plan (minimum)
 

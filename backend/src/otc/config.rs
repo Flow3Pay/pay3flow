@@ -100,6 +100,10 @@ pub(crate) struct Config {
     pub public_offers_enabled: bool,
     #[serde(default)]
     pub p2p_enabled: bool,
+    /// Temporary custodial intermediaries. Off by default; the key material
+    /// layer exists but deals do not create wallets until settlement ships.
+    #[serde(default)]
+    pub temp_wallets: bool,
     pub demo: bool,
     #[serde(default = "default_evm_chain")]
     pub ethereum_chain_id: u64,
@@ -164,6 +168,7 @@ impl Default for Config {
             enabled: false,
             public_offers_enabled: false,
             p2p_enabled: false,
+            temp_wallets: false,
             demo: false,
             ethereum_chain_id: default_evm_chain(),
             usdt_contract: default_usdt_contract(),
@@ -223,6 +228,11 @@ impl Config {
             Ok(value) if value.trim().is_empty() => BTreeMap::new(),
             Ok(value) => parse_fee_recipients(&value)?,
             Err(std::env::VarError::NotPresent) => BTreeMap::new(),
+            Err(error) => return Err(error.into()),
+        };
+        cfg.temp_wallets = match std::env::var("OTC_TEMP_WALLETS") {
+            Ok(value) => parse_flag("OTC_TEMP_WALLETS", &value)?,
+            Err(std::env::VarError::NotPresent) => cfg.temp_wallets,
             Err(error) => return Err(error.into()),
         };
         cfg.usdt_contract = cfg.usdt_contract.to_ascii_lowercase();
@@ -319,6 +329,14 @@ pub(crate) fn evm_chain_id(network: &str) -> Option<u64> {
         "base" => Some(8453),
         "sei" => Some(1329),
         _ => None,
+    }
+}
+
+fn parse_flag(name: &str, raw: &str) -> anyhow::Result<bool> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" | "" => Ok(false),
+        _ => anyhow::bail!("{name} must be 0 or 1"),
     }
 }
 
@@ -513,7 +531,15 @@ impl Config {
 
 #[cfg(test)]
 mod config_tests {
-    use super::{evm_chain_id, parse_fee_recipients, Config, USDT};
+    use super::{evm_chain_id, parse_fee_recipients, parse_flag, Config, USDT};
+
+    #[test]
+    fn temporary_wallets_are_off_until_an_explicit_flag() {
+        assert!(!Config::default().temp_wallets);
+        assert!(parse_flag("OTC_TEMP_WALLETS", "1").unwrap());
+        assert!(!parse_flag("OTC_TEMP_WALLETS", "0").unwrap());
+        assert!(parse_flag("OTC_TEMP_WALLETS", "maybe").is_err());
+    }
 
     #[test]
     fn parses_all_operator_fee_recipients() {

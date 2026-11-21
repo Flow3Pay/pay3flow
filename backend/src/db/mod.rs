@@ -87,6 +87,10 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .await
         .context("apply OTC P2P chat migration")?;
     client
+        .batch_execute(include_str!("../../migrations/otc_temp_wallets.sql"))
+        .await
+        .context("apply OTC temporary wallet migration")?;
+    client
         .batch_execute(include_str!("../../migrations/otc_history.sql"))
         .await?;
     client

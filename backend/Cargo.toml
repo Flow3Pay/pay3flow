@@ -13,6 +13,7 @@ alloy-sol-types = "1"
 async-trait = "0.1"
 axum = { version = "0.7", features = ["ws", "macros"] }
 base64 = "0.22"
+bip32 = "0.5"
 bs58 = "0.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 deadpool-postgres = "0.12"
@@ -53,6 +54,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 blake2 = "0.10"
 salsa20 = "0.10"
 argon2 = { version = "0.5", features = ["password-hash"] }
+zeroize = "1"
+
+[dev-dependencies]
+bip39 = "2"
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
