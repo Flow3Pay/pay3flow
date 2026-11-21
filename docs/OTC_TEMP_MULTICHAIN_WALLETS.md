@@ -22,10 +22,12 @@ from the platform `reserve` when `OTC_TEMP_RESERVE_PAYOUT=1` (preflighted at
 Accept); a cross-network payout is an exact-output NEAR Intents quote signed
 from that wallet. Phase B key material and signed transaction builders exist for
 every chain family through the maintained SDKs, but only the EVM source can be
-broadcast today. Only the USD input row is funded: the EVER leg and non-EVM
-sources stay on the legacy direct/routed path, so `ever` and `usd_out` are
-reserved addresses retired at settlement. Non-EVM settlement (broadcasting) is
-not implemented; the non-EVM SDK signers exist but no worker calls them yet.
+broadcast today. The USD input row and the deal's `ever` row are funded: the
+EVER payer deposits on `temp_ever`, and once the USD net is delivered a worker
+signs an EverWallet ABI 2.0 external message and forwards the booked EVER
+amount to `ever_payee` before the deal completes. `usd_out` remains a reserved
+address retired at settlement. Non-EVM stablecoin sources are not created yet;
+their SDK signers exist but no worker broadcasts them.
 Operational recovery is in [the runbook](otc-temp-wallet-runbook.md). See §10 for
 the checklist and §10.1 for the shipped code paths and deviations.
 
@@ -268,10 +270,10 @@ delete(ever temp)
 
 ### 6.1 Cross-network USD (`send_chain_usd != get_chain_usd`) — 3 wallets
 
-> Accept persists the full planned set (`ever`, `usd_in`, `usd_out`). Only
-> `usd_in` is funded and settled: the EVER leg stays on the legacy direct path
-> and Intents pays the payee's main USD wallet, so `ever` and `usd_out` are
-> reserved addresses retired at settlement.
+> Accept persists the full planned set (`ever`, `usd_in`, `usd_out`).
+> `usd_in` and `ever` are funded: Intents pays the payee's main USD wallet, and
+> the EVER worker forwards `temp_ever` to `ever_payee` after the USD net is
+> delivered. `usd_out` stays a reserved address retired at settlement.
 
 Step-by-step:
 
@@ -308,10 +310,11 @@ Step-by-step:
 
 ### 6.2 Same-network USD (`send_chain_usd == get_chain_usd`) — 2 wallets
 
-> Accept persists `ever` + `usd`. The EVER leg still uses the legacy direct
-> path, so the `ever` row is a reserved address retired at settlement. With
-> `OTC_TEMP_RESERVE_PAYOUT=1` the net is paid from the `reserve` wallet row
-> instead of the funded temp, and Accept preflights that reserve.
+> Accept persists `ever` + `usd`. The EVER payer deposits on `temp_ever`;
+> after the USD net is delivered the worker forwards the booked EVER amount to
+> `ever_payee` and completes the deal. With `OTC_TEMP_RESERVE_PAYOUT=1` the USD
+> net is paid from the `reserve` wallet row instead of the funded temp, and
+> Accept preflights that reserve.
 
 1. Accept creates `ever` + `usd` on that single USD network.
 2. Users fund `temp_ever` and `temp_usd` as above.
@@ -459,7 +462,8 @@ defined verification path before marking funded.
 
 - [x] Accept creates the planned 2–3 rows (`ever` + `usd`, or `ever` +
       `usd_in` + `usd_out`) for EVM stablecoin sources (flag on, idempotent);
-      only the USD input row is funded by the current settlement paths
+      the USD input row and the reserved `ever` row are funded, `usd_out` stays
+      unfunded
 - [x] Deal payload exposes `temp_wallets`
 - [x] The existing EVM observer verifies the transfer into the temp address
 - [x] Cross-chain: exact-output Intents quote, signed deposit from the temp,
@@ -484,8 +488,9 @@ defined verification path before marking funded.
       whatever is left, including a partial fee after cross-network route cost)
 - [x] The withheld 3% is sent to the configured fee recipient; without one it is
       marked `fee_retained` for ops
-- [x] Every terminal payout state marks the deal's reserved `ever` and
-      `usd_out` rows `deleted` (§7 rule 4); the funded input row is recycled
+- [x] `usd_out` is deleted when the USD leg terminates, and `ever` is deleted
+      once the EVER forward is included (§7 rule 4); the funded USD input row is
+      recycled. A `stalled`/`failed` EVER forward leaves the row for ops
 
 ### Phase F — Product floor + docs/API
 
@@ -535,12 +540,20 @@ recipient on that network must be configured, and the flag must be on.
   route cost consumed part of the fee, the shortfall is logged and only the
   remaining balance is swept. `REFUNDED` stops the worker in `intents_refunded`
   (funds are back on the temp wallet for ops); `FAILED` stops it in `failed`.
-- Not implemented: non-EVM sources, Ever temporary wallets, a separate
-  `usd_out` custody wallet (Intents pays the payee directly and refunds to the
-  source temp), gas top-up from a reserve (the worker waits for native gas and
-  records the need), quote/status expiry for a permanently pending Intents swap
-  (the ten-attempt cap now ends in terminal `stalled`), stale-claim operator
-  tooling, and TON addresses.
+- The EVER leg is custodial: when Accept reserved an `ever` row, the payout
+  handoff points the EVER payer at `temp_ever`, and a worker forwards the
+  booked amount to `ever_payee` only after the USD settlement is `settled` or
+  `fee_retained` and the payer's deposit attempt is verified. It signs an
+  EverWallet ABI 2.0 external message (ed25519 over the body without the
+  513-bit signature prefix, StateInit attached) and publishes it through the
+  Everscale GraphQL `sendMessage` mutation. State lives in
+  `otc_temp_settlements.ever_state/ever_reference/ever_error/ever_attempts`;
+  the trade stays `delivery_pending` until the forward is included.
+- Not implemented: non-EVM stablecoin sources, a separate `usd_out` custody
+  wallet (Intents pays the payee directly and refunds to the source temp), gas
+  top-up from a reserve (the worker waits for native gas and records the need),
+  quote/status expiry for a permanently pending Intents swap (the ten-attempt
+  cap now ends in terminal `stalled`), and stale-claim operator tooling.
 - Settlement for Solana, NEAR, TON, TRON and Aptos has SDK-built signed
   transactions but still no nonce/seqno reader or broadcaster, so those sources
   keep the legacy direct/routed flow.
@@ -567,7 +580,9 @@ recipient on that network must be configured, and the flag must be on.
 | Settlement state table | `backend/migrations/otc_temp_settlements.sql` |
 | Same-network reserve payout | `backend/src/otc/temp_settle.rs` (`temp_reserve_payout`, `ensure_reserve`) |
 | Reserve wallet rows | `otc_temp_wallets` (`role = 'reserve'`, one per chain) |
-| Reserved-role retirement (Accept-time `ever`/`usd_out`) | `repo::temp_wallets::delete_role` on every terminal payout state |
+| EVER temp payout | `backend/src/otc/everwallet.rs` (`transfer`), `backend/src/otc/chain/mod.rs` (`ever_temp_transfer`), `backend/src/otc/temp_settle.rs` (`ever_settlement_tick`) |
+| EVER payout state | `otc_temp_settlements.ever_state/ever_reference/ever_error/ever_attempts` |
+| `usd_out` retirement | `repo::temp_wallets::delete_role` on terminal USD payout states |
 | Two/three wallet role planning | `backend/src/otc/temp_wallet.rs` (`plan`, gated on an EVM payer) |
 | Table | `backend/migrations/otc_temp_wallets.sql` |
 | Repository helpers | `backend/src/otc/repo/temp_wallets.rs` |

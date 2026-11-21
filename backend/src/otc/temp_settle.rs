@@ -30,6 +30,9 @@ impl Service {
                 repo::temp_wallets::note_error(&client, &row.trade_id, &error.to_string()).await?;
             }
         }
+        if let Err(error) = self.ever_settlement_tick().await {
+            tracing::warn!(error=%error, "otc.temp.ever_settlement_failed");
+        }
         Ok(())
     }
 
@@ -49,9 +52,24 @@ impl Service {
     }
 
     fn material(&self, row: &repo::temp_wallets::SettlementRow) -> Result<WalletMaterial> {
-        let seed = temp_wallet::open(&self.secrets_key, &row.salt, &row.key_ciphertext)?;
-        let chain = temp_wallet::Chain::parse(&row.chain)?;
-        let index = u32::try_from(row.derivation_index)
+        self.material_for(
+            &row.chain,
+            row.derivation_index,
+            &row.salt,
+            &row.key_ciphertext,
+        )
+    }
+
+    fn material_for(
+        &self,
+        chain: &str,
+        derivation_index: i32,
+        salt: &[u8],
+        key_ciphertext: &[u8],
+    ) -> Result<WalletMaterial> {
+        let seed = temp_wallet::open(&self.secrets_key, salt, key_ciphertext)?;
+        let chain = temp_wallet::Chain::parse(chain)?;
+        let index = u32::try_from(derivation_index)
             .map_err(|_| invalid("temporary wallet derivation index is invalid"))?;
         WalletMaterial::from_seed(chain, &seed[..], index)
     }
@@ -457,6 +475,115 @@ impl Service {
         Ok(())
     }
 
+    /// EVER leg (spec §6.1 step 11): the payer deposits EVER on the deal's
+    /// `ever` temp wallet; after the USD net is delivered the worker forwards
+    /// the booked EVER amount to `ever_payee` and only then completes the deal.
+    async fn ever_settlement_tick(&self) -> Result<()> {
+        if !self.cfg.temp_wallets {
+            return Ok(());
+        }
+        let client = self.pool.get().await?;
+        let rows = repo::temp_wallets::due_ever_payouts(&client).await?;
+        drop(client);
+        for row in rows {
+            if let Err(error) = self.settle_ever(&row).await {
+                tracing::warn!(trade=%row.trade_id, error=%error, "otc.temp.ever_failed");
+                let client = self.pool.get().await?;
+                repo::temp_wallets::note_ever_error(&client, &row.trade_id, &error.to_string())
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn settle_ever(&self, row: &repo::temp_wallets::EverPayoutRow) -> Result<()> {
+        let client = self.pool.get().await?;
+        if row.ever_state.as_deref() == Some("submitted") {
+            let reference = row
+                .ever_reference
+                .as_deref()
+                .ok_or_else(|| invalid("EVER payout reference is missing"))?;
+            let data = self
+                .ever_agree(
+                    "query($id:String!){transactions(filter:{in_msg:{eq:$id}},limit:1){id aborted compute{success}}}",
+                    json!({"id": reference}),
+                )
+                .await?;
+            let Some(transaction) = data["transactions"]
+                .as_array()
+                .and_then(|rows| rows.first())
+            else {
+                repo::temp_wallets::note_ever_error(
+                    &client,
+                    &row.trade_id,
+                    "EVER payout message is not included yet",
+                )
+                .await?;
+                return Ok(());
+            };
+            if transaction["aborted"] == true || transaction["compute"]["success"] != true {
+                repo::temp_wallets::set_ever_state(
+                    &client,
+                    &row.trade_id,
+                    "failed",
+                    None,
+                    Some("EVER payout transaction aborted"),
+                )
+                .await?;
+                return Ok(());
+            }
+            repo::temp_wallets::delete_role(&client, &row.trade_id, "ever").await?;
+            repo::p2p::advance_trade(&client, &row.trade_id, "completed", &None).await?;
+            repo::temp_wallets::set_ever_state(&client, &row.trade_id, "paid", None, None).await?;
+            tracing::info!(trade=%row.trade_id, reference, "otc.temp.ever_paid");
+            return Ok(());
+        }
+        let units = amount::integer(
+            row.body["ever_units"]
+                .as_str()
+                .ok_or_else(|| invalid("deal EVER terms are missing"))?,
+        )?;
+        if units == 0 {
+            return Err(invalid("deal EVER amount must be positive"));
+        }
+        let payee = row.body["ever_payee"]
+            .as_str()
+            .ok_or_else(|| invalid("deal EVER payee is missing"))?;
+        let balance = super::chain::number(&self.ever_account(&row.address).await?["balance"])?;
+        let gas = amount::units(&self.cfg.ever_gas_reserve, 9)?;
+        let needed = units
+            .checked_add(gas)
+            .ok_or_else(|| invalid("EVER payout amount overflow"))?;
+        if balance < needed {
+            repo::temp_wallets::set_ever_state(
+                &client,
+                &row.trade_id,
+                "pending",
+                None,
+                Some("temporary EVER wallet is not funded enough for payout"),
+            )
+            .await?;
+            return Ok(());
+        }
+        let material = self.material_for(
+            &row.chain,
+            row.derivation_index,
+            &row.salt,
+            &row.key_ciphertext,
+        )?;
+        let reference = self.ever_temp_transfer(&material, payee, units).await?;
+        repo::temp_wallets::set_ever_state(
+            &client,
+            &row.trade_id,
+            "submitted",
+            Some(&reference),
+            None,
+        )
+        .await?;
+        tracing::info!(trade=%row.trade_id, reference, attempts=%row.ever_attempts, "otc.temp.ever_submitted");
+        Ok(())
+    }
+
     fn reserve_material(
         &self,
         reserve: &repo::temp_wallets::ReserveWallet,
@@ -468,19 +595,16 @@ impl Service {
         WalletMaterial::from_seed(chain, &seed[..], index)
     }
 
-    /// A terminal payout state retires the roles that were reserved at Accept
-    /// but never funded: the EVER leg stays on the legacy direct path and
-    /// Intents pays the payee directly, so neither `ever` nor `usd_out` should
-    /// keep an active status once the deal is done (spec §7 rule 4).
+    /// A terminal USD payout retires the roles that were reserved at Accept
+    /// but never funded. The `ever` row is not retired here: the EVER worker
+    /// forwards it after the USD net is delivered and then deletes it
+    /// (spec §6.1 step 11, §7 rule 4).
     async fn retire_reserved_roles(
         &self,
         client: &deadpool_postgres::Client,
         trade_id: &uuid::Uuid,
     ) -> Result<()> {
-        for role in ["ever", "usd_out"] {
-            repo::temp_wallets::delete_role(client, trade_id, role).await?;
-        }
-        Ok(())
+        repo::temp_wallets::delete_role(client, trade_id, "usd_out").await
     }
 
     /// The net reached the payee: record the fee as collected, sweep the desk's

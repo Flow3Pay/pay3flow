@@ -253,6 +253,55 @@ impl Service {
         self.evm_send_raw(net, &raw).await
     }
 
+    /// Publishes one already-signed external message to the Everscale network.
+    /// Sending stays separate from signing so a caller persists the message
+    /// hash before retrying an ambiguous broadcast.
+    pub(crate) async fn ever_send_boc(&self, boc: &str) -> Result<()> {
+        let endpoint = self
+            .cfg
+            .everscale_graphql
+            .first()
+            .ok_or_else(|| invalid("no Everscale endpoint configured for sending"))?;
+        let body: Value = self
+            .http
+            .post(endpoint)
+            .json(&json!({
+                "query": "mutation Send($message:String!){sendMessage(message:$message)}",
+                "variables": {"message": boc},
+            }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        if body.get("errors").is_some() || body.get("data").is_none() {
+            return Err(invalid("Everscale rejected the external message"));
+        }
+        Ok(())
+    }
+
+    /// Signs and broadcasts an EVER transfer from a temporary wallet. The
+    /// caller checks the balance and gas reserve first; this only builds the
+    /// transfer and records nothing.
+    pub(crate) async fn ever_temp_transfer(
+        &self,
+        material: &WalletMaterial,
+        to: &str,
+        amount: u128,
+    ) -> Result<String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| invalid("system clock is before the Unix epoch"))?;
+        let now_ms =
+            u64::try_from(now.as_millis()).map_err(|_| invalid("EVER message time overflow"))?;
+        let expire = u32::try_from(now.as_secs().saturating_add(600))
+            .map_err(|_| invalid("EVER message expiry overflow"))?;
+        let secret = material.ed25519_secret()?;
+        let (hash, boc) = super::everwallet::transfer(&secret, to, amount, now_ms, expire)?;
+        self.ever_send_boc(&boc).await?;
+        Ok(hash)
+    }
+
     pub(crate) async fn ever_agree(&self, query: &str, variables: Value) -> Result<Value> {
         if self.cfg.everscale_graphql.len() < 2 {
             return Err(invalid("two independent Everscale endpoints required"));

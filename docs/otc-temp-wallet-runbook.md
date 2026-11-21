@@ -9,7 +9,9 @@ Scope: `OTC_TEMP_WALLETS=1` and an EVM stablecoin source
 USD input wallet is funded and settled: the Ever leg and non-EVM sources stay
 on the legacy direct/routed flow, and `ever`/`usd_out` are retired at
 settlement. With `OTC_TEMP_RESERVE_PAYOUT=1` a same-chain reserve payout still
-uses the deal's USD input wallet.
+uses the deal's USD input wallet. The `ever` wallet is funded too: the EVER
+payer deposits on `temp_ever` and the worker forwards the booked amount to
+`ever_payee` once the USD side settled.
 
 ## 1. Enablement prerequisites
 
@@ -38,7 +40,7 @@ Do not enable the flag until every item holds on the target deployment:
 | `otc_p2p_trades.body.temp_wallet` | Funded USD input address, chain, token and asset id shown to both parties |
 | `otc_p2p_trades.body.temp_wallets` | Full planned set (`ever`, `usd`, or `usd_in` + `usd_out`) with status |
 | `otc_temp_wallets` | Role, chain, address, derivation index, salt, ciphertext, status |
-| `otc_temp_settlements` | Payout state machine, tx hashes, Intents quote id and deposit details, attempt count, `reserve_units` when the net came from the platform reserve |
+| `otc_temp_settlements` | USD payout state machine, tx hashes, Intents quote id and deposit details, attempt count, `reserve_units` when the net came from the platform reserve, and `ever_state`/`ever_reference`/`ever_error`/`ever_attempts` for the EVER forward |
 | `otc_temp_wallets` (`role = 'reserve'`) | One platform reserve wallet per chain when `OTC_TEMP_RESERVE_PAYOUT=1` |
 | `otc_p2p_attempts.temp_wallet_id` | Links a payment attempt to the custody row that received the deposit |
 
@@ -228,6 +230,27 @@ desk reserve only tops up native gas. Keep a documented per-network gas buffer
 and alert when it drops below one week of expected settlements. Automatic gas
 top-up is not implemented; a depleted reserve blocks settlement until an
 operator funds gas.
+
+## 7.1 EVER temporary leg
+
+When Accept reserved an `ever` row, the payout handoff sends the EVER payer to
+`temp_ever` instead of `ever_payee`. After the USD settlement reaches `settled`
+or `fee_retained` and the payer's deposit attempt is `verified`, the worker
+forwards the booked `ever_units` to `ever_payee` and completes the deal. State
+is on the settlement row:
+
+```sql
+SELECT trade_id, ever_state, ever_reference, ever_attempts, ever_error
+FROM otc_temp_settlements WHERE ever_state IS NOT NULL ORDER BY updated_at DESC;
+```
+
+`ever_state = 'pending'` with "not funded enough" means the temp holds less than
+`ever_units + ever_gas_reserve`; top it up and the next tick retries.
+`submitted` means the signed external message was accepted; the worker polls
+`transactions(in_msg: reference)` until it is included. `failed` means the
+message aborted or 60 attempts elapsed; inspect the temp address and the
+`ever_reference` message. The USD side is already final at this point, so treat
+an EVER failure as a P1 and do not reopen the USD leg.
 
 ## 8. Evidence to collect for an incident
 

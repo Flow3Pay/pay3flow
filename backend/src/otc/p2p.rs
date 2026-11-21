@@ -665,7 +665,7 @@ impl Service {
                 "everscale",
                 text("ever_units"),
                 text("ever_payer"),
-                text("ever_payee"),
+                Self::temp_ever_address(body).unwrap_or_else(|| text("ever_payee")),
             ),
             _ => return Err(invalid("invalid transfer kind")),
         };
@@ -688,6 +688,19 @@ impl Service {
             recipient,
         })
     }
+    /// The deal's `ever` temporary wallet, when Accept reserved one. The EVER
+    /// payer deposits there and the worker forwards it after the USD net is
+    /// delivered; without a reserved row the legacy direct payout applies.
+    fn temp_ever_address(body: &Value) -> Option<String> {
+        body.get("temp_wallets")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .find(|wallet| wallet["role"] == json!("ever"))
+            .and_then(|wallet| wallet["address"].as_str())
+            .map(str::to_string)
+    }
+
     /// Whether the accrued service fee can be transferred as plain USDT on the
     /// network the payer already used, without a provider route.
     async fn p2p_fee_pays_directly(&self, actor: &str, id: Uuid) -> Result<bool> {
@@ -2107,8 +2120,17 @@ impl Service {
                 ),
             )
         } else {
+            // A payout routed through the deal's `ever` temp wallet is not final
+            // delivery: the EVER worker forwards it to `ever_payee` and only
+            // then advances the trade to completed.
+            let routed_to_temp = Self::temp_ever_address(&body)
+                .is_some_and(|address| address == evidence.leg.recipient);
             (
-                "completed",
+                if routed_to_temp {
+                    "delivery_pending"
+                } else {
+                    "completed"
+                },
                 row.get::<_, Option<DateTime<Utc>>>("payout_by"),
             )
         };
@@ -2538,6 +2560,21 @@ mod route_status_tests {
             "canonical-usdt",
             "canonical-usdt"
         ));
+    }
+
+    #[test]
+    fn a_reserved_ever_wallet_receives_the_payout_before_the_payee() {
+        let body = json!({
+            "temp_wallets": [
+                {"role": "ever", "address": "0:aaaa"},
+                {"role": "usd_in", "address": "0xbb"}
+            ]
+        });
+        assert_eq!(
+            super::Service::temp_ever_address(&body).as_deref(),
+            Some("0:aaaa")
+        );
+        assert!(super::Service::temp_ever_address(&json!({"temp_wallet": {}})).is_none());
     }
 
     #[test]

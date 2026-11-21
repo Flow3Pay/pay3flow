@@ -30,6 +30,11 @@ const SET_INTENTS_QUOTE: &str = "UPDATE otc_temp_settlements SET reference=$2,de
 /// failure moves it to an explicit terminal state instead of freezing in a live
 /// one that still looks actionable.
 const NOTE_ERROR: &str = "UPDATE otc_temp_settlements SET attempts=attempts+1,last_error=$2,state=CASE WHEN attempts+1>=10 THEN 'stalled' ELSE state END,updated_at=now() WHERE trade_id=$1";
+/// EVER payouts start only after the USD net is delivered and the payer's
+/// verified deposit landed on the deal's `ever` temp wallet.
+const DUE_EVER: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.ever_state,s.ever_reference,s.ever_attempts FROM otc_temp_settlements s JOIN otc_p2p_trades t ON t.id=s.trade_id JOIN otc_temp_wallets w ON w.trade_id=s.trade_id AND w.role='ever' WHERE t.state='delivery_pending' AND s.state IN ('settled','fee_retained') AND w.status='active' AND (s.ever_state IS NULL OR s.ever_state IN ('pending','submitted')) AND s.ever_attempts<60 AND EXISTS(SELECT 1 FROM otc_p2p_attempts a WHERE a.trade_id=s.trade_id AND a.kind='payout' AND a.state='verified' AND a.instructions->'leg'->>'recipient'=w.address) ORDER BY s.updated_at LIMIT 20";
+const SET_EVER_STATE: &str = "UPDATE otc_temp_settlements SET ever_state=$2,ever_reference=COALESCE($3,ever_reference),ever_error=$4,updated_at=now() WHERE trade_id=$1";
+const NOTE_EVER_ERROR: &str = "UPDATE otc_temp_settlements SET ever_attempts=ever_attempts+1,ever_error=$2,ever_state=CASE WHEN ever_attempts+1>=60 THEN 'failed' WHEN ever_state='submitted' THEN 'submitted' ELSE 'pending' END,updated_at=now() WHERE trade_id=$1";
 
 #[derive(Clone, Debug)]
 pub(crate) struct TempWallet {
@@ -124,6 +129,22 @@ pub(crate) struct ReserveWallet {
     pub derivation_index: i32,
     pub salt: Vec<u8>,
     pub key_ciphertext: Vec<u8>,
+}
+
+/// One funded `ever` temporary wallet whose USD side already settled.
+#[derive(Clone)]
+pub(crate) struct EverPayoutRow {
+    pub trade_id: Uuid,
+    pub wallet_id: Uuid,
+    pub chain: String,
+    pub address: String,
+    pub derivation_index: i32,
+    pub salt: Vec<u8>,
+    pub key_ciphertext: Vec<u8>,
+    pub body: serde_json::Value,
+    pub ever_state: Option<String>,
+    pub ever_reference: Option<String>,
+    pub ever_attempts: i32,
 }
 
 pub(crate) async fn insert_settlement(
@@ -328,6 +349,51 @@ pub(crate) async fn reserve(
         }))
 }
 
+pub(crate) async fn due_ever_payouts(
+    client: &(impl GenericClient + Sync),
+) -> Result<Vec<EverPayoutRow>> {
+    Ok(client
+        .query(DUE_EVER, &[])
+        .await?
+        .iter()
+        .map(|row| EverPayoutRow {
+            trade_id: row.get(0),
+            wallet_id: row.get(1),
+            chain: row.get(2),
+            address: row.get(3),
+            derivation_index: row.get(4),
+            salt: row.get(5),
+            key_ciphertext: row.get(6),
+            body: row.get(7),
+            ever_state: row.get(8),
+            ever_reference: row.get(9),
+            ever_attempts: row.get(10),
+        })
+        .collect())
+}
+
+pub(crate) async fn set_ever_state(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    state: &str,
+    reference: Option<&str>,
+    error: Option<&str>,
+) -> Result<()> {
+    client
+        .execute(SET_EVER_STATE, &[trade_id, &state, &reference, &error])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn note_ever_error(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    error: &str,
+) -> Result<()> {
+    client.execute(NOTE_EVER_ERROR, &[trade_id, &error]).await?;
+    Ok(())
+}
+
 /// Soft-deletes every wallet row of one role for a deal (the Ever temp after
 /// its payout). Rows are kept for forensics, never hard-deleted.
 pub(crate) async fn delete_role(
@@ -341,7 +407,7 @@ pub(crate) async fn delete_role(
 
 #[cfg(test)]
 mod tests {
-    use super::{COLUMNS, DELETE_ROLE, NOTE_ERROR, RESERVE, SET_RESERVE_PAYMENT};
+    use super::{COLUMNS, DELETE_ROLE, DUE_EVER, NOTE_ERROR, RESERVE, SET_RESERVE_PAYMENT};
 
     #[test]
     fn the_attempt_cap_becomes_a_terminal_stalled_state() {
@@ -357,6 +423,8 @@ mod tests {
         assert!(SET_RESERVE_PAYMENT.contains("reserve_units=$3"));
         assert!(SET_RESERVE_PAYMENT.contains("state='payout_submitted'"));
         assert!(DELETE_ROLE.contains("status='deleted'"));
+        assert!(DUE_EVER.contains("w.role='ever'"));
+        assert!(DUE_EVER.contains("a.instructions->'leg'->>'recipient'=w.address"));
     }
 
     #[test]
