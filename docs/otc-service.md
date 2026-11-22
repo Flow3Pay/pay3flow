@@ -105,7 +105,11 @@ network it is prefilled and remains editable; other formats must be entered by
 hand and are validated before the button enables. The accept request carries the
 stablecoin source network and asset ID chosen on that card (`payment_source`,
 `payment_source_asset_id`), so the server can freeze a routable payer source and
-the deal window opens on it after confirmation. When the leg the taker has to
+the deal window opens on it after confirmation. A sell offer's taker only
+receives EVER and never signs that leg, so the request may name the payout
+address in `taker_ever`; that lets the taker accept when the EVER Wallet
+extension cannot reach its network, while a verified EVER wallet remains the
+fallback. A buy offer's taker still signs the EVER leg and keeps requiring it. When the leg the taker has to
 send is larger than the balance the server reads for that wallet, a warning
 appears beside the button and blocks the booking, so no deal is created that
 cannot be paid. A rejected acceptance is reported on the page instead of closing

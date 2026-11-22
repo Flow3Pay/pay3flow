@@ -1266,6 +1266,69 @@ async fn p2p_accept_binds_cross_legs_and_replays_the_key() {
 
 #[tokio::test]
 #[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_sell_offer_accepts_an_ever_destination_without_a_verified_wallet() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    service
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .execute(
+            "DELETE FROM otc_wallets WHERE actor=$1 AND chain='everscale'",
+            &[&taker],
+        )
+        .await
+        .unwrap();
+    // A malformed destination is refused before a deal is created.
+    let mut malformed = acceptance();
+    malformed.taker_ever = Some("0:not-a-hash".into());
+    let error = service
+        .accept_offer(
+            &taker,
+            published_offer(&service, &owner, Direction::Sell).await,
+            "malformed",
+            malformed,
+        )
+        .await
+        .expect_err("a malformed EVER destination must be refused");
+    assert!(
+        matches!(error, super::error::Error::Invalid(_)),
+        "{error:?}"
+    );
+    // Without an EVER wallet or a destination the acceptance still fails.
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let error = service
+        .accept_offer(&taker, offer_id, "missing", acceptance())
+        .await
+        .expect_err("a sell acceptance needs an EVER destination");
+    assert!(
+        matches!(
+            error,
+            super::error::Error::VerificationRequired("everscale")
+        ),
+        "{error:?}"
+    );
+    // The taker only receives EVER, so a typed address is enough.
+    let mut destination = acceptance();
+    destination.taker_ever = Some(format!("0:{}", "e".repeat(64)));
+    let deal = service
+        .accept_offer(&taker, offer_id, "accept", destination)
+        .await
+        .unwrap();
+    assert_eq!(
+        deal["terms"]["ever_payee"],
+        json!(format!("0:{}", "e".repeat(64)))
+    );
+    // The stablecoin leg keeps coming from the verified EVM wallet.
+    assert_eq!(
+        deal["terms"]["usdt_payer"],
+        json!(format!("0x{}", "d".repeat(40)))
+    );
+    cleanup(service, task).await;
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
 async fn p2p_buy_offer_flips_which_side_pays_usdt() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Buy).await;

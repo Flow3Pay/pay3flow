@@ -52,6 +52,11 @@ pub(crate) struct AcceptOfferRequest {
     pub payment_source: Option<String>,
     #[serde(default)]
     pub payment_source_asset_id: Option<String>,
+    /// EVER address that receives the taker's payout. The taker of a sell offer
+    /// never signs the EVER leg, so an address is enough to accept without an
+    /// EVER Wallet session; a verified EVER wallet stays the fallback.
+    #[serde(default)]
+    pub taker_ever: Option<String>,
 }
 
 impl From<&str> for DealPrepareRequest {
@@ -230,7 +235,14 @@ impl Service {
             return Err(Error::Disabled);
         }
         let taker_eth = self.wallet(actor, "ethereum").await?;
-        let taker_ever = self.wallet(actor, "everscale").await?;
+        // The taker of a buy offer signs the EVER leg and therefore needs a
+        // verified EVER wallet. The taker of a sell offer only receives EVER, so
+        // a missing wallet is tolerated until the destination is resolved.
+        let taker_ever_wallet = match self.wallet(actor, "everscale").await {
+            Ok(address) => Some(address),
+            Err(Error::VerificationRequired("everscale")) => None,
+            Err(error) => return Err(error),
+        };
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         repo::p2p::lock_offer(&tx, &format!("otc-p2p-offer:{offer_id}")).await?;
@@ -314,6 +326,19 @@ impl Service {
                 "offer was published for a different payment network".into(),
             ));
         }
+        let taker_ever = match direction {
+            Direction::Buy => taker_ever_wallet.ok_or(Error::VerificationRequired("everscale"))?,
+            Direction::Sell => match destination
+                .taker_ever
+                .as_deref()
+                .map(str::trim)
+                .filter(|address| !address.is_empty())
+            {
+                Some(address) => super::wallet::address("everscale", address)
+                    .map_err(|_| invalid("invalid EVER receiving address"))?,
+                None => taker_ever_wallet.ok_or(Error::VerificationRequired("everscale"))?,
+            },
+        };
         let (usdt_payer, default_usdt_payee, ever_payer, ever_payee) = match direction {
             Direction::Sell => (taker_eth, usdt_address.clone(), seller_ever, taker_ever),
             Direction::Buy => (usdt_address, taker_eth, taker_ever, seller_ever),
