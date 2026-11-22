@@ -29,7 +29,9 @@ The image names are `localhost/pay3flow/backend:RELEASE_TAG` and
 `localhost/pay3flow/frontend:RELEASE_TAG`. Snapshots live under
 `/var/lib/pay3flow/backups/RELEASE_TAG`; an existing snapshot is never overwritten.
 Verification checks readiness, USD references for RUB/AMD/BYN/UAH/KZT, both
-RUB/AMD sources, and frontend availability. `rollback` requires an explicit tag.
+RUB/AMD sources, and frontend availability. Readiness retries for up to three
+minutes so a slow control-plane or endpoint update does not trigger a rollback.
+`rollback` requires an explicit tag.
 
 SSH normally uses the workstation's existing key or agent. The environment
 variables `PAY3FLOW_DEPLOY_HOST`, `PAY3FLOW_DEPLOY_USER`, `PAY3FLOW_NAMESPACE`,

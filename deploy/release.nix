@@ -1,8 +1,14 @@
 { pkgs }:
 let
   verifyHttp = ''
+    # Endpoint and iptables updates can lag for a minute on a busy control
+    # plane, so readiness gets a longer retry window than the data checks.
+    wait_ready() {
+      curl --fail --silent --show-error --retry 20 --retry-delay 5 \
+        --retry-max-time 180 --max-time 30 "$public_url/health/ready" >/dev/null
+    }
     verify_http() {
-      curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 30 "$public_url/health/ready" >/dev/null
+      wait_ready
       for currency in RUB AMD BYN UAH KZT; do
         curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
           "$public_url/api/reference-rates?from=USD&to=$currency&market=noncash" \
@@ -125,7 +131,7 @@ in {
         '{spec:{template:{metadata:{annotations:{"pay3flow.io/source-revision":$revision}},spec:{containers:[({name:$service,image:("localhost/pay3flow/"+$service+":"+$tag),imagePullPolicy:"IfNotPresent"} + (if $service == "frontend" then {env:[{name:"PUBLIC_SOLANA_RPC_URL",value:$solana_rpc},{name:"PUBLIC_SUI_RPC_URL",value:$sui_rpc},{name:"PUBLIC_APTOS_RPC_URL",value:$aptos_rpc},{name:"PUBLIC_TON_API_URL",value:$ton_api},{name:"PUBLIC_TONCONNECT_MANIFEST_URL",value:$ton_manifest}]} elif $service == "backend" then {env:[{name:"OTC_FEE_RECIPIENTS",valueFrom:{secretKeyRef:{name:"pay3flow-secrets",key:"OTC_FEE_RECIPIENTS"}}}]} else {} end))]}}}}')
       kube patch deployment "pay3flow-$service" --type=strategic -p "$patch"
       kube rollout status "deployment/pay3flow-$service" --timeout=8m
-      curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 30 "$public_url/health/ready" >/dev/null
+      wait_ready
     done
     verify_http
     patch=$(jq -n --arg tag "$image_tag" --arg revision "$revision" '{data:{IMAGE_TAG:$tag,SOURCE_REVISION:$revision}}')
