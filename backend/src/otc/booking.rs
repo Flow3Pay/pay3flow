@@ -160,10 +160,8 @@ impl Service {
         } else {
             output_units
         };
-        // A configured lower floor cannot undercut the product minimum: the
-        // desk would otherwise quote a deal whose 3% fee is eaten by route costs.
-        let minimum =
-            amount::units(&self.cfg.min_usdt, 6)?.max(super::config::MIN_DEAL_STABLECOIN_UNITS);
+        // The private desk quote floor comes from its operator configuration.
+        let minimum = amount::units(&self.cfg.min_usdt, 6)?;
         if basis < minimum {
             return Err(invalid("quote is below the desk stablecoin minimum"));
         }

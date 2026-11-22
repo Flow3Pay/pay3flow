@@ -127,12 +127,11 @@ its first JSON frame, sends the latest 100 messages, then accepts and streams
 text messages. Messages are limited to 2,000 characters; attachments are not
 supported. The additive `otc_p2p_chat.sql` migration is applied at startup.
 
-Every new P2P offer must list at least 30 USDT/USDC on the stablecoin leg
-(`30_000_000` six-decimal units), and the desk's `min_usdt` defaults to `"30"`
-and is floored at 30 even when configured lower. The product floor does not
-replace the per-route NEAR Intents floors: the requirement is
-`max(30 USDT, technical floor)`, so TRON as a source still needs roughly 100.1
-USDT.
+P2P offers have no additional product minimum while the flow is in development.
+Amounts must still be positive, and the per-network technical settlement floors
+remain enforced: Ethereum needs at least `0.300065` USDT/USDC, while TRON as a
+source still needs roughly `100.1` USDT. Private desk RFQs continue to use the
+operator-configured `min_usdt` value (default `"30"`).
 
 Each P2P deal accrues a 3% service fee exactly once from the gross USDT
 leg (`otc_p2p_fees`; startup also applies `backend/migrations/otc_p2p_fees.sql`).

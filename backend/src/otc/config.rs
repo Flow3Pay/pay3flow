@@ -51,18 +51,16 @@ pub(crate) fn minimum_stablecoin_units(network: &str, leg: StablecoinLeg) -> u12
     }
 }
 
-/// Product floor for every new P2P deal, in six-decimal stablecoin units.
+/// Additional P2P product floor in six-decimal stablecoin units.
 ///
-/// The 3% service fee is taken from the gross stablecoin leg, so a deal below
-/// $30 pays more in route costs than the fee is worth. This floor sits above
-/// the technical Intents floors on almost every network and never replaces
-/// them: the effective minimum is the larger of the two.
-pub(crate) const MIN_DEAL_STABLECOIN_UNITS: u128 = 30_000_000;
+/// Keep this at zero while the flow is being developed. Positive amount
+/// validation and per-network technical settlement floors still apply.
+pub(crate) const P2P_PRODUCT_MIN_STABLECOIN_UNITS: u128 = 0;
 
-/// Effective minimum for a new deal: the product floor or the leg's technical
-/// Intents floor, whichever is larger.
+/// Effective minimum for a P2P deal: the product floor or technical route
+/// minimum, whichever is larger.
 pub(crate) fn required_stablecoin_units(network: &str, leg: StablecoinLeg) -> u128 {
-    MIN_DEAL_STABLECOIN_UNITS.max(minimum_stablecoin_units(network, leg))
+    P2P_PRODUCT_MIN_STABLECOIN_UNITS.max(minimum_stablecoin_units(network, leg))
 }
 
 /// Fixed fee charged when the stablecoin is delivered on `network`, in

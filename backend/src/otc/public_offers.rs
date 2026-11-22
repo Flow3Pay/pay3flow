@@ -462,30 +462,26 @@ mod tests {
     }
 
     #[test]
-    fn offer_minimums_follow_the_product_floor_and_cross_network_leg() {
+    fn offer_minimums_follow_network_technical_floors_without_product_floor() {
         use super::super::config::{required_stablecoin_units, StablecoinLeg};
         let cfg = super::super::config::Config::default();
-        // The $30 product floor binds long before the 0.3 USDT Ethereum fee.
+        // Ethereum's technical route floor, not a $30 product floor, applies.
         let mut item = draft();
-        item.usdt_amount = "29.999999".into();
-        assert!(
-            item.terms(&cfg).is_err(),
-            "29.999999 is below the $30 product floor"
-        );
-        item.usdt_amount = "30".into();
+        item.usdt_amount = "0.300064".into();
+        assert!(item.terms(&cfg).is_err());
+        item.usdt_amount = "0.300065".into();
         assert!(item.terms(&cfg).is_ok());
         assert_eq!(
             required_stablecoin_units("ethereum", StablecoinLeg::Outgoing),
-            30_000_000
+            300_065
         );
         assert_eq!(
             required_stablecoin_units("solana", StablecoinLeg::Incoming),
-            30_000_000
+            300_065
         );
 
-        // TRON as the source keeps 1Click's $100 technical minimum because the
-        // swap starts there. As a destination only the product floor applies,
-        // because the product floor already exceeds its withdrawal fee.
+        // TRON as the source keeps 1Click's $100 technical minimum; when it is
+        // only the destination, the Ethereum-origin fee determines the floor.
         item.stablecoin_network = "tron".into();
         item.stablecoin_asset_id = Some("nep141:trx-usdt.omft.near".into());
         item.usdt_address = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb".into();
@@ -499,9 +495,9 @@ mod tests {
             100_100_000
         );
         item.direction = Direction::Sell;
-        item.usdt_amount = "29".into();
+        item.usdt_amount = "0.3".into();
         assert!(item.terms(&cfg).is_err());
-        item.usdt_amount = "30".into();
+        item.usdt_amount = "0.300001".into();
         assert!(item.terms(&cfg).is_ok());
     }
 
