@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const ever = `0:${"a".repeat(64)}`, eth = `0x${"b".repeat(40)}`;
-async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean; deals?: any[]; balances?: { ever?: string | null; usdt?: string | null; state?: "ok" | "unverified" | "unavailable"; fail?: boolean }; destinationAssets?: any[] } = {}) {
+async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean; deals?: any[]; balances?: { ever?: string | null; usdt?: string | null; state?: "ok" | "unverified" | "unavailable"; fail?: boolean }; destinationAssets?: any[]; minStablecoinAmount?: string } = {}) {
   const session = { token: "seller-token", actor: "https://relay.example/actors/seller", desk: false, expires_at: "2099-01-01T00:00:00Z", signing_wallet: { chain: "everscale", address: ever }, wallets: [{ chain: "everscale", address: ever, verified_at: new Date().toISOString() }] };
   if (options.verifiedEthereum) session.wallets.push({chain:"ethereum",address:eth,verified_at:new Date().toISOString()});
   const calls: { path: string; method: string; body: any; key: string | undefined }[] = [];
@@ -59,7 +59,7 @@ async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: b
     }
     else if (path === "/config") response = { enabled: false, available: false, public_offers_available: true, public_offer_directions: ["buy","sell"], p2p_available: !!options.deals, wallet_login_available: true, wallet_login_chains: ["everscale", "ethereum"], demo: false, desk: "", desk_name: "", ever_resource: "", usdt_resource: "" };
     else if (path === "/session/challenge") response = { id: "challenge", message: "Sign in only; no transfer", everscale_data: btoa("sign-in") };
-    else if (path === "/p2p/assets") response = { assets: [], destination_assets: options.destinationAssets || [], buy_destination_assets: options.destinationAssets || [] };
+    else if (path === "/p2p/assets") response = { assets: [], destination_assets: options.destinationAssets || [], buy_destination_assets: options.destinationAssets || [], min_stablecoin_amount: options.minStablecoinAmount ?? "0.000001" };
     else if (path === "/session/proof" || path === "/session") response = session;
     else if (path === "/session/revoke") response = { revoked: true };
     else if (path === "/p2p/trades") response = { deals: options.deals || [] };
@@ -618,6 +618,19 @@ test("a buy offer warns on the USDT total and only for the verified paying walle
   await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(`0x${"c".repeat(40)}`);
   await expect(warning).toHaveCount(0);
+});
+
+test("an amount below the server product floor is red and explained before connecting", async ({ page }) => {
+  await setup(page, { minStablecoinAmount: "30" });
+  await page.getByTestId("otc-offer-ever").fill("10.000000001");
+  await page.getByTestId("otc-offer-usdt").fill("1.000001");
+  await expect(page.locator("#otc-receive")).toHaveClass(/blocked/);
+  const blocked = page.getByTestId("otc-offer-blocked");
+  await expect(blocked).toHaveText("Minimum offer is 30 USDT.");
+  await expect(page.getByTestId("otc-connect-offer")).toBeVisible();
+  await page.getByTestId("otc-offer-usdt").fill("30");
+  await expect(page.locator("#otc-receive")).not.toHaveClass(/blocked/);
+  await expect(blocked).toHaveCount(0);
 });
 
 for (const [label, balances] of [["unverified", { state: "unverified" as const }], ["unavailable", { state: "unavailable" as const }], ["a failed reader", { fail: true }]] as const) test(`a balance that is ${label} warns nothing and stays out of the errors`, async ({ page }) => {

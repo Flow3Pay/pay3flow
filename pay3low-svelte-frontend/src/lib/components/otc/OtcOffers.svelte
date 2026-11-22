@@ -61,6 +61,10 @@
   $: amountFloored = offerFloored(everAmount,9) ? "EVER" as const : offerFloored(usdtAmount,6) ? "USDT" as const : null;
   $: everUnits = offerUnits(everAmount,9);
   $: usdtUnits = offerUnits(usdtAmount,6);
+  // The product floor is a server value; a total under it is called out in red
+  // even before a wallet is connected, so the ticket never silently refuses.
+  $: minStablecoinUnits = offerUnits(minStablecoinAmount,6) ?? 0;
+  $: belowMinimum = usdtUnits !== null && usdtUnits < minStablecoinUnits;
   // The desk settles the other leg on Ethereum, so any other network needs a
   // NEAR Intents swap and cannot go below the measured route floor.
   $: swapMinimum = stablecoinNetwork === "ethereum"
@@ -106,7 +110,7 @@
     ? say(`Enter a positive ${stablecoin} total.`, `Укажите положительную сумму ${stablecoin}.`)
     : usdtUnits > MAX_OFFER_USDT_UNITS
     ? say(`One offer can total at most 1,000,000 ${stablecoin}.`, `Общая сумма одного предложения не может превышать 1 000 000 ${stablecoin}.`)
-    : usdtUnits !== null && usdtUnits < (offerUnits(minStablecoinAmount,6) ?? 0)
+    : belowMinimum
     ? say(`Minimum offer is ${minStablecoinAmount} ${stablecoin}.`, `Минимальная сумма предложения — ${minStablecoinAmount} ${stablecoin}.`)
     : swapMinimum && usdtUnits !== null && usdtUnits < (offerUnits(swapMinimum,6) ?? 0)
     ? say(`Minimum for the NEAR Intents swap is ${swapMinimum} ${stablecoin}.`, `Минимум для свопа через NEAR Intents — ${swapMinimum} ${stablecoin}.`)
@@ -311,7 +315,7 @@
     edited();
   }
   $: ticket = {
-    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, addressValid: isValidWalletAddress(stablecoinNetwork, receivingAddress), stablecoinNetwork, swapMinimum, swapFee, swapOptions, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
+    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, belowMinimum, everAmount, usdtAmount, receivingAddress, addressValid: isValidWalletAddress(stablecoinNetwork, receivingAddress), stablecoinNetwork, swapMinimum, swapFee, swapOptions, supportedStablecoinAssets: stablecoinAssets.map(({ symbol, network }) => ({ symbol, network })), seller, askingRate, valid, reviewing, linkingWallet,
     marketPrice, marketRate, marketUsdRate, usdtApprox, everApprox, error,
     onPrice: changePrice,
     onEver: changeEver,

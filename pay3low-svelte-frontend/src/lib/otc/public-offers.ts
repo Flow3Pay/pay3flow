@@ -45,6 +45,8 @@ export interface SaleTicketState {
   /** Wallet balance behind {@link shortfall}, in the asset's own decimals; empty when no balance was read. */
   fundedBalance: string;
   blockingReason: string;
+  /** The stablecoin total is below the server's product floor, so it is marked red. */
+  belowMinimum: boolean;
   everAmount: string;
   usdtAmount: string;
   receivingAddress: string;

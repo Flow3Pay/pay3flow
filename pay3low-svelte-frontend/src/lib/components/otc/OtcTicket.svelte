@@ -42,6 +42,9 @@
     : sendValue;
   $: sendShort = sale?.shortfall === "ever";
   $: receiveShort = sale?.shortfall === "usdt";
+  // A total below the product floor is an error, not a balance warning: the
+  // stablecoin amount and the reason are both shown in red right away.
+  $: belowMinimum = !!sale?.belowMinimum;
   $: shortfallNote = (asset: "EVER" | "USDT" | "USDC") => {
     const available = sale?.fundedBalance ? say(` — available ${sale.fundedBalance} ${asset}`, ` — доступно ${sale.fundedBalance} ${asset}`) : "";
     return say(`Not enough ${asset} in your wallet${available}. You can still publish the offer.`, `Недостаточно ${asset} на кошельке${available}. Опубликовать предложение всё равно можно.`);
@@ -208,7 +211,7 @@
       <span class="networkCopy"><span class="networkName">{selectedStablecoinNetwork?.name ?? sale.stablecoinNetwork}</span></span>
       <svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
     </button></div>
-  </div>{:else}{@render asset(receiveAsset)}{/if}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say(`Total to pay · ${sale.stablecoin}`, `Всего к оплате · ${sale.stablecoin}`) : say(`Total to receive · ${sale.stablecoin}`, `Всего к получению · ${sale.stablecoin}`) : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={usdtHint} />{#if receiveShort}{@render shortfallMark(sale?.stablecoin || "USDT")}{/if}</div></div></div>
+  </div>{:else}{@render asset(receiveAsset)}{/if}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say(`Total to pay · ${sale.stablecoin}`, `Всего к оплате · ${sale.stablecoin}`) : say(`Total to receive · ${sale.stablecoin}`, `Всего к получению · ${sale.stablecoin}`) : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} class:blocked={belowMinimum} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={usdtHint} />{#if receiveShort}{@render shortfallMark(sale?.stablecoin || "USDT")}{/if}</div></div></div>
   </div>
   <div class="priceField">
     <div class="priceHead">
@@ -248,7 +251,7 @@
     </div>
   {/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
-  {#if sale?.seller && sale.blockingReason}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
+  {#if sale && sale.blockingReason && (sale.seller || sale.belowMinimum)}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
   {#if pendingBooking}<p class="priceHint" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button type="button" class="reconcileButton" disabled={busy || pendingBookingLocked} on:click={onReconcile}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}
   <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingWallet || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
@@ -310,6 +313,7 @@
   .moneyPanel .amountRow { display: flex; min-width: 0; align-items: center; gap: 6px; }
   .moneyPanel .amountRow .amountInput { width: auto; flex: 1 1 auto; min-width: 0; }
   .moneyPanel .amountInput.shortfall { color: var(--color-warn); }
+  .moneyPanel .amountInput.blocked { color: var(--color-danger); }
   .shortfallMark { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; background: transparent; color: var(--color-warn); }
   .assetIdentity { display: flex; width: 100%; min-width: 0; align-items: center; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
   .assetMain { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 7px; min-height: 40px; padding: 5px 7px 5px 6px; }
