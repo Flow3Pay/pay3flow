@@ -3,14 +3,14 @@ import { expect, test, type Page } from "@playwright/test";
 const ever = `0:${"a".repeat(64)}`, eth = `0x${"b".repeat(40)}`;
 const sellerEver = `0:${"c".repeat(64)}`, sellerEth = `0x${"d".repeat(40)}`;
 
-type Fixture = { takerEver: string | null; takerUsdt: string | null; acceptError?: string; offerDirection?: "sell" | "buy"; offerNetwork?: string };
+type Fixture = { takerEver: string | null; takerUsdt: string | null; acceptError?: string; offerDirection?: "sell" | "buy"; offerNetwork?: string; sessionEver?: boolean };
 
 async function setup(page: Page, options: Fixture) {
   const session = {
     token: "taker-token", actor: "https://relay.example/actors/taker", desk: false, expires_at: "2099-01-01T00:00:00Z",
     signing_wallet: { chain: "everscale", address: ever },
     wallets: [
-      { chain: "everscale", address: ever, verified_at: new Date().toISOString() },
+      ...(options.sessionEver === false ? [] : [{ chain: "everscale", address: ever, verified_at: new Date().toISOString() }]),
       { chain: "ethereum", address: eth, verified_at: new Date().toISOString() },
     ],
   };
@@ -109,8 +109,20 @@ test("accepting an offer opens the deal window for the taker", async ({ page }) 
   await dialog.getByTestId("otc-accept-offer").click();
   await expect(page.getByTestId("otc-p2p-deal-id")).toContainText("deal-1");
   await expect(page.getByTestId("otc-p2p-deal-id")).toBeVisible();
-  expect(f.calls.find(call => call.path === "/offers/offer-foreign/accept")?.body).toEqual({});
+  expect(f.calls.find(call => call.path === "/offers/offer-foreign/accept")?.body).toEqual({ taker_ever: ever });
   await expect(page.getByTestId("otc-error")).toHaveCount(0);
+});
+
+test("a sell offer accepts a typed EVER address when no EVER wallet is available", async ({ page }) => {
+  const f = await setup(page, { takerEver: null, takerUsdt: "500", sessionEver: false });
+  const dialog = await openOffer(page);
+  const address = dialog.getByTestId("otc-ever-payout-address");
+  await expect(address).toHaveValue("");
+  await expect(dialog.getByTestId("otc-accept-offer")).toBeDisabled();
+  await address.fill(`0:${"f".repeat(64)}`);
+  await expect(dialog.getByTestId("otc-accept-offer")).toBeEnabled();
+  await dialog.getByTestId("otc-accept-offer").click();
+  expect(f.calls.find(call => call.path === "/offers/offer-foreign/accept")?.body).toEqual({ taker_ever: `0:${"f".repeat(64)}` });
 });
 
 test("a buy offer names the seller's actual stablecoin network and warns about the EVER leg", async ({ page }) => {

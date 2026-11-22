@@ -41,6 +41,7 @@
     stablecoin_address?: string;
     payment_source?: string;
     payment_source_asset_id?: string;
+    taker_ever?: string;
   }) {
     const owner = signedIn();
     if (!owner) { toTerminal(); return; }
@@ -74,6 +75,7 @@
     <p class="dealNote">{say("No public offers are open right now. The terminal shows the desk quote instead.", "Публичных офферов сейчас нет. В терминале доступна котировка деска.")}</p>
   {:else}
     <OtcDeskBook publicOffers={book} config={config} listings={[]} selectedId="" onSelect={() => {}} compact showEmpty busy={busy}
+      everAddress={signedIn()?.wallets.find(wallet => wallet.chain === "everscale")?.address || ""}
       testId="guide-otc-offer" onAccept={accept} />
     {#if !book.length}<p class="dealNote">{say("No single offer covers this amount yet. Open the terminal to request a desk quote.", "Ни один оффер пока не покрывает эту сумму. Откройте терминал, чтобы запросить котировку деска.")}</p>{/if}
     {#if notice}<p class="dealNotice" role="status">{notice}</p>{/if}

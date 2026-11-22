@@ -9,6 +9,7 @@
   import type { ConnectedWallet, WalletFamily } from "$lib/wallet-execution";
   import { networkIcon } from "$lib/icons";
   import { p2pCompatibleSources } from "$lib/otc/p2p";
+  import { isEverscaleAddress } from "$lib/everscale-wallet";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
   export let onAccept: (id: string, destination?: {
@@ -18,6 +19,8 @@
     /** Source the payer intends to spend; stored so a reload keeps the route. */
     payment_source?: string;
     payment_source_asset_id?: string;
+    /** EVER address that receives a sell offer's payout. */
+    taker_ever?: string;
   }, paymentSource?: string) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
   export let dialogOnly = false;
@@ -27,6 +30,8 @@
   export let balances: WalletBalance[] = [];
   /** The trader's verified EVM address, offered as the default stablecoin recipient. */
   export let evmAddress = "";
+  /** The trader's verified EVER address, offered as the default sell-offer payout. */
+  export let everAddress = "";
   /** Connected browser wallets, reused for the receiving network and address. */
   export let wallets: Partial<Record<WalletFamily, ConnectedWallet>> = {};
   export let listings: Proposal[] = [];
@@ -48,6 +53,7 @@
     || null;
   $: destinationNetwork = selectedBuyDestination?.network || "ethereum";
   let destinationAddress = "";
+  let everPayoutAddress = "";
   let destinationAssetsError = "";
   // The taker always pays one leg from their own wallet. The stablecoin fee is
   // withheld from that transfer, so only the net amount has to be spendable.
@@ -86,6 +92,9 @@
   /** Prefer a network the trader already has a wallet for, without hiding the explicit picker. */
   const preferredDestination = (symbol: string) => preferredDestinationAsset(buyDestinationAssets, symbol, wallets);
   $: destinationValid = !!selectedBuyDestination && isValidWalletAddress(destinationNetwork, destinationAddress.trim());
+  // The taker of a sell offer receives EVER without signing that leg, so a
+  // typed address is enough when no EVER wallet is connected or verified.
+  $: everPayoutValid = isEverscaleAddress(everPayoutAddress.trim());
   $: destinationWallet = connectedAddress(destinationNetwork);
   $: destinationWalletMatches = !!destinationWallet && destinationAddress.trim().toLowerCase() === destinationWallet.toLowerCase();
   function chooseDestination(assetId: string, network: string) {
@@ -142,6 +151,7 @@
     const initialDestination = preferredDestination(offerStablecoin(offer));
     destinationAssetId = initialDestination?.asset_id || "";
     destinationAddress = initialDestination ? defaultDestinationAddress(initialDestination.network) : "";
+    everPayoutAddress = connectedAddress("everscale") || everAddress;
     await tick();
     if (dialog && !dialog.open) dialog.showModal();
   }
@@ -324,9 +334,14 @@
               <p class="settlementNote">{say("Payment networks are temporarily unavailable; the payment leg stays on Ethereum.", "Сети оплаты временно недоступны; оплата останется в Ethereum.")}</p>
             {/if}
           </div>
+          <label class="buyDestination">{say("EVER receiving address", "EVER-адрес получения")}
+            <input bind:value={everPayoutAddress} required autocomplete="off" spellcheck="false" placeholder="0:…" disabled={busy} data-testid="otc-ever-payout-address" />
+          </label>
+          {#if everPayoutAddress.trim() && !everPayoutValid}<p class="acceptError" role="alert">{say("Enter a valid Everscale address (0:…).", "Укажите корректный адрес Everscale (0:…).")}</p>{/if}
+          <p class="settlementNote">{say("An EVER Wallet is not required: the seller sends EVER to this address.", "EVER Wallet не обязателен: продавец отправит EVER на этот адрес.")}</p>
         {/if}
         {#if takerShort}<p class="acceptWarning" role="status" data-testid="otc-accept-shortfall">{say(`Not enough ${takerSymbol} to settle this offer: ${takerAvailable || 0} ${takerSymbol} available on ${takerNetwork}, ${takerAmount} ${takerSymbol} needed. Top up that wallet and reopen the offer.`, `Недостаточно ${takerSymbol} для расчёта по этому офферу: доступно ${takerAvailable || 0} ${takerSymbol} в сети ${takerNetwork}, требуется ${takerAmount} ${takerSymbol}. Пополните кошелёк и откройте оффер заново.`)}</p>{/if}
-        <button type="button" class="acceptOffer" disabled={busy || takerShort || (side === "buy" && !destinationValid)} data-testid="otc-accept-offer" on:click={() => {
+        <button type="button" class="acceptOffer" disabled={busy || takerShort || (side === "buy" && !destinationValid) || (side === "sell" && !everPayoutValid)} data-testid="otc-accept-offer" on:click={() => {
           if (side === "buy" && selectedBuyDestination) {
             onAccept(selected.id, {
               stablecoin_network: selectedBuyDestination.network,
@@ -337,10 +352,13 @@
             // The taker's payment source has to reach the backend, otherwise a
             // reloaded deal falls back to a direct transfer on the seller's
             // network instead of the NEAR Intents route the taker picked.
-            onAccept(selected.id, selectedPaymentSource ? {
-              payment_source: selectedPaymentSource.asset,
-              payment_source_asset_id: selectedPaymentSource.asset_id,
-            } : undefined, selectedPaymentSource?.asset);
+            onAccept(selected.id, {
+              ...(selectedPaymentSource ? {
+                payment_source: selectedPaymentSource.asset,
+                payment_source_asset_id: selectedPaymentSource.asset_id,
+              } : {}),
+              taker_ever: everPayoutAddress.trim(),
+            }, selectedPaymentSource?.asset);
           }
           closeOffer();
         }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button>
