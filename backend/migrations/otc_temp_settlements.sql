@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS otc_temp_settlements (
  deposit_address TEXT,
  deposit_memo TEXT,
  quote_id TEXT,
+ intents_started_at TIMESTAMPTZ,
  source_units TEXT,
  minimum_units TEXT,
  -- Net paid from the platform reserve instead of the temporary wallet; the
@@ -26,6 +27,9 @@ CREATE TABLE IF NOT EXISTS otc_temp_settlements (
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS deposit_address TEXT;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS deposit_memo TEXT;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS quote_id TEXT;
+ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS intents_started_at TIMESTAMPTZ;
+UPDATE otc_temp_settlements SET intents_started_at=updated_at
+ WHERE state='intents_submitted' AND intents_started_at IS NULL;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS source_units TEXT;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS minimum_units TEXT;
 ALTER TABLE otc_temp_settlements ADD COLUMN IF NOT EXISTS reserve_units TEXT;

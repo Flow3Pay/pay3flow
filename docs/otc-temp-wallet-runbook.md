@@ -162,8 +162,10 @@ The worker accepts `SUCCESS` only when the delivered amount is at least
 - `REFUNDED`: see §4.5.
 - `FAILED`: the deposit may still sit on the temporary address or be in flight;
   verify the token balance before any manual action.
-- `PENDING` beyond the quote window: confirm the deposit transaction is mined
-  and the provider still knows the deposit; escalate with the quote id.
+- `PENDING` for two hours: the worker moves the settlement to `stalled` and
+  stops automatic retries. Confirm the deposit transaction is mined and the
+  provider still knows the deposit; escalate with the quote id. The timeout is
+  a manual-review cutoff, not proof that the swap can no longer settle.
 
 ### 4.5 `intents_refunded`
 

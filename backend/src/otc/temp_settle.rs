@@ -412,6 +412,9 @@ impl Service {
                         )
                         .await?;
                     }
+                    "PENDING" => {
+                        repo::temp_wallets::stall_expired_intents(&client, &row.trade_id).await?;
+                    }
                     _ => {}
                 }
             }

@@ -28,10 +28,11 @@ const SET_INTENTS_PAYOUT_REFERENCE: &str = "UPDATE otc_temp_settlements SET refe
 const RESET_INTENTS_PAYOUT: &str = "UPDATE otc_temp_settlements SET reference=NULL,output_signed_transaction=NULL,state='intents_submitted',last_error=$2,updated_at=now() WHERE trade_id=$1 AND state='intents_payout_submitted'";
 const SET_STATE: &str =
     "UPDATE otc_temp_settlements SET state=$2,last_error=$3,updated_at=now() WHERE trade_id=$1";
+const STALL_EXPIRED_INTENTS: &str = "UPDATE otc_temp_settlements SET state='stalled',last_error='NEAR Intents status remained pending for over two hours; operator review required',updated_at=now() WHERE trade_id=$1 AND state='intents_submitted' AND intents_started_at < now()-interval '2 hours'";
 const SET_PAYOUT_REFERENCE: &str = "UPDATE otc_temp_settlements SET reference=$2,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
 const SET_FEE_REFERENCE: &str = "UPDATE otc_temp_settlements SET fee_reference=$2,fee_signed_transaction=$3,state='fee_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('payout_submitted','intents_submitted','intents_payout_submitted')";
 const SET_TREASURY_PAYMENT: &str = "UPDATE otc_temp_settlements SET reference=$2,reserve_units=$3,payout_signed_transaction=$4,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
-const SET_INTENTS_QUOTE: &str = "UPDATE otc_temp_settlements SET reference=$2,deposit_address=$3,deposit_memo=$4,quote_id=$5,source_units=$6,minimum_units=$7,state='intents_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
+const SET_INTENTS_QUOTE: &str = "UPDATE otc_temp_settlements SET reference=$2,deposit_address=$3,deposit_memo=$4,quote_id=$5,source_units=$6,minimum_units=$7,intents_started_at=now(),state='intents_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
 const WALLET_SECRET_FOR_ROLE: &str = "SELECT chain,address,derivation_index,salt,key_ciphertext FROM otc_temp_wallets WHERE trade_id=$1 AND role=$2 AND status='active' LIMIT 1";
 /// A row that keeps failing stops being selected at ten attempts, so the tenth
 /// failure moves it to an explicit terminal state instead of freezing in a live
@@ -260,6 +261,15 @@ pub(crate) async fn set_state(
         .execute(SET_STATE, &[trade_id, &state, &error])
         .await?;
     Ok(())
+}
+
+/// Stops automatic settlement after a funded Intents swap remains pending for
+/// two hours. Funds stay on custodial addresses for operator reconciliation.
+pub(crate) async fn stall_expired_intents(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+) -> Result<bool> {
+    Ok(client.execute(STALL_EXPIRED_INTENTS, &[trade_id]).await? == 1)
 }
 
 pub(crate) async fn set_payout_reference(
@@ -637,7 +647,7 @@ mod tests {
     use super::{
         ATTACH_POOL_SLOT, CLAIM_EVER, CLAIM_GAS, COLUMNS, DELETE_ROLE, DUE_EVER, GAS_FUNDING,
         LOCK_POOL_SLOT, NOTE_ERROR, NOTE_GAS_ERROR, RETURN_TO_POOL, SET_EVER_SIGNED,
-        SET_GAS_SIGNED, SET_TREASURY_PAYMENT, TREASURY,
+        SET_GAS_SIGNED, SET_INTENTS_QUOTE, SET_TREASURY_PAYMENT, STALL_EXPIRED_INTENTS, TREASURY,
     };
 
     #[test]
@@ -680,6 +690,14 @@ mod tests {
         assert!(SET_GAS_SIGNED.contains("state='claim'"));
         assert!(NOTE_GAS_ERROR.contains("attempts+1>=10"));
         assert!(GAS_FUNDING.contains("FROM otc_temp_gas"));
+    }
+
+    #[test]
+    fn intents_pending_timeout_is_measured_from_quote_creation() {
+        assert!(SET_INTENTS_QUOTE.contains("intents_started_at=now()"));
+        assert!(STALL_EXPIRED_INTENTS.contains("intents_started_at < now()-interval '2 hours'"));
+        assert!(STALL_EXPIRED_INTENTS.contains("state='intents_submitted'"));
+        assert!(STALL_EXPIRED_INTENTS.contains("state='stalled'"));
     }
 
     #[test]
