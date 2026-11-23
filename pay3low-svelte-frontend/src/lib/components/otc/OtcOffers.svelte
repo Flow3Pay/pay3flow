@@ -6,7 +6,8 @@
   import { sameWalletAddress } from "$lib/wallet-amount";
   import { isValidWalletAddress } from "$lib/wallet-address";
   import { chainIdForNetwork, walletFamily } from "$lib/wallet-execution";
-  import { fetchMarketPrices } from "$lib/exchange";
+import { fetchMarketPrices } from "$lib/exchange";
+import { otcNetworkAllowed } from "$lib/otc/p2p";
   import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState, type Stablecoin } from "$lib/otc/public-offers";
   export let session: Session | null;
   export let busy = false;
@@ -117,7 +118,7 @@
     : !isValidWalletAddress(stablecoinNetwork, receivingAddress)
       ? say(`Enter a valid receiving ${stablecoin} address for ${networkLabel(stablecoinNetwork)}.`, `Укажите корректный адрес получения ${stablecoin} в сети ${networkLabel(stablecoinNetwork)}.`)
       : "";
-  const networkLabels: Record<string, string> = { ethereum: "Ethereum", sei: "Sei", "bnb-smart-chain": "BNB Smart Chain", "polygon-pos": "Polygon", "avalanche-c": "Avalanche", "arbitrum-one": "Arbitrum One", base: "Base", optimism: "Optimism", gnosis: "Gnosis", near: "NEAR", tron: "TRON", solana: "Solana", ton: "TON", sui: "Sui", aptos: "Aptos" };
+  const networkLabels: Record<string, string> = { ethereum: "Ethereum", sei: "Sei", "bnb-smart-chain": "BNB Smart Chain", "polygon-pos": "Polygon", "avalanche-c": "Avalanche", "arbitrum-one": "Arbitrum One", base: "Base", optimism: "Optimism", gnosis: "Gnosis", near: "NEAR", solana: "Solana", ton: "TON", sui: "Sui", aptos: "Aptos" };
   const networkLabel = (network: string) => networkLabels[network] ?? network;
   $: valid = !blockingReason;
   $: if (direction !== loadedDirection) resetDirection(direction);
@@ -275,7 +276,7 @@
     mounted = true;
     void request<{ destination_assets: typeof stablecoinAssets; swap_minimums?: typeof swapMinimums; min_stablecoin_amount?: string }>("/p2p/assets")
       .then(result => {
-        stablecoinAssets = result.destination_assets || [];
+        stablecoinAssets = (result.destination_assets || []).filter(asset => otcNetworkAllowed(asset.network));
         swapMinimums = result.swap_minimums || {};
         minStablecoinAmount = result.min_stablecoin_amount || "30";
       })

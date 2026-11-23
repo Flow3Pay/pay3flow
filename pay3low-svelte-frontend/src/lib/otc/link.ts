@@ -19,7 +19,8 @@ function decimal(value: string | null): string | undefined {
 }
 
 function network(value: string | null): string | undefined {
-  return value !== null && /^[a-z0-9][a-z0-9_-]{0,79}$/.test(value) ? value : undefined;
+  return value !== null && value.toLowerCase() !== "tron"
+    && /^[a-z0-9][a-z0-9_-]{0,79}$/.test(value) ? value : undefined;
 }
 
 export function parseOtcHash(hash: string): Partial<OtcLinkState> {

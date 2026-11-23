@@ -1,10 +1,13 @@
 import type { Attempt } from "./service";
 
 export type P2pLeg = "payment" | "payout";
+export function otcNetworkAllowed(network: string): boolean {
+  return network.trim().toLowerCase() !== "tron";
+}
 const directNetworks = new Set([
   "ethereum", "optimism", "bnb-smart-chain", "gnosis",
   "polygon-pos", "avalanche-c", "arbitrum-one", "base", "sei",
-  "tron", "ton", "solana",
+  "ton", "solana",
 ]);
 const evmDirectNetworks = new Set([
   "ethereum", "optimism", "bnb-smart-chain", "gnosis",
@@ -21,12 +24,13 @@ export function p2pDirectDirectionAllowed(direction: "buy" | "sell", network: st
     && (direction === "buy" || evmDirectNetworks.has(network));
 }
 
-export function p2pCompatibleSources<T extends { destination_asset_ids: string[] }>(
+export function p2pCompatibleSources<T extends { asset: string; destination_asset_ids: string[] }>(
   sources: T[],
   destinationAssetId: string,
 ): T[] {
   return destinationAssetId
-    ? sources.filter(source => source.destination_asset_ids.includes(destinationAssetId))
+    ? sources.filter(source => source.destination_asset_ids.includes(destinationAssetId)
+      && otcNetworkAllowed(source.asset.split("@")[1] ?? ""))
     : [];
 }
 
@@ -81,6 +85,7 @@ export function p2pDirectAssetMatch(
   return !!source
     && source.asset === destinationAsset
     && source.asset_id === destinationAssetId
+    && otcNetworkAllowed(destinationNetwork)
     && directNetworks.has(destinationNetwork)
     && source.asset.split("@")[1] === destinationNetwork;
 }

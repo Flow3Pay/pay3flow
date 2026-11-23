@@ -582,10 +582,21 @@ mod config_tests {
             vec!["https://polygon-a".into(), "https://polygon-b".into()],
         );
         cfg.p2p_evm_rpcs.insert(
+            "avalanche-c".into(),
+            vec!["https://avalanche-a".into(), "https://avalanche-b".into()],
+        );
+        cfg.p2p_evm_rpcs.insert(
             "base".into(),
             vec!["https://base-a".into(), "https://base-b".into()],
         );
-        assert_eq!(cfg.temp_wallet_networks(), vec!["ethereum", "polygon-pos"]);
+        cfg.p2p_chain_rpcs.insert(
+            "tron".into(),
+            vec!["https://tron-a".into(), "https://tron-b".into()],
+        );
+        assert_eq!(
+            cfg.temp_wallet_networks(),
+            vec!["ethereum", "polygon-pos", "avalanche-c"]
+        );
     }
 
     #[test]

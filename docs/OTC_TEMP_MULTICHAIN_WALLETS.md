@@ -75,17 +75,17 @@ legs are funded and accepted, the backend signs outbound transfers:
 
 Canonical network ids (match `route_execution` / route engine aliases):
 
-| Spec name | Canonical id | Family | Coin type / notes |
-| --- | --- | --- | --- |
-| ETH | `ethereum` | EVM secp256k1 | BIP44 `m/44'/60'/0'/0/i` |
-| Polygon | `polygon-pos` | EVM | same EVM key/address as ethereum family |
-| Avalanche C | `avalanche-c` | EVM | same EVM key/address as ethereum family |
-| TRON | `tron` | secp256k1 + Tron address | Tron derivation / Base58Check |
-| Solana | `solana` | ed25519 | Solana pubkey Base58 |
-| NEAR | `near` | ed25519 | implicit account hex |
-| TON | `ton` | ed25519 | TON-friendly address encoding |
-| Aptos | `aptos` | ed25519 | `0x` + 32-byte account |
-| Everscale (EVER leg) | `everscale` | ed25519 / EverWallet | reuse `m/44'/396'/…` pattern from evernode-multisig |
+| Spec name | Canonical id | Family | Address/key support | OTC settlement |
+| --- | --- | --- | --- | --- |
+| ETH | `ethereum` | EVM secp256k1 | BIP44 `m/44'/60'/0'/0/i` | Yes, with two configured RPC endpoints |
+| Polygon | `polygon-pos` | EVM | same EVM key/address as ethereum family | Yes, with two configured RPC endpoints |
+| Avalanche C | `avalanche-c` | EVM | same EVM key/address as ethereum family | Yes, with two configured RPC endpoints |
+| TRON | `tron` | secp256k1 + Tron address | Address derivation / Base58Check only for the address generator | No; excluded from OTC offers, temp deal plans, and payouts |
+| Solana | `solana` | ed25519 | Solana pubkey Base58 | Not yet |
+| NEAR | `near` | ed25519 | implicit account hex | Not yet |
+| TON | `ton` | ed25519 | TON-friendly address encoding | Not yet |
+| Aptos | `aptos` | ed25519 | `0x` + 32-byte account | Not yet |
+| Everscale (EVER leg) | `everscale` | ed25519 / EverWallet | reuse `m/44'/396'/…` pattern from evernode-multisig | EVER deposit/forward only |
 
 Stablecoins: **USDT** and **USDC** only, identified as `(stablecoin, network)`
 plus catalog asset id. An EVM `0x…` address never implies the network.
@@ -106,8 +106,8 @@ configured `min_usdt` minimum.
 ### 3.2 Technical Intents floors
 
 `otc::config::minimum_stablecoin_units` and `GET /api/otc/p2p/assets`
-`swap_minimums` remain authoritative for **routable** amounts. Example: TRON as
-origin still needs ~**100.1** USDT for 1Click. An amount may be positive and
+`swap_minimums` remain authoritative for **routable** amounts. TRON is excluded
+from OTC regardless of its configured route minimum. An amount may be positive and
 still be rejected for a specific route with a clear 400 naming amount, network,
 and technical minimum.
 
@@ -143,8 +143,8 @@ Let:
 Examples:
 
 - EVER ↔ USDT on Ethereum only → 2 wallets (`everscale` + `ethereum`).
-- Pay USDT on TRON, receive USDT on Solana, EVER on Everscale → 3 wallets
-  (`everscale` + `tron` + `solana`).
+- Pay USDT on Ethereum, receive USDT on Polygon, EVER on Everscale → 3 wallets
+  (`everscale` + `ethereum` + `polygon-pos`).
 
 Creation happens **once at Accept**, idempotent on `(trade_id, role)`.
 
@@ -177,7 +177,7 @@ RLP/BCS/protobuf/cell encoders are not acceptable for a custodial path.
 | Solana | [official Solana Rust client](https://solana.com/docs/clients/official/rust) (`solana-sdk`, `solana-client`, `spl-token`) | ed25519 keys, associated token accounts, transaction build/sign |
 | NEAR | [`near-api-rs`](https://github.com/near/near-api-rs) | implicit accounts, Borsh transactions, NEP-141 calls, RPC |
 | TON | [`tonlib-rs`](https://github.com/ston-fi/tonlib-rs) | wallet contracts, cells/BoC, external messages, signing |
-| TRON | [`anychain-tron`](https://crates.io/crates/anychain-tron) | Tron address encoding, TRX/TRC-20 transactions, signing |
+| TRON | [`anychain-tron`](https://crates.io/crates/anychain-tron) | Address encoding for the general address generator only; no OTC custody or settlement |
 | Everscale | existing `evernode-multisig` + `everscale-types` | EverWallet address and contract messages |
 | Aptos | [`aptos-bcs`](https://crates.io/crates/aptos-bcs) | ed25519 account, BCS transaction, FA transfer (the SDK's own codec; see the note below on `aptos-sdk`) |
 
@@ -185,7 +185,7 @@ Pin versions in `backend/Cargo.toml` and cover each family with the round-trip
 sign/verify tests in Phase B. The wired crates are `solana-sdk` + `spl-token`,
 `near-api-types` (the types crate of near-api-rs; the `near-api` RPC client
 needs OpenSSL/pkg-config, which the build image does not provide),
-`anychain-tron`, `tonlib-core` (the pure-Rust part of tonlib-rs), `aptos-bcs`
+`anychain-tron` (address derivation only; TRON is excluded from OTC), `tonlib-core` (the pure-Rust part of tonlib-rs), `aptos-bcs`
 and `alloy` for EVM. Avoid the native `tonlib` crate: it needs cmake and a
 compiled tonlib, and the pure-Rust core builds everywhere the backend does.
 `aptos-sdk` is not linked: every 0.4–0.8 release force-enables
@@ -409,7 +409,7 @@ Gas policy:
 ### Observers
 
 Reuse [`backend/src/otc/chain/`](../backend/src/otc/chain/) patterns for EVM,
-TRON, TON, Solana, Everscale. NEAR/Aptos may remain Intents-status-driven until
+TON, Solana, Everscale. NEAR/Aptos may remain Intents-status-driven until
 dedicated observers exist; inbound user→temp on those chains still needs a
 defined verification path before marking funded.
 
@@ -443,7 +443,7 @@ defined verification path before marking funded.
 - [x] Chain SDKs from §5.1.1 wired in; no hand-rolled RLP/BCS/protobuf/cell
       encoding. EVM uses `alloy`; Solana uses `solana-sdk` + `spl-token`; NEAR
       uses `near-api-types` (`ft_transfer` Borsh transaction); TRON uses
-      `anychain-tron` (TRC-20 trigger contract); TON uses `tonlib-core`, the
+      `anychain-tron` only for general address derivation; TON uses `tonlib-core`, the
       pure-Rust cell/wallet V4R2 library of tonlib-rs (the native `tonlib` crate
       needs cmake and a tonlib build, so it is not linked); Aptos uses
       `aptos-bcs` (fungible-asset entry function and signed BCS transaction);
@@ -556,7 +556,7 @@ recipient on that network must be configured, and the flag must be on.
   from treasury (the worker waits for native gas and records the need),
   quote/status expiry for a permanently pending Intents swap (the ten-attempt
   cap now ends in terminal `stalled`), and stale-claim operator tooling.
-- Settlement for Solana, NEAR, TON, TRON and Aptos has SDK-built signed
+- Settlement for Solana, NEAR, TON and Aptos has SDK-built signed
   transactions but still no nonce/seqno reader or broadcaster, so those sources
   keep the legacy direct/routed flow.
 - A permanent treasury is generated and sealed for each configured EVM temp
@@ -571,7 +571,7 @@ recipient on that network must be configured, and the flag must be on.
 | Key generation, derivation, addresses | `backend/src/otc/temp_wallet.rs` |
 | Solana address and SPL transfer signing | `backend/src/otc/temp_wallet/solana.rs` |
 | NEAR implicit address and NEP-141 signing | `backend/src/otc/temp_wallet/near.rs` |
-| TRON address and TRC-20 signing | `backend/src/otc/temp_wallet/tron.rs` |
+| TRON address derivation (general generator only; no OTC role) | `backend/src/otc/temp_wallet/tron.rs` |
 | TON wallet-V4R2 address and transfer signing | `backend/src/otc/temp_wallet/ton.rs` |
 | Aptos address and fungible-asset signing | `backend/src/otc/temp_wallet/aptos.rs` |
 | Salted AES-256-GCM seed storage | `backend/src/otc/temp_wallet.rs` (`seal` / `open`) |
@@ -603,7 +603,7 @@ would create temps here; the spec’s `otc_trades` predates that table.
    `SECRETS_KEY` fails.
 3. **Wallet count**: same USD networks → 2 rows; different → 3 rows.
 4. **Min amount**: 29.999999 rejected; 30.000000 accepted subject to route
-   floors; TRON origin still blocked below technical ~100.1 when routed.
+   floors; TRON is rejected from OTC regardless of configured RPCs; its generator address derivation remains available outside OTC.
 5. **Withhold**: after funding, outbound Intents/reserve amount equals
    `net_units`; 3% remains until commission/recycle.
 6. **Lifecycle**: mock balance 0.5 → recycled child; mock balance 5 → commission

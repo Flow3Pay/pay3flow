@@ -31,7 +31,7 @@ test("payment networks are restricted to routes for the exact destination token"
       true,
     );
   }
-  for (const network of ["sei", "tron", "ton", "solana"]) {
+  for (const network of ["sei", "ton", "solana"]) {
     const asset = `USDT@${network}`;
     assert.equal(
       p2pDirectAssetMatch(
@@ -44,7 +44,12 @@ test("payment networks are restricted to routes for the exact destination token"
     );
     assert.equal(p2pDirectAssetMatch(sources[0], asset, `${network}-usdt`, network), false);
   }
-  for (const network of ["tron", "ton", "solana"]) {
+  assert.equal(p2pDirectAssetMatch(
+    { ...sources[0], asset: "USDT@tron", asset_id: "tron-usdt" },
+    "USDT@tron", "tron-usdt", "tron",
+  ), false);
+  assert.equal(p2pDirectDirectionAllowed("buy", "tron"), false);
+  for (const network of ["ton", "solana"]) {
     assert.equal(p2pDirectDirectionAllowed("buy", network), true);
     assert.equal(p2pDirectDirectionAllowed("sell", network), false);
   }
@@ -101,7 +106,7 @@ test("the deal modal never defaults to a source that cannot be routed", () => {
   // The source the payer picked when accepting wins over everything.
   assert.equal(
     p2pDefaultSourceAsset(nearDeal, sources, destinations, "USDT@tron"),
-    "USDT@tron",
+    "USDT@ethereum",
   );
   // A stale preference that no longer routes is ignored.
   assert.equal(
@@ -115,7 +120,7 @@ test("the deal modal never defaults to a source that cannot be routed", () => {
       sources,
       destinations,
     ),
-    "USDT@tron",
+    "USDT@ethereum",
   );
   // An EVM destination can still default to its own network.
   const evmDeal = deal({

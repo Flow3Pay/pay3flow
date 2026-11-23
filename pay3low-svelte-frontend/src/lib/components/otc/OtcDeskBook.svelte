@@ -8,7 +8,7 @@
   import { connectedWalletAddress, destinationAddressFor, isValidWalletAddress, preferredDestinationAsset } from "$lib/wallet-address";
   import type { ConnectedWallet, WalletFamily } from "$lib/wallet-execution";
   import { networkIcon } from "$lib/icons";
-  import { p2pCompatibleSources } from "$lib/otc/p2p";
+import { otcNetworkAllowed, p2pCompatibleSources } from "$lib/otc/p2p";
   import { isEverscaleAddress } from "$lib/everscale-wallet";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
@@ -167,8 +167,8 @@
   onMount(() => {
     void request<{ assets?: PaymentSource[]; buy_destination_assets?: typeof buyDestinationAssets }>("/p2p/assets")
       .then(result => {
-        buyDestinationAssets = result.buy_destination_assets || [];
-        paymentSourceAssets = result.assets || [];
+        buyDestinationAssets = (result.buy_destination_assets || []).filter(asset => otcNetworkAllowed(asset.network));
+        paymentSourceAssets = (result.assets || []).filter(asset => otcNetworkAllowed(asset.network));
         if (selectedOffer && !destinationAssetId) {
           const fallback = preferredDestination(offerToken);
           destinationAssetId = fallback?.asset_id || "";

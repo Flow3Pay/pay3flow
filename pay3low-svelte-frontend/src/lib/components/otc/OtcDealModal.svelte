@@ -7,7 +7,7 @@
   import { identiconDataUri } from "$lib/otc/identicon";
   import OtcChatModal from "./OtcChatModal.svelte";
   import {
-    p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDefaultSourceAsset, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+    otcNetworkAllowed, p2pAction, p2pActive, p2pBothConfirmed, p2pCompatibleSources, p2pDefaultSourceAsset, p2pDirectAssetMatch, p2pDirectDirectionAllowed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
     p2pFeeStatus, p2pFormatUnits, p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
     type P2pDeal, type P2pLeg,
   } from "$lib/otc/p2p";
@@ -175,8 +175,8 @@
   onMount(() => {
     void request<{ assets: RouteAsset[]; destination_assets: DestinationAsset[] }>("/p2p/assets")
       .then(result => {
-        sourceAssets = result.assets || [];
-        destinationAssets = result.destination_assets || [];
+        sourceAssets = (result.assets || []).filter(asset => otcNetworkAllowed(asset.network));
+        destinationAssets = (result.destination_assets || []).filter(asset => otcNetworkAllowed(asset.network));
         if (routePickerOpen && deal && !selectedSourceAsset) selectedSourceAsset = defaultSourceAsset(deal);
       })
       .catch(() => { assetLoadError = say("Payment networks are temporarily unavailable.", "Сети оплаты временно недоступны."); });

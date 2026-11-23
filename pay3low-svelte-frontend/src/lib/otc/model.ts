@@ -45,7 +45,6 @@ export const otcFallbackNetworks: CryptoNetwork[] = [
   { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
   { id: "ethereum", name: "Ethereum (ERC-20)", currencies: ["ETH", "USDT"] },
   { id: "solana", name: "Solana", currencies: ["SOL", "USDT"] },
-  { id: "tron", name: "TRON (TRC-20)", currencies: ["USDT"] },
 ];
 export const markets: OtcMarket[] = [
   { id: "EVER-USDT", base: "EVER", quote: "USDT", name: "Everscale", price: 0.01, priceDecimals: 5, amountDecimals: 6, tickSize: 0.00001, change: 2.84, volume: 12500, icon: "/icons/assets/ever.svg" },

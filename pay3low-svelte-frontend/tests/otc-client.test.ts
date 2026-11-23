@@ -3,6 +3,10 @@ import test from "node:test";
 import { OtcClient } from "../src/lib/otc/client.ts";
 import { demoCandles, demoSnapshot, markets, otcFallbackNetworks, type OrderDraft } from "../src/lib/otc/model.ts";
 
+test("OTC fallback network catalog excludes TRON", () => {
+  assert.equal(otcFallbackNetworks.some(network => network.id === "tron"), false);
+});
+
 class Socket {
   readyState = 0;
   sent: Record<string, unknown>[] = [];

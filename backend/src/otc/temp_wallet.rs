@@ -168,26 +168,6 @@ pub(crate) fn plan(
     Ok(Some(wallets))
 }
 
-pub(crate) fn roles(send_chain_usd: &str, get_chain_usd: &str) -> Result<Vec<(Role, Chain)>> {
-    let send = Chain::parse(send_chain_usd)?;
-    let get = Chain::parse(get_chain_usd)?;
-    for chain in [send, get] {
-        if chain == Chain::Everscale {
-            return Err(invalid(
-                "Everscale is not a supported stablecoin temporary wallet network",
-            ));
-        }
-    }
-    let mut roles = vec![(Role::Ever, Chain::Everscale)];
-    if send == get {
-        roles.push((Role::Usd, send));
-    } else {
-        roles.push((Role::UsdIn, send));
-        roles.push((Role::UsdOut, get));
-    }
-    Ok(roles)
-}
-
 /// Values a caller must read from the chain before signing. RPC reads stay in
 /// `otc::chain`; this type is chain-neutral so settlement never depends on an
 /// alloy type.
@@ -734,26 +714,30 @@ mod tests {
     }
 
     #[test]
-    fn deal_shape_uses_two_or_three_wallets() {
-        let same = roles("ethereum", "ethereum").unwrap();
+    fn deal_shape_uses_only_supported_evm_wallets() {
+        let same = plan("ethereum", "ethereum").unwrap().unwrap();
         assert_eq!(
             same,
             vec![(Role::Ever, Chain::Everscale), (Role::Usd, Chain::Ethereum)]
         );
-        let different = roles("tron", "solana").unwrap();
+        let different = plan("ethereum", "avalanche-c").unwrap().unwrap();
         assert_eq!(
             different,
             vec![
                 (Role::Ever, Chain::Everscale),
-                (Role::UsdIn, Chain::Tron),
-                (Role::UsdOut, Chain::Solana),
+                (Role::UsdIn, Chain::Ethereum),
+                (Role::UsdOut, Chain::AvalancheC),
             ]
         );
         assert_eq!(
-            roles("sol", "solana").unwrap(),
-            vec![(Role::Ever, Chain::Everscale), (Role::Usd, Chain::Solana)]
+            plan("polygon-pos", "polygon-pos").unwrap().unwrap(),
+            vec![
+                (Role::Ever, Chain::Everscale),
+                (Role::Usd, Chain::PolygonPos)
+            ]
         );
-        assert!(roles("everscale", "ethereum").is_err());
+        assert!(plan("tron", "avalanche-c").unwrap().is_none());
+        assert!(plan("ethereum", "tron").unwrap().is_none());
     }
 
     #[test]

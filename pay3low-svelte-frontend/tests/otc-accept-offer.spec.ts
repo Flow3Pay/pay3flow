@@ -135,14 +135,13 @@ test("a buy offer names the seller's actual stablecoin network and warns about t
   await expect(dialog.getByTestId("otc-accept-offer")).toBeDisabled();
 });
 
-test("the receiving network is a styled picker with short names and a prefilled verified address", async ({ page }) => {
+test("the receiving network picker excludes TRON and keeps the verified EVM address", async ({ page }) => {
   await setup(page, { takerEver: "500", takerUsdt: "500", offerDirection: "buy" });
   const dialog = await openOffer(page);
   const choices = dialog.getByTestId("otc-buy-destination-network");
-  await expect(choices).toHaveCount(3);
+  await expect(choices).toHaveCount(2);
   await expect(choices.nth(0)).toHaveText("Ethereum");
   await expect(choices.nth(1)).toHaveText("Polygon");
-  await expect(choices.nth(2)).toHaveText("TRON");
   await expect(choices.nth(0)).toHaveAttribute("aria-pressed", "true");
   expect(await choices.nth(0).locator("img").getAttribute("src")).toContain("eth");
   const address = dialog.getByTestId("otc-buy-destination-address");
@@ -151,15 +150,7 @@ test("the receiving network is a styled picker with short names and a prefilled 
   await choices.nth(1).click();
   await expect(choices.nth(1)).toHaveAttribute("aria-pressed", "true");
   await expect(address).toHaveValue(eth);
-  await choices.nth(2).click();
-  await expect(address).toHaveValue("");
-  await expect(dialog.getByTestId("otc-accept-offer")).toBeDisabled();
-  await address.fill(`0x${"e".repeat(40)}`);
-  await expect(dialog.getByRole("alert")).toContainText("Enter a valid USDT address for TRON");
-  await expect(dialog.getByTestId("otc-accept-offer")).toBeDisabled();
-  await address.fill(`T${"1".repeat(33)}`);
-  await expect(dialog.getByRole("alert")).toHaveCount(0);
-  await expect(dialog.getByTestId("otc-accept-offer")).toBeEnabled();
+  await expect(choices.getByText("TRON")).toHaveCount(0);
 });
 
 test("a rejected acceptance reports why instead of closing silently", async ({ page }) => {

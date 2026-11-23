@@ -22,7 +22,7 @@
   const networkNames: Record<string, string> = {
     ethereum: "Ethereum", sei: "Sei", "bnb-smart-chain": "BNB Smart Chain", "polygon-pos": "Polygon",
     "avalanche-c": "Avalanche C-Chain", "arbitrum-one": "Arbitrum One", base: "Base", optimism: "Optimism",
-    gnosis: "Gnosis", near: "NEAR", tron: "TRON", solana: "Solana", ton: "TON", sui: "Sui", aptos: "Aptos",
+    gnosis: "Gnosis", near: "NEAR", solana: "Solana", ton: "TON", sui: "Sui", aptos: "Aptos",
   };
   $: networkLabel = networkNames[stablecoinNetwork] ?? stablecoinNetwork;
   $: fee = p2pFeeSplit(usdtAmount);

@@ -175,6 +175,9 @@ impl Service {
             && self.cfg.p2p_rpc().len() >= 2
     }
     pub(crate) fn p2p_direct_network_available(&self, network: &str) -> bool {
+        if crate::route_engine::canonical_network_id(network) == "tron" {
+            return false;
+        }
         if super::config::evm_chain_id(network).is_some() {
             self.cfg
                 .p2p_evm_rpcs(network)
@@ -303,7 +306,7 @@ impl Service {
             owner.as_str()
         };
         let offer_network = terms["stablecoin_network"].as_str().unwrap_or("ethereum");
-        if offer_network == "tron" {
+        if crate::route_engine::canonical_network_id(offer_network) == "tron" {
             return Err(Error::Conflict(
                 "TRON is no longer available for new OTC deals".into(),
             ));
@@ -365,6 +368,7 @@ impl Service {
                 ("ethereum".to_string(), None)
             })
         };
+        ensure_no_tron_route(&payer_network, &output_network)?;
         let mut output_contract = token_contract.to_string();
         let mut fee_usdt_contract = if output_network == "ethereum" {
             Some(self.cfg.p2p_usdt().to_string())
@@ -2263,6 +2267,36 @@ impl Service {
         tracing::info!(trade=%id, kind, state=next, "otc.p2p.leg_verified");
         tx.commit().await?;
         Ok(())
+    }
+}
+
+fn ensure_no_tron_route(source: &str, destination: &str) -> Result<()> {
+    if [source, destination]
+        .into_iter()
+        .any(|network| crate::route_engine::canonical_network_id(network) == "tron")
+    {
+        return Err(Error::Conflict(
+            "TRON is not available for OTC deals".into(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tron_route_tests {
+    use super::{ensure_no_tron_route, Error};
+
+    #[test]
+    fn otc_rejects_tron_on_either_side_case_insensitively() {
+        assert!(ensure_no_tron_route("ethereum", "polygon-pos").is_ok());
+        assert!(matches!(
+            ensure_no_tron_route("TrOn", "ethereum"),
+            Err(Error::Conflict(_))
+        ));
+        assert!(matches!(
+            ensure_no_tron_route("ethereum", "TRON"),
+            Err(Error::Conflict(_))
+        ));
     }
 }
 fn provider_amount_units(value: &str, decimals: u32) -> Option<u128> {
