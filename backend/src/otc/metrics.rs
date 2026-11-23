@@ -75,6 +75,19 @@ impl Service {
                 );
             }
         }
+        output.push_str("# TYPE pay3flow_otc_custody_gas_funding gauge\n");
+        for (state, count) in repo::metrics::custody_gas_states(&client).await? {
+            let _ = writeln!(
+                output,
+                "pay3flow_otc_custody_gas_funding{{{labels},state=\"{state}\"}} {count}"
+            );
+        }
+        output.push_str("# TYPE pay3flow_otc_custody_stalled_settlements gauge\n");
+        let stalled = repo::metrics::custody_stalled(&client).await?;
+        let _ = writeln!(
+            output,
+            "pay3flow_otc_custody_stalled_settlements{{{labels}}} {stalled}"
+        );
         output.push_str("# TYPE pay3flow_otc_quote_response_seconds histogram\n");
         // Durably linked RFQ cohorts; HTTP retries cannot increase this histogram.
         for bucket in [5, 15, 30, 60, 120, 300] {

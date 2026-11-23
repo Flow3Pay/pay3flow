@@ -560,11 +560,12 @@ recipient on that network must be configured, and the flag must be on.
   `otc_temp_settlements.ever_state/ever_reference/ever_error/ever_attempts`;
   the trade stays `delivery_pending` until the forward is included.
 - Treasury-to-deal-wallet gas funding is implemented with a persisted signed
-  envelope (`otc_temp_gas`); a retry replays the same transaction. Not
-  implemented: automatic top-up of the treasury itself from collected fees,
-  alerting, quote/status expiry for a permanently pending Intents swap (the
-  ten-attempt cap now ends in terminal `stalled`), and stale-claim operator
-  tooling.
+  envelope (`otc_temp_gas`); a retry replays the same transaction. Metrics
+  expose `pay3flow_otc_custody_gas_funding{state}` and
+  `pay3flow_otc_custody_stalled_settlements` for alerting. Not implemented:
+  automatic top-up of the treasury itself from collected fees, quote/status
+  expiry for a permanently pending Intents swap (the ten-attempt cap now ends
+  in terminal `stalled`), and stale-claim operator tooling.
 - Settlement for Solana, NEAR, TON and Aptos has SDK-built signed
   transactions but still no nonce/seqno reader or broadcaster, so those sources
   keep the legacy direct/routed flow.

@@ -8,6 +8,8 @@ const OBSERVERS: &str = "SELECT chain,last_scan,paused,failures,lag FROM otc_obs
 const QUOTE_RESPONSE_BUCKET: &str = "SELECT count(*) FROM otc_rfq r JOIN otc_trades t ON t.rfq_id=r.id JOIN otc_inbox i ON i.actor=t.customer_actor AND i.activity_id=t.terms->'proposal'->>'id' WHERE extract(epoch FROM i.processed_at-r.created_at)<=$1::int";
 const QUOTE_RESPONSE_TOTALS: &str = "SELECT count(*),COALESCE(sum(extract(epoch FROM i.processed_at-r.created_at)),0)::double precision FROM otc_rfq r JOIN otc_trades t ON t.rfq_id=r.id JOIN otc_inbox i ON i.actor=t.customer_actor AND i.activity_id=t.terms->'proposal'->>'id'";
 const OPEN_INCIDENTS: &str = "SELECT severity,count(*),min(detected_at) FROM otc_incidents WHERE closed_at IS NULL GROUP BY severity";
+const CUSTODY_GAS_STATES: &str = "SELECT state,count(*) FROM otc_temp_gas GROUP BY state";
+const CUSTODY_STALLED: &str = "SELECT count(*) FROM otc_temp_settlements WHERE state='stalled'";
 
 /// One event counter labelled by event kind and RFQ direction.
 pub(crate) async fn event_count(
@@ -56,6 +58,19 @@ pub(crate) async fn quote_response_totals(
 ) -> Result<(i64, f64)> {
     let row = client.query_one(QUOTE_RESPONSE_TOTALS, &[]).await?;
     Ok((row.get(0), row.get(1)))
+}
+
+/// Returns `(state, count)` for persisted deal-wallet gas funding rows.
+pub(crate) async fn custody_gas_states(
+    client: &(impl GenericClient + Sync),
+) -> Result<Vec<(String, i64)>> {
+    let rows = client.query(CUSTODY_GAS_STATES, &[]).await?;
+    Ok(rows.iter().map(|row| (row.get(0), row.get(1))).collect())
+}
+
+/// Settlement rows that exhausted their retry budget and need an operator.
+pub(crate) async fn custody_stalled(client: &(impl GenericClient + Sync)) -> Result<i64> {
+    Ok(client.query_one(CUSTODY_STALLED, &[]).await?.get(0))
 }
 
 /// Returns `(severity, count, oldest detected_at)` per open incident severity.

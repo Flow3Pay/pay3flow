@@ -13,6 +13,31 @@ The EVER payer deposits on `temp_ever`; the worker forwards the booked amount
 to `ever_payee` after USD settlement. Native gas auto-top-up is not
 implemented, and non-EVM stablecoin custody is not available.
 
+The desk-only `GET /api/otc/desk/metrics` endpoint requires its bearer session
+and exposes Prometheus text. Alert on any stalled settlement or failed gas
+funding row; these require operator triage:
+
+```yaml
+groups:
+  - name: pay3flow-otc-custody
+    rules:
+      - alert: OtcCustodySettlementStalled
+        expr: pay3flow_otc_custody_stalled_settlements > 0
+        for: 1m
+        labels:
+          severity: page
+      - alert: OtcCustodyGasFundingFailed
+        expr: pay3flow_otc_custody_gas_funding{state="failed"} > 0
+        for: 1m
+        labels:
+          severity: page
+```
+
+Because this endpoint is authenticated, configure the Prometheus scrape target
+with an authorized desk session and rotate it through the normal session
+process. If the session expires, the scrape fails; alert on target
+`up == 0` as well. Do not expose the desk token in scrape labels or logs.
+
 ## 1. Enablement prerequisites
 
 Do not enable the flag until every item holds on the target deployment:
@@ -25,9 +50,9 @@ Do not enable the flag until every item holds on the target deployment:
   payouts and native gas for its own transactions. The row is never deleted.
 - `near_intents` is configured for every cross-network deal; without it Accept
   does not create a temporary wallet for that route.
-- `temp_gas_reserve` (default `0.0005`) is below the native gas kept on each
-  temporary address and on each treasury. The worker waits instead of
-  signing when gas is short.
+- `temp_gas_reserve` (default `0.0005`) is below the native gas held by each
+  treasury. The treasury must have two such reserves available: one to fund
+  the deal wallet and one to submit its own transfer.
 - Each treasury holds enough stablecoin to front at least one same-network net
   payout plus a native gas buffer.
 - `SECRETS_KEY` is stable. Rotating it breaks decryption of every active row
@@ -225,9 +250,13 @@ Fund each address with stablecoins for a same-chain payout plus a native-gas
 buffer before enabling custody. Accept preflights the stablecoin and native gas
 balances and returns a 409 naming the treasury when it cannot front the payout.
 The payer's full deposit remains on the USD temp and its accumulated balance is
-swept to treasury. The worker does not yet top up temp-wallet gas automatically;
-if a temp address is short, the settlement records the reason and an operator
-must fund it from the treasury before the worker can continue.
+swept to treasury. If a deal wallet lacks its configured native reserve, the
+worker funds it from the permanent treasury. The signed transfer is stored in
+`otc_temp_gas` before broadcast; an ambiguous RPC response retries the same
+signed bytes. A failed or exhausted gas-funding row is visible in
+`pay3flow_otc_custody_gas_funding{state}`. The worker does not yet replenish the
+treasury from collected stablecoin fees, so operators must maintain its native
+gas reserve and pause custody if it is depleted.
 
 ## 7.1 EVER temporary leg
 

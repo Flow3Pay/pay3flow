@@ -796,6 +796,11 @@ async fn monitoring_zero_traffic_stale_data_and_fee_accounting() {
     );
     let metrics = service.metrics(&service.cfg.desk_actor).await.unwrap();
     assert!(metrics.contains("pay3flow_otc_quote_response_seconds_count"));
+    assert!(metrics.contains("pay3flow_otc_custody_gas_funding"));
+    assert!(metrics.contains("pay3flow_otc_custody_stalled_settlements"));
+    assert!(metrics.contains(
+        "pay3flow_otc_custody_stalled_settlements{environment=\"demo\",desk=\"onboarded\"} 0"
+    ));
     assert!(!metrics.contains(&actor));
     assert!(!metrics.contains("0xaaaa"));
     assert!(service.metrics(&actor).await.is_err());
