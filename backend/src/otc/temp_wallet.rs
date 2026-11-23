@@ -142,12 +142,9 @@ pub(crate) fn evm_temp_source(send_chain_usd: &str) -> Result<Option<Chain>> {
 
 /// The concrete wallet set Accept creates for one deal.
 ///
-/// The Ever leg always reserves an `ever` row. When both stablecoin legs share
-/// a network the deal gets one `usd` wallet; otherwise it gets `usd_in` on the
-/// payer network and `usd_out` on the payout network. A payout network outside
-/// the custody set (Base, Sui, ...) still gets the `usd_in` wallet because
-/// NEAR Intents delivers straight to the payee. `None` keeps the legacy
-/// direct/routed flow for a payer network we cannot sign for.
+/// A verified EVM-to-EVM custodial route reserves the EVER wallet and either
+/// one USD wallet or separate input/output wallets. Other route families stay
+/// on the legacy execution path until their signed settlement workers exist.
 pub(crate) fn plan(
     payer_network: &str,
     payout_network: &str,
@@ -155,14 +152,18 @@ pub(crate) fn plan(
     let Some(send) = evm_temp_source(payer_network)? else {
         return Ok(None);
     };
+    let Ok(get) = Chain::parse(payout_network) else {
+        return Ok(None);
+    };
+    if !get.is_evm() {
+        return Ok(None);
+    }
     let mut wallets = vec![(Role::Ever, Chain::Everscale)];
-    match Chain::parse(payout_network) {
-        Ok(get) if get == send => wallets.push((Role::Usd, send)),
-        Ok(get) if get != Chain::Everscale => {
-            wallets.push((Role::UsdIn, send));
-            wallets.push((Role::UsdOut, get));
-        }
-        _ => wallets.push((Role::UsdIn, send)),
+    if get == send {
+        wallets.push((Role::Usd, send));
+    } else {
+        wallets.push((Role::UsdIn, send));
+        wallets.push((Role::UsdOut, get));
     }
     Ok(Some(wallets))
 }
@@ -769,15 +770,9 @@ mod tests {
             plan("ethereum", "ethereum").unwrap().unwrap(),
             vec![(Role::Ever, Chain::Everscale), (Role::Usd, Chain::Ethereum)]
         );
-        // A payout network outside the custody set still needs the input row;
-        // Intents delivers to the payee directly.
-        assert_eq!(
-            plan("ethereum", "base").unwrap().unwrap(),
-            vec![
-                (Role::Ever, Chain::Everscale),
-                (Role::UsdIn, Chain::Ethereum)
-            ]
-        );
+        // A payout network without a verified temp signer stays non-custodial.
+        assert!(plan("ethereum", "base").unwrap().is_none());
+        assert!(plan("ethereum", "near").unwrap().is_none());
         // A non-EVM payer keeps the legacy flow.
         assert!(plan("tron", "ethereum").unwrap().is_none());
         assert!(plan("solana", "solana").unwrap().is_none());

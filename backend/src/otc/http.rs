@@ -276,13 +276,30 @@ async fn p2p_trades(State(state): State<AppState>, headers: HeaderMap) -> Result
 }
 async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
     let Some(provider) = state.otc.near_intents.as_ref() else {
-        return Json(json!({"assets":[],"destination_assets":[],"buy_destination_assets":[]}));
+        return Json(json!({
+            "assets":[],"destination_assets":[],"buy_destination_assets":[],
+            "min_stablecoin_amount":super::amount::decimal(super::config::P2P_PRODUCT_MIN_STABLECOIN_UNITS,6),
+            "custody":{"enabled":state.otc.cfg.temp_wallets,"supported_networks":state.otc.cfg.temp_wallet_networks(),"treasury_funding":"not_reported_by_catalog","note":"Intents provider unavailable; no routes are executable."}
+        }));
     };
     let tokens = provider.supported_tokens().await;
     let mut candidates = Vec::new();
     for token in tokens {
         let symbol = token.symbol.to_ascii_uppercase();
         let network = crate::route_engine::canonical_network_id(&token.blockchain);
+        // With custodial settlement enabled, only advertise routes for which
+        // this deployment has a complete signer and RPC path. A NEAR Intents
+        // catalog entry alone does not make a destination payable by custody.
+        if state.otc.cfg.temp_wallets
+            && !state
+                .otc
+                .cfg
+                .temp_wallet_networks()
+                .iter()
+                .any(|configured| configured == &network)
+        {
+            continue;
+        }
         if !matches!(symbol.as_str(), "USDT" | "USDC")
             || network == "tron"
             || token.decimals.is_none()
@@ -333,10 +350,20 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         }
         let symbol = token.symbol.to_ascii_uppercase();
         let network = destination.location.as_deref().unwrap_or_default();
-        let Some(fee_recipient) = state.otc.cfg.fee_recipients.get(network) else {
+        let fee_recipient = state.otc.cfg.fee_recipients.get(network);
+        let treasury_sink = state.otc.cfg.temp_wallets
+            && state
+                .otc
+                .cfg
+                .temp_wallet_networks()
+                .iter()
+                .any(|candidate| candidate == network);
+        if fee_recipient.is_none() && !treasury_sink {
             continue;
-        };
-        if crate::route_execution::validate_otc_wallet_address(network, fee_recipient).is_err() {
+        }
+        if fee_recipient.is_some_and(|address| {
+            crate::route_execution::validate_otc_wallet_address(network, address).is_err()
+        }) {
             continue;
         }
         let Ok(fee_asset) = crate::route_engine::Asset::new("USDT", Some(network)) else {
@@ -376,6 +403,14 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
             "asset_id": token.asset_id,
             "decimals": token.decimals,
             "contract_address": token.contract_address,
+            "effective_minimum": {
+                "incoming": super::amount::decimal(super::config::required_stablecoin_units(
+                    network, super::config::StablecoinLeg::Incoming
+                ), 6),
+                "outgoing": super::amount::decimal(super::config::required_stablecoin_units(
+                    network, super::config::StablecoinLeg::Outgoing
+                ), 6),
+            },
         });
         let mut any_route = false;
         for (source, source_token) in &candidates {
@@ -431,11 +466,20 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
                 continue;
             }
             let network = destination.location.as_deref().unwrap_or_default();
-            let Some(fee_recipient) = state.otc.cfg.fee_recipients.get(network) else {
+            let fee_recipient = state.otc.cfg.fee_recipients.get(network);
+            let treasury_sink = state.otc.cfg.temp_wallets
+                && state
+                    .otc
+                    .cfg
+                    .temp_wallet_networks()
+                    .iter()
+                    .any(|candidate| candidate == network);
+            if fee_recipient.is_none() && !treasury_sink {
                 continue;
-            };
-            if crate::route_execution::validate_otc_wallet_address(network, fee_recipient).is_err()
-            {
+            }
+            if fee_recipient.is_some_and(|address| {
+                crate::route_execution::validate_otc_wallet_address(network, address).is_err()
+            }) {
                 continue;
             }
             let Ok(fee_asset) = crate::route_engine::Asset::new("USDT", Some(network)) else {
@@ -543,6 +587,12 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
             super::config::P2P_PRODUCT_MIN_STABLECOIN_UNITS,
             6
         ),
+        "custody": {
+            "enabled": state.otc.cfg.temp_wallets,
+            "supported_networks": state.otc.cfg.temp_wallet_networks(),
+            "treasury_funding": "not_reported_by_catalog",
+            "note": "A network is listed as supported only when two RPC endpoints are configured. Actual treasury token and native-gas balances are checked during deal preflight."
+        },
         "swap_minimums":swap_minimums
     }))
 }

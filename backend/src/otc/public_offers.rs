@@ -476,11 +476,11 @@ mod tests {
         assert!(item.terms(&cfg).is_ok());
         assert_eq!(
             required_stablecoin_units("ethereum", StablecoinLeg::Outgoing),
-            300_065
+            30_000_000
         );
         assert_eq!(
             required_stablecoin_units("solana", StablecoinLeg::Incoming),
-            300_065
+            30_000_000
         );
 
         // TRON as the source keeps 1Click's $100 technical minimum; when it is
@@ -501,7 +501,7 @@ mod tests {
         item.usdt_amount = "0.3".into();
         assert!(item.terms(&cfg).is_err());
         item.usdt_amount = "0.300001".into();
-        assert!(item.terms(&cfg).is_ok());
+        assert!(item.terms(&cfg).is_err());
     }
 
     #[test]

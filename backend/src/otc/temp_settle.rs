@@ -15,12 +15,20 @@ use super::{
 use crate::route_engine::{Amount, Asset, NearQuoteRequest, NearSwapStatus};
 use serde_json::{json, Value};
 
+const FEE_SWEEP_THRESHOLD_UNITS: u128 = 1_000_000;
+
 impl Service {
     pub(crate) async fn temp_settlement_tick(&self) -> Result<()> {
         if !self.cfg.temp_wallets {
             return Ok(());
         }
         let client = self.pool.get().await?;
+        // Provision durable treasuries for every EVM network whose temp-wallet
+        // signer and independent RPC pair are configured. These rows are
+        // operator-funded and never recycled or deleted.
+        for chain in self.cfg.temp_wallet_networks() {
+            self.ensure_treasury(&client, &chain).await?;
+        }
         let rows = repo::temp_wallets::due_settlements(&client).await?;
         drop(client);
         for row in rows {
@@ -86,7 +94,7 @@ impl Service {
                 .as_str()
                 .ok_or_else(|| invalid("deal fee terms are malformed"))?,
         )?;
-        let fee = fee_split(gross, payout)?;
+        fee_split(gross, payout)?;
         let latest = json!("latest");
         let client = self.pool.get().await?;
         match row.state.as_str() {
@@ -116,28 +124,19 @@ impl Service {
                     return Ok(());
                 }
                 let material = self.material(row)?;
-                let payee = row.body["usdt_payee"]
-                    .as_str()
-                    .ok_or_else(|| invalid("deal payee is missing"))?;
                 let same_network = row.body["stablecoin_network"]
                     .as_str()
                     .unwrap_or("ethereum")
                     == row.chain;
                 let result = if !same_network {
-                    self.temp_intents_payout(&client, row, &material, &net, payee, gross, payout)
-                        .await
-                } else if self.cfg.temp_reserve_payout {
-                    self.temp_reserve_payout(&client, row, &net, payee, payout)
+                    self.temp_intents_payout(&client, row, &material, &net, gross, payout)
                         .await
                 } else {
-                    self.evm_temp_token_transfer(
-                        &material,
-                        &net,
-                        temp_token(&row.body)?,
-                        payee,
-                        payout,
-                    )
-                    .await
+                    let payee = row.body["usdt_payee"]
+                        .as_str()
+                        .ok_or_else(|| invalid("deal payee is missing"))?;
+                    self.temp_treasury_payout(&client, row, &net, payee, payout)
+                        .await
                 };
                 match result {
                     Ok(reference) => {
@@ -178,6 +177,9 @@ impl Service {
                     .evm_agree(&net, "eth_getTransactionReceipt", json!([reference]))
                     .await?;
                 if receipt.is_null() {
+                    if let Some(raw) = &row.payout_signed_transaction {
+                        self.evm_send_raw(&net, raw).await?;
+                    }
                     return Ok(());
                 }
                 if super::chain::number(&receipt["status"])? != 1 {
@@ -190,7 +192,7 @@ impl Service {
                     .await?;
                     return Ok(());
                 }
-                self.after_paid(&client, row, fee).await?;
+                self.after_paid(&client, row).await?;
             }
             "intents_submitted" => {
                 let Some(provider) = &self.near_intents else {
@@ -215,7 +217,8 @@ impl Service {
                             tracing::warn!(trade=%row.trade_id, delivered, payout, "otc.temp.intents_shortfall");
                             return Ok(());
                         }
-                        self.after_paid(&client, row, fee).await?;
+                        self.submit_intents_output_payout(&client, row, payout)
+                            .await?;
                     }
                     "REFUNDED" => {
                         repo::temp_wallets::set_state(
@@ -238,6 +241,45 @@ impl Service {
                     _ => {}
                 }
             }
+            "intents_payout_claim" => {
+                // The signed transaction is persisted before broadcast, so a
+                // stale claim has not moved funds and can safely resume polling.
+                repo::temp_wallets::set_state(
+                    &client,
+                    &row.trade_id,
+                    "intents_submitted",
+                    Some("recovered a stale cross-network payout claim"),
+                )
+                .await?;
+            }
+            "intents_payout_submitted" => {
+                let net = self.output_temp_net(row)?;
+                let reference = row
+                    .reference
+                    .as_deref()
+                    .ok_or_else(|| invalid("cross-network payout reference is missing"))?;
+                let receipt = self
+                    .evm_agree(&net, "eth_getTransactionReceipt", json!([reference]))
+                    .await?;
+                if receipt.is_null() {
+                    if let Some(raw) = &row.output_signed_transaction {
+                        // Re-broadcasting the exact persisted envelope is
+                        // idempotent even when the first response was lost.
+                        self.evm_send_raw(&net, raw).await?;
+                    }
+                    return Ok(());
+                }
+                if super::chain::number(&receipt["status"])? != 1 {
+                    repo::temp_wallets::reset_intents_payout(
+                        &client,
+                        &row.trade_id,
+                        "cross-network temp payout reverted; safe to retry",
+                    )
+                    .await?;
+                    return Ok(());
+                }
+                self.after_paid(&client, row).await?;
+            }
             "fee_submitted" => {
                 let reference = row
                     .fee_reference
@@ -247,6 +289,9 @@ impl Service {
                     .evm_agree(&net, "eth_getTransactionReceipt", json!([reference]))
                     .await?;
                 if receipt.is_null() {
+                    if let Some(raw) = &row.fee_signed_transaction {
+                        self.evm_send_raw(&net, raw).await?;
+                    }
                     return Ok(());
                 }
                 if super::chain::number(&receipt["status"])? != 1 {
@@ -269,15 +314,14 @@ impl Service {
         Ok(())
     }
 
-    /// Cross-network payout: exact-output quote to the payee, refund to the
-    /// temp address we control, then a signed deposit from that address.
+    /// Cross-network payout: Intents delivers the exact output to our separate
+    /// USD temp. A later worker step verifies and forwards it to the payee.
     async fn temp_intents_payout(
         &self,
         client: &deadpool_postgres::Client,
         row: &repo::temp_wallets::SettlementRow,
         material: &WalletMaterial,
         net: &super::chain::EvmNet,
-        payee: &str,
         gross: u128,
         payout: u128,
     ) -> Result<String> {
@@ -288,6 +332,11 @@ impl Service {
         let output_network = row.body["stablecoin_network"]
             .as_str()
             .ok_or_else(|| invalid("deal network is missing"))?;
+        let output_temp = row.body["temp_wallets"]
+            .as_array()
+            .and_then(|wallets| wallets.iter().find(|wallet| wallet["role"] == "usd_out"))
+            .and_then(|wallet| wallet["address"].as_str())
+            .ok_or_else(|| invalid("cross-network USD temporary wallet is missing"))?;
         let symbol = row.body["stablecoin"].as_str().unwrap_or("USDT");
         let from = Asset::new(symbol, Some(&row.chain))?;
         let to = Asset::new(symbol, Some(output_network))?;
@@ -303,7 +352,7 @@ impl Service {
                     amount::decimal(payout, 6),
                     Asset::new(symbol, Some(output_network))?,
                 )?,
-                recipient: payee.to_string(),
+                recipient: output_temp.to_string(),
                 refund_to: row.address.clone(),
                 slippage_bps: 100,
                 app_fees: Vec::new(),
@@ -348,10 +397,107 @@ impl Service {
         Ok(reference)
     }
 
-    /// Same-network payout from platform reserve inventory (spec §6.2): the desk
-    /// fronts the net from the reserve on the payout network, so the payer's
-    /// whole deposit stays withheld on the temporary wallet.
-    async fn temp_reserve_payout(
+    fn output_temp_net(
+        &self,
+        row: &repo::temp_wallets::SettlementRow,
+    ) -> Result<super::chain::EvmNet> {
+        let chain = row.body["stablecoin_network"]
+            .as_str()
+            .ok_or_else(|| invalid("deal output network is missing"))?;
+        let chain_id = super::config::evm_chain_id(chain)
+            .ok_or_else(|| invalid("temporary output wallet is not on a supported EVM network"))?;
+        let rpcs = self
+            .cfg
+            .p2p_evm_rpcs(chain)
+            .filter(|endpoints| endpoints.len() >= 2)
+            .ok_or_else(|| invalid("two independent output-network EVM endpoints are required"))?;
+        let token = row.body["stablecoin_contract"]
+            .as_str()
+            .ok_or_else(|| invalid("deal output token is missing"))?;
+        Ok(super::chain::EvmNet {
+            rpcs: rpcs.to_vec(),
+            chain_id,
+            usdt: token.to_string(),
+        })
+    }
+
+    /// Pays the agreed stablecoin amount from the USD output temp after
+    /// Intents has delivered and the exact output balance is verified.
+    async fn submit_intents_output_payout(
+        &self,
+        client: &deadpool_postgres::Client,
+        row: &repo::temp_wallets::SettlementRow,
+        payout: u128,
+    ) -> Result<()> {
+        if !repo::temp_wallets::claim_intents_payout(client, &row.trade_id).await? {
+            return Ok(());
+        }
+        let net = self.output_temp_net(row)?;
+        let output_wallet = row.body["temp_wallets"]
+            .as_array()
+            .and_then(|wallets| wallets.iter().find(|wallet| wallet["role"] == "usd_out"))
+            .and_then(|wallet| wallet["address"].as_str())
+            .ok_or_else(|| invalid("cross-network USD temporary wallet is missing"))?;
+        let balance = self
+            .erc20_balance_of(&net, output_wallet, &json!("latest"))
+            .await?;
+        if balance < payout {
+            repo::temp_wallets::set_state(
+                client,
+                &row.trade_id,
+                "intents_submitted",
+                Some("Intents output is not yet visible on the USD temporary wallet"),
+            )
+            .await?;
+            return Ok(());
+        }
+        let gas = super::chain::number(
+            &self
+                .evm_agree(&net, "eth_getBalance", json!([output_wallet, "latest"]))
+                .await?,
+        )?;
+        if gas < amount::units(&self.cfg.temp_gas_reserve, 18)? {
+            repo::temp_wallets::set_state(
+                client,
+                &row.trade_id,
+                "intents_submitted",
+                Some("USD output temporary wallet needs native gas before payout"),
+            )
+            .await?;
+            return Ok(());
+        }
+        let secret = repo::temp_wallets::wallet_secret_for_role(client, &row.trade_id, "usd_out")
+            .await?
+            .ok_or_else(|| invalid("cross-network USD wallet key is missing"))?;
+        let material = self.material_for(
+            &secret.chain,
+            secret.derivation_index,
+            &secret.salt,
+            &secret.key_ciphertext,
+        )?;
+        let payee = row.body["usdt_payee"]
+            .as_str()
+            .ok_or_else(|| invalid("deal payee is missing"))?;
+        let signed = self
+            .evm_sign_temp_token_transfer(&material, &net, &net.usdt, payee, payout)
+            .await?;
+        let reference = super::chain::evm_transaction_hash(&signed);
+        // Persist the exact envelope before broadcasting it. A restart or a
+        // lost RPC response can safely retry the same transaction hash.
+        repo::temp_wallets::set_intents_payout_reference(
+            client,
+            &row.trade_id,
+            &reference,
+            &signed,
+        )
+        .await?;
+        self.evm_send_raw(&net, &signed).await?;
+        Ok(())
+    }
+
+    /// Same-network payout from the permanent treasury (spec §6.2), leaving
+    /// the payer's entire deposit on the temporary wallet until fee sweep.
+    async fn temp_treasury_payout(
         &self,
         client: &deadpool_postgres::Client,
         row: &repo::temp_wallets::SettlementRow,
@@ -359,50 +505,53 @@ impl Service {
         payee: &str,
         payout: u128,
     ) -> Result<String> {
-        let reserve = self.ensure_reserve(client, &row.chain).await?;
-        let material = self.reserve_material(&reserve)?;
+        let treasury = self.ensure_treasury(client, &row.chain).await?;
+        let material = self.treasury_material(&treasury)?;
         let latest = json!("latest");
         let balance = self
-            .erc20_balance_of(net, &reserve.address, &latest)
+            .erc20_balance_of(net, &treasury.address, &latest)
             .await?;
         if balance < payout {
             return Err(invalid(
-                "the same-network reserve cannot cover the agreed payout; fund it before retrying",
+                "the same-network treasury cannot cover the agreed payout; fund it before retrying",
             ));
         }
         let gas = super::chain::number(
             &self
-                .evm_agree(net, "eth_getBalance", json!([reserve.address, latest]))
+                .evm_agree(net, "eth_getBalance", json!([treasury.address, latest]))
                 .await?,
         )?;
         if gas < amount::units(&self.cfg.temp_gas_reserve, 18)? {
             return Err(invalid(
-                "the same-network reserve needs native gas before payout",
+                "the same-network treasury needs native gas before payout",
             ));
         }
-        let reference = self
-            .evm_temp_token_transfer(&material, net, temp_token(&row.body)?, payee, payout)
+        let signed = self
+            .evm_sign_temp_token_transfer(&material, net, temp_token(&row.body)?, payee, payout)
             .await?;
-        repo::temp_wallets::set_reserve_payment(
+        let reference = super::chain::evm_transaction_hash(&signed);
+        repo::temp_wallets::set_treasury_payment(
             client,
             &row.trade_id,
             &reference,
             &payout.to_string(),
+            &signed,
         )
         .await?;
-        tracing::info!(trade=%row.trade_id, reserve=%reserve.address, payout, "otc.temp.reserve_payout_sent");
+        self.evm_send_raw(net, &signed).await?;
+        tracing::info!(trade=%row.trade_id, treasury=%treasury.address, payout, "otc.temp.treasury_payout_sent");
         Ok(reference)
     }
 
-    /// Returns the chain's reserve row, generating and sealing one on first use.
-    /// The address it reports is the one an operator has to fund.
-    async fn ensure_reserve(
+    /// Returns the chain's permanent treasury, generating and sealing it on
+    /// first use. Its native balance funds outgoing treasury transactions.
+    async fn ensure_treasury(
         &self,
         client: &deadpool_postgres::Client,
         chain: &str,
-    ) -> Result<repo::temp_wallets::ReserveWallet> {
-        if let Some(reserve) = repo::temp_wallets::reserve(client, chain).await? {
-            return Ok(reserve);
+    ) -> Result<repo::temp_wallets::TreasuryWallet> {
+        if let Some(treasury) = repo::temp_wallets::treasury(client, chain).await? {
+            return Ok(treasury);
         }
         let parsed = temp_wallet::Chain::parse(chain)?;
         let material = WalletMaterial::generate(parsed)?;
@@ -411,7 +560,7 @@ impl Service {
             client,
             &uuid::Uuid::new_v4(),
             None,
-            "reserve",
+            "treasury",
             parsed.id(),
             &material.address()?,
             material.derivation_index(),
@@ -420,16 +569,14 @@ impl Service {
             None,
         )
         .await?;
-        repo::temp_wallets::reserve(client, chain)
+        repo::temp_wallets::treasury(client, chain)
             .await?
-            .ok_or_else(|| invalid("the reserve wallet could not be provisioned"))
+            .ok_or_else(|| invalid("the treasury wallet could not be provisioned"))
     }
 
-    /// Accept-time guard for `OTC_TEMP_RESERVE_PAYOUT` (spec §6.3): a
-    /// same-network deal that the reserve cannot front must fail before any
-    /// address exists instead of parking in `awaiting_payment`. The reserve row
-    /// is provisioned on first use so the conflict names the address to fund.
-    pub(crate) async fn temp_reserve_preflight(
+    /// Accept-time guard: a same-network deal the treasury cannot front fails
+    /// before any temporary address exists.
+    pub(crate) async fn temp_treasury_preflight(
         &self,
         chain: &str,
         token: &str,
@@ -448,28 +595,28 @@ impl Service {
             usdt: token.to_string(),
         };
         let client = self.pool.get().await?;
-        let reserve = self.ensure_reserve(&client, chain).await?;
+        let treasury = self.ensure_treasury(&client, chain).await?;
         let latest = json!("latest");
         let balance = self
-            .erc20_balance_of(&net, &reserve.address, &latest)
+            .erc20_balance_of(&net, &treasury.address, &latest)
             .await?;
         if balance < payout {
             return Err(super::error::Error::Conflict(format!(
-                "the {chain} reserve wallet {} holds {} but the deal needs {}; fund it before accepting",
-                reserve.address,
+                "the {chain} treasury {} holds {} but the deal needs {}; fund it before accepting",
+                treasury.address,
                 amount::decimal(balance, 6),
                 amount::decimal(payout, 6)
             )));
         }
         let gas = super::chain::number(
             &self
-                .evm_agree(&net, "eth_getBalance", json!([reserve.address, latest]))
+                .evm_agree(&net, "eth_getBalance", json!([treasury.address, latest]))
                 .await?,
         )?;
         if gas < amount::units(&self.cfg.temp_gas_reserve, 18)? {
             return Err(super::error::Error::Conflict(format!(
-                "the {chain} reserve wallet {} needs native gas before accepting reserve-payout deals",
-                reserve.address
+                "the {chain} treasury {} needs native gas before accepting same-network deals",
+                treasury.address
             )));
         }
         Ok(())
@@ -586,14 +733,14 @@ impl Service {
         Ok(())
     }
 
-    fn reserve_material(
+    fn treasury_material(
         &self,
-        reserve: &repo::temp_wallets::ReserveWallet,
+        treasury: &repo::temp_wallets::TreasuryWallet,
     ) -> Result<WalletMaterial> {
-        let seed = temp_wallet::open(&self.secrets_key, &reserve.salt, &reserve.key_ciphertext)?;
-        let chain = temp_wallet::Chain::parse(&reserve.chain)?;
-        let index = u32::try_from(reserve.derivation_index)
-            .map_err(|_| invalid("reserve wallet derivation index is invalid"))?;
+        let seed = temp_wallet::open(&self.secrets_key, &treasury.salt, &treasury.key_ciphertext)?;
+        let chain = temp_wallet::Chain::parse(&treasury.chain)?;
+        let index = u32::try_from(treasury.derivation_index)
+            .map_err(|_| invalid("treasury wallet derivation index is invalid"))?;
         WalletMaterial::from_seed(chain, &seed[..], index)
     }
 
@@ -615,27 +762,10 @@ impl Service {
         &self,
         client: &deadpool_postgres::Client,
         row: &repo::temp_wallets::SettlementRow,
-        fee: u128,
     ) -> Result<()> {
         repo::p2p::collect_fee(client, &row.trade_id).await?;
-        let from_reserve = row.reserve_units.is_some();
-        let Some(recipient) = self.cfg.fee_recipients.get(&row.chain).cloned() else {
-            repo::temp_wallets::set_state(
-                client,
-                &row.trade_id,
-                "fee_retained",
-                Some("no fee recipient configured; fee stays on the temporary wallet"),
-            )
-            .await?;
-            self.retire_reserved_roles(client, &row.trade_id).await?;
-            return Ok(());
-        };
-        if fee == 0 && !from_reserve {
-            self.recycle(client, row).await?;
-            repo::temp_wallets::set_state(client, &row.trade_id, "settled", None).await?;
-            self.retire_reserved_roles(client, &row.trade_id).await?;
-            return Ok(());
-        }
+        let treasury = self.ensure_treasury(client, &row.chain).await?;
+        let recipient = treasury.address;
         let net = self.temp_net(&row.chain, &row.body)?;
         let material = self.material(row)?;
         // A cross-network route may consume part of the withheld fee; sweep what
@@ -645,7 +775,18 @@ impl Service {
         let balance = self
             .erc20_balance_of(&net, &row.address, &json!("latest"))
             .await?;
-        let sweep = sweep_amount(fee, balance, from_reserve);
+        if !fee_sweep_required(balance) {
+            repo::temp_wallets::return_to_pool(client, &row.wallet_id).await?;
+            repo::temp_wallets::set_state(client, &row.trade_id, "settled", None).await?;
+            self.retire_reserved_roles(client, &row.trade_id).await?;
+            tracing::info!(trade=%row.trade_id, balance, "otc.temp.dust_slot_reused");
+            return Ok(());
+        }
+        // Once accumulated fees reach $1, sweep the entire remaining token
+        // balance. On cross-network settlements the Intents input itself can
+        // consume part of the withheld fee, so the current balance is the
+        // authoritative amount owned by the platform.
+        let sweep = sweep_amount(balance);
         if sweep == 0 {
             repo::temp_wallets::set_state(
                 client,
@@ -657,19 +798,20 @@ impl Service {
             self.retire_reserved_roles(client, &row.trade_id).await?;
             return Ok(());
         }
-        if !from_reserve && balance < fee {
-            tracing::warn!(trade=%row.trade_id, balance, fee, "otc.temp.fee_shortfall");
-        }
-        match self
-            .evm_temp_token_transfer(&material, &net, temp_token(&row.body)?, &recipient, sweep)
+        let signed = match self
+            .evm_sign_temp_token_transfer(
+                &material,
+                &net,
+                temp_token(&row.body)?,
+                &recipient,
+                sweep,
+            )
             .await
         {
-            Ok(reference) => {
-                repo::temp_wallets::set_fee_reference(client, &row.trade_id, &reference).await?;
-            }
+            Ok(signed) => signed,
             Err(error) => {
-                // The net is already delivered; keep the fee for ops instead of
-                // retrying a sweep that the chain just rejected.
+                // The net is already delivered; retain the fee for ops if the
+                // treasury sweep cannot be prepared safely.
                 repo::temp_wallets::set_state(
                     client,
                     &row.trade_id,
@@ -678,8 +820,12 @@ impl Service {
                 )
                 .await?;
                 self.retire_reserved_roles(client, &row.trade_id).await?;
+                return Ok(());
             }
-        }
+        };
+        let reference = super::chain::evm_transaction_hash(&signed);
+        repo::temp_wallets::set_fee_reference(client, &row.trade_id, &reference, &signed).await?;
+        self.evm_send_raw(&net, &signed).await?;
         Ok(())
     }
 
@@ -731,12 +877,12 @@ fn fee_split(gross: u128, payout: u128) -> Result<u128> {
 /// A direct or Intents payout leaves the withheld fee on the temporary wallet,
 /// so only the fee is swept. A reserve payout fronted the net from platform
 /// inventory, so the whole withheld deposit belongs to the desk and is swept.
-fn sweep_amount(fee: u128, balance: u128, from_reserve: bool) -> u128 {
-    if from_reserve {
-        balance
-    } else {
-        fee.min(balance)
-    }
+fn sweep_amount(balance: u128) -> u128 {
+    balance
+}
+
+fn fee_sweep_required(balance: u128) -> bool {
+    balance >= FEE_SWEEP_THRESHOLD_UNITS
 }
 
 /// Reads the delivered atomic amount from a 1Click status payload.
@@ -769,16 +915,21 @@ fn intents_output(status: &NearSwapStatus) -> Option<u128> {
 
 #[cfg(test)]
 mod tests {
-    use super::{fee_split, intents_output, sweep_amount};
+    use super::{fee_split, fee_sweep_required, intents_output, sweep_amount};
     use crate::route_engine::NearSwapStatus;
     use serde_json::json;
 
     #[test]
-    fn reserve_payout_sweeps_the_whole_withheld_deposit() {
-        assert_eq!(sweep_amount(3_000_000, 100_000_000, true), 100_000_000);
-        assert_eq!(sweep_amount(3_000_000, 100_000_000, false), 3_000_000);
-        assert_eq!(sweep_amount(3_000_000, 2_000_000, false), 2_000_000);
-        assert_eq!(sweep_amount(3_000_000, 0, true), 0);
+    fn sweep_moves_the_full_accumulated_treasury_balance() {
+        assert_eq!(sweep_amount(100_000_000), 100_000_000);
+        assert_eq!(sweep_amount(2_000_000), 2_000_000);
+        assert_eq!(sweep_amount(0), 0);
+    }
+
+    #[test]
+    fn dust_below_one_usd_keeps_the_same_wallet_slot_available() {
+        assert!(!fee_sweep_required(999_999));
+        assert!(fee_sweep_required(1_000_000));
     }
 
     #[test]

@@ -99,16 +99,14 @@ pub(crate) struct Config {
     pub public_offers_enabled: bool,
     #[serde(default)]
     pub p2p_enabled: bool,
-    /// Temporary custodial intermediaries. Off by default; the key material
-    /// layer exists but deals do not create wallets until settlement ships.
+    /// Temporary custodial intermediaries. Off by default.
     #[serde(default)]
     pub temp_wallets: bool,
     /// Native gas a temporary wallet must hold before a sweep is signed.
     #[serde(default = "default_temp_gas_reserve")]
     pub temp_gas_reserve: String,
-    /// Pay a same-network payout from the platform reserve on the payout
-    /// network and keep the payer's whole deposit withheld. Off by default:
-    /// the net is then paid from the funded temporary wallet instead.
+    /// Deprecated compatibility setting. Custodial same-network payouts always
+    /// use the permanent treasury when `temp_wallets` is enabled.
     #[serde(default)]
     pub temp_reserve_payout: bool,
     pub demo: bool,
@@ -328,6 +326,23 @@ impl Config {
             .get(network)
             .filter(|endpoints| endpoints.len() >= 2)
             .map(Vec::as_slice)
+    }
+
+    /// EVM networks for which OTC has a complete signed temp-wallet path.
+    pub(crate) fn temp_wallet_networks(&self) -> Vec<String> {
+        let mut networks = Vec::new();
+        if self.p2p_rpc().len() >= 2 {
+            networks.push("ethereum".to_string());
+        }
+        for network in ["polygon-pos", "avalanche-c"] {
+            if self
+                .p2p_evm_rpcs(network)
+                .is_some_and(|endpoints| endpoints.len() >= 2)
+            {
+                networks.push(network.to_string());
+            }
+        }
+        networks
     }
 }
 
@@ -555,6 +570,22 @@ mod config_tests {
         assert!(parse_flag("OTC_TEMP_WALLETS", "1").unwrap());
         assert!(!parse_flag("OTC_TEMP_WALLETS", "0").unwrap());
         assert!(parse_flag("OTC_TEMP_WALLETS", "maybe").is_err());
+    }
+
+    #[test]
+    fn treasury_networks_only_include_configured_temp_signers() {
+        let mut cfg = Config::default();
+        assert!(cfg.temp_wallet_networks().is_empty());
+        cfg.p2p_ethereum_rpc = vec!["https://eth-a".into(), "https://eth-b".into()];
+        cfg.p2p_evm_rpcs.insert(
+            "polygon-pos".into(),
+            vec!["https://polygon-a".into(), "https://polygon-b".into()],
+        );
+        cfg.p2p_evm_rpcs.insert(
+            "base".into(),
+            vec!["https://base-a".into(), "https://base-b".into()],
+        );
+        assert_eq!(cfg.temp_wallet_networks(), vec!["ethereum", "polygon-pos"]);
     }
 
     #[test]

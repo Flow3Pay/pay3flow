@@ -38,6 +38,11 @@ pub(crate) fn number(value: &Value) -> Result<u128> {
         value.parse().map_err(|_| invalid("invalid chain amount"))
     }
 }
+
+pub(crate) fn evm_transaction_hash(raw: &[u8]) -> String {
+    let hash = alloy::primitives::keccak256(raw);
+    format!("0x{}", wallet::hex(hash.as_slice()))
+}
 /// One Ethereum contour: the RPC pair that reads it and its ERC-20 token.
 /// The desk and peer settlement may point at different networks.
 #[derive(Clone)]
@@ -73,7 +78,10 @@ impl Service {
             .json()
             .await?;
         if body.get("error").is_some() || body.get("result").is_none() {
-            return Err(invalid("Ethereum RPC failed"));
+            let detail = body["error"]["message"]
+                .as_str()
+                .unwrap_or("unknown RPC error");
+            return Err(invalid(&format!("Ethereum RPC failed: {detail}")));
         }
         Ok(body["result"].clone())
     }
@@ -155,13 +163,29 @@ impl Service {
             .rpcs
             .first()
             .ok_or_else(|| invalid("no Ethereum RPC endpoint configured"))?;
-        let sent = self
+        let sent = match self
             .evm_read(
                 url,
                 "eth_sendRawTransaction",
                 json!([format!("0x{}", wallet::hex(raw))]),
             )
-            .await?;
+            .await
+        {
+            Ok(sent) => sent,
+            Err(error)
+                if error
+                    .to_string()
+                    .to_ascii_lowercase()
+                    .contains("already known")
+                    || error
+                        .to_string()
+                        .to_ascii_lowercase()
+                        .contains("known transaction") =>
+            {
+                return Ok(evm_transaction_hash(raw));
+            }
+            Err(error) => return Err(error),
+        };
         let hash = sent
             .as_str()
             .filter(|hash| {
@@ -222,6 +246,22 @@ impl Service {
         to: &str,
         amount: u128,
     ) -> Result<String> {
+        let raw = self
+            .evm_sign_temp_token_transfer(material, net, token, to, amount)
+            .await?;
+        self.evm_send_raw(net, &raw).await
+    }
+
+    /// Builds and signs an ERC-20 transfer without broadcasting it. Callers
+    /// that need crash-safe retries persist these bytes and their hash first.
+    pub(crate) async fn evm_sign_temp_token_transfer(
+        &self,
+        material: &WalletMaterial,
+        net: &EvmNet,
+        token: &str,
+        to: &str,
+        amount: u128,
+    ) -> Result<Vec<u8>> {
         if amount == 0 {
             return Err(invalid("EVM transfer amount must be positive"));
         }
@@ -250,7 +290,7 @@ impl Service {
             calldata,
         };
         let raw = material.sign_evm_transfer(&transfer)?;
-        self.evm_send_raw(net, &raw).await
+        Ok(raw)
     }
 
     /// Publishes one already-signed external message to the Everscale network.

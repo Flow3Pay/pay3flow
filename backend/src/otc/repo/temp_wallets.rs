@@ -14,18 +14,25 @@ const BY_ADDRESS: &str = "SELECT id,trade_id,role,chain,address,derivation_index
 const SET_STATUS: &str = "UPDATE otc_temp_wallets SET status=$2,updated_at=now() WHERE id=$1";
 const RECYCLE: &str =
     "UPDATE otc_temp_wallets SET trade_id=NULL,status='recycled',updated_at=now() WHERE id=$1";
-const RESERVE: &str = "SELECT id,chain,address,derivation_index,salt,key_ciphertext FROM otc_temp_wallets WHERE role='reserve' AND trade_id IS NULL AND chain=$1 AND status='active' ORDER BY created_at LIMIT 1";
+const RETURN_TO_POOL: &str = "UPDATE otc_temp_wallets SET trade_id=NULL,status='active',updated_at=now() WHERE id=$1 AND status='active'";
+const TREASURY: &str = "SELECT id,chain,address,derivation_index,salt,key_ciphertext FROM otc_temp_wallets WHERE role='treasury' AND trade_id IS NULL AND chain=$1 AND status='active' ORDER BY created_at LIMIT 1";
+const LOCK_POOL_SLOT: &str = "SELECT id,address,derivation_index,salt,key_ciphertext FROM otc_temp_wallets WHERE trade_id IS NULL AND chain=$1 AND role IN ('usd','usd_in') AND status='active' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED";
+const ATTACH_POOL_SLOT: &str = "UPDATE otc_temp_wallets SET trade_id=$2,role=$3,updated_at=now() WHERE id=$1 AND trade_id IS NULL AND status='active'";
 const DELETE_ROLE: &str = "UPDATE otc_temp_wallets SET status='deleted',updated_at=now() WHERE trade_id=$1 AND role=$2 AND status<>'deleted'";
 const INSERT_SETTLEMENT: &str = "INSERT INTO otc_temp_settlements(trade_id,wallet_id) VALUES($1,$2) ON CONFLICT (trade_id) DO NOTHING";
 const SETTLEMENT_STATE: &str = "SELECT state FROM otc_temp_settlements WHERE trade_id=$1";
-const DUE_SETTLEMENTS: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.role,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.state,s.reference,s.fee_reference,s.attempts,s.deposit_address,s.deposit_memo,s.quote_id,s.source_units,s.minimum_units,s.reserve_units FROM otc_temp_settlements s JOIN otc_temp_wallets w ON w.id=s.wallet_id JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE t.state IN ('delivery_pending','completed') AND (s.state IN ('awaiting_payment','payout_submitted','intents_submitted','fee_submitted') OR (s.state='payout_claim' AND s.updated_at<now()-interval '2 minutes')) AND s.attempts<10 ORDER BY s.updated_at LIMIT 20";
+const DUE_SETTLEMENTS: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.role,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.state,s.reference,s.fee_reference,s.attempts,s.deposit_address,s.deposit_memo,s.quote_id,s.source_units,s.minimum_units,s.reserve_units,s.output_signed_transaction,s.payout_signed_transaction,s.fee_signed_transaction FROM otc_temp_settlements s JOIN otc_temp_wallets w ON w.id=s.wallet_id JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE t.state IN ('delivery_pending','completed') AND (s.state IN ('awaiting_payment','payout_submitted','intents_submitted','intents_payout_submitted','fee_submitted') OR (s.state IN ('payout_claim','intents_payout_claim') AND s.updated_at<now()-interval '2 minutes')) AND s.attempts<10 ORDER BY s.updated_at LIMIT 20";
 const CLAIM: &str = "UPDATE otc_temp_settlements SET state='payout_claim',updated_at=now() WHERE trade_id=$1 AND state='awaiting_payment'";
+const CLAIM_INTENTS_PAYOUT: &str = "UPDATE otc_temp_settlements SET state='intents_payout_claim',updated_at=now() WHERE trade_id=$1 AND state='intents_submitted'";
+const SET_INTENTS_PAYOUT_REFERENCE: &str = "UPDATE otc_temp_settlements SET reference=$2,output_signed_transaction=$3,state='intents_payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state='intents_payout_claim'";
+const RESET_INTENTS_PAYOUT: &str = "UPDATE otc_temp_settlements SET reference=NULL,output_signed_transaction=NULL,state='intents_submitted',last_error=$2,updated_at=now() WHERE trade_id=$1 AND state='intents_payout_submitted'";
 const SET_STATE: &str =
     "UPDATE otc_temp_settlements SET state=$2,last_error=$3,updated_at=now() WHERE trade_id=$1";
 const SET_PAYOUT_REFERENCE: &str = "UPDATE otc_temp_settlements SET reference=$2,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
-const SET_FEE_REFERENCE: &str = "UPDATE otc_temp_settlements SET fee_reference=$2,state='fee_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('payout_submitted','intents_submitted')";
-const SET_RESERVE_PAYMENT: &str = "UPDATE otc_temp_settlements SET reference=$2,reserve_units=$3,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
+const SET_FEE_REFERENCE: &str = "UPDATE otc_temp_settlements SET fee_reference=$2,fee_signed_transaction=$3,state='fee_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('payout_submitted','intents_submitted','intents_payout_submitted')";
+const SET_TREASURY_PAYMENT: &str = "UPDATE otc_temp_settlements SET reference=$2,reserve_units=$3,payout_signed_transaction=$4,state='payout_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
 const SET_INTENTS_QUOTE: &str = "UPDATE otc_temp_settlements SET reference=$2,deposit_address=$3,deposit_memo=$4,quote_id=$5,source_units=$6,minimum_units=$7,state='intents_submitted',last_error=NULL,updated_at=now() WHERE trade_id=$1 AND state IN ('awaiting_payment','payout_claim')";
+const WALLET_SECRET_FOR_ROLE: &str = "SELECT chain,address,derivation_index,salt,key_ciphertext FROM otc_temp_wallets WHERE trade_id=$1 AND role=$2 AND status='active' LIMIT 1";
 /// A row that keeps failing stops being selected at ten attempts, so the tenth
 /// failure moves it to an explicit terminal state instead of freezing in a live
 /// one that still looks actionable.
@@ -117,13 +124,33 @@ pub(crate) struct SettlementRow {
     pub minimum_units: Option<String>,
     /// Net fronted from the platform reserve when this is set.
     pub reserve_units: Option<String>,
+    pub output_signed_transaction: Option<Vec<u8>>,
+    pub payout_signed_transaction: Option<Vec<u8>>,
+    pub fee_signed_transaction: Option<Vec<u8>>,
 }
 
-/// One platform reserve wallet for a chain (spec §5.4). It is stored like a
-/// temporary wallet so the same per-row salted encryption applies.
+/// One permanent platform treasury for a chain, including its gas reserve.
+/// It is stored with salted encryption and is never deleted.
 #[derive(Clone)]
-pub(crate) struct ReserveWallet {
+pub(crate) struct TreasuryWallet {
     pub id: Uuid,
+    pub chain: String,
+    pub address: String,
+    pub derivation_index: i32,
+    pub salt: Vec<u8>,
+    pub key_ciphertext: Vec<u8>,
+}
+
+/// A previously derived USD address atomically attached to one new deal.
+pub(crate) struct PooledWallet {
+    pub id: Uuid,
+    pub address: String,
+    pub derivation_index: i32,
+    pub salt: Vec<u8>,
+    pub key_ciphertext: Vec<u8>,
+}
+
+pub(crate) struct WalletSecret {
     pub chain: String,
     pub address: String,
     pub derivation_index: i32,
@@ -204,6 +231,9 @@ pub(crate) async fn due_settlements(
             source_units: row.get(16),
             minimum_units: row.get(17),
             reserve_units: row.get(18),
+            output_signed_transaction: row.get(19),
+            payout_signed_transaction: row.get(20),
+            fee_signed_transaction: row.get(21),
         })
         .collect())
 }
@@ -235,9 +265,13 @@ pub(crate) async fn set_fee_reference(
     client: &(impl GenericClient + Sync),
     trade_id: &Uuid,
     reference: &str,
+    signed_transaction: &[u8],
 ) -> Result<()> {
     client
-        .execute(SET_FEE_REFERENCE, &[trade_id, &reference])
+        .execute(
+            SET_FEE_REFERENCE,
+            &[trade_id, &reference, &signed_transaction],
+        )
         .await?;
     Ok(())
 }
@@ -270,15 +304,74 @@ pub(crate) async fn set_intents_quote(
     Ok(())
 }
 
+pub(crate) async fn set_intents_payout_reference(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    reference: &str,
+    signed_transaction: &[u8],
+) -> Result<()> {
+    let updated = client
+        .execute(
+            SET_INTENTS_PAYOUT_REFERENCE,
+            &[trade_id, &reference, &signed_transaction],
+        )
+        .await?;
+    if updated != 1 {
+        return Err(crate::otc::error::Error::Conflict(
+            "cross-network payout claim was lost before it was persisted".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn claim_intents_payout(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+) -> Result<bool> {
+    Ok(client.execute(CLAIM_INTENTS_PAYOUT, &[trade_id]).await? == 1)
+}
+
+pub(crate) async fn reset_intents_payout(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    reason: &str,
+) -> Result<()> {
+    client
+        .execute(RESET_INTENTS_PAYOUT, &[trade_id, &reason])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn wallet_secret_for_role(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    role: &str,
+) -> Result<Option<WalletSecret>> {
+    Ok(client
+        .query_opt(WALLET_SECRET_FOR_ROLE, &[trade_id, &role])
+        .await?
+        .map(|row| WalletSecret {
+            chain: row.get("chain"),
+            address: row.get("address"),
+            derivation_index: row.get("derivation_index"),
+            salt: row.get("salt"),
+            key_ciphertext: row.get("key_ciphertext"),
+        }))
+}
+
 /// Marks the net as fronted from the reserve and records the payout hash.
-pub(crate) async fn set_reserve_payment(
+pub(crate) async fn set_treasury_payment(
     client: &(impl GenericClient + Sync),
     trade_id: &Uuid,
     reference: &str,
     units: &str,
+    signed_transaction: &[u8],
 ) -> Result<()> {
     client
-        .execute(SET_RESERVE_PAYMENT, &[trade_id, &reference, &units])
+        .execute(
+            SET_TREASURY_PAYMENT,
+            &[trade_id, &reference, &units, &signed_transaction],
+        )
         .await?;
     Ok(())
 }
@@ -331,15 +424,26 @@ pub(crate) async fn recycle(client: &(impl GenericClient + Sync), id: &Uuid) -> 
     Ok(())
 }
 
+/// Returns the same address to the available pool while retaining its dust.
+pub(crate) async fn return_to_pool(client: &(impl GenericClient + Sync), id: &Uuid) -> Result<()> {
+    let returned = client.execute(RETURN_TO_POOL, &[id]).await?;
+    if returned != 1 {
+        return Err(crate::otc::error::Error::Conflict(
+            "temporary wallet could not be safely returned to the pool".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// The active platform reserve for a chain, if it has been provisioned.
-pub(crate) async fn reserve(
+pub(crate) async fn treasury(
     client: &(impl GenericClient + Sync),
     chain: &str,
-) -> Result<Option<ReserveWallet>> {
+) -> Result<Option<TreasuryWallet>> {
     Ok(client
-        .query_opt(RESERVE, &[&chain])
+        .query_opt(TREASURY, &[&chain])
         .await?
-        .map(|row| ReserveWallet {
+        .map(|row| TreasuryWallet {
             id: row.get("id"),
             chain: row.get("chain"),
             address: row.get("address"),
@@ -347,6 +451,44 @@ pub(crate) async fn reserve(
             salt: row.get("salt"),
             key_ciphertext: row.get("key_ciphertext"),
         }))
+}
+
+/// Locks one empty USD slot under the caller's deal transaction. Row locking
+/// with SKIP LOCKED ensures concurrent accepts can never receive the same
+/// deposit address.
+pub(crate) async fn lock_pool_slot(
+    client: &(impl GenericClient + Sync),
+    chain: &str,
+) -> Result<Option<PooledWallet>> {
+    Ok(client
+        .query_opt(LOCK_POOL_SLOT, &[&chain])
+        .await?
+        .map(|row| PooledWallet {
+            id: row.get("id"),
+            address: row.get("address"),
+            derivation_index: row.get("derivation_index"),
+            salt: row.get("salt"),
+            key_ciphertext: row.get("key_ciphertext"),
+        }))
+}
+
+/// Attaches a slot locked earlier in the same transaction after its trade row
+/// exists (the wallet row has a foreign key to that trade).
+pub(crate) async fn attach_pool_slot(
+    client: &(impl GenericClient + Sync),
+    wallet_id: &Uuid,
+    trade_id: &Uuid,
+    role: &str,
+) -> Result<()> {
+    let attached = client
+        .execute(ATTACH_POOL_SLOT, &[wallet_id, trade_id, &role])
+        .await?;
+    if attached != 1 {
+        return Err(crate::otc::error::Error::Conflict(
+            "temporary wallet slot was claimed concurrently".into(),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) async fn due_ever_payouts(
@@ -407,7 +549,10 @@ pub(crate) async fn delete_role(
 
 #[cfg(test)]
 mod tests {
-    use super::{COLUMNS, DELETE_ROLE, DUE_EVER, NOTE_ERROR, RESERVE, SET_RESERVE_PAYMENT};
+    use super::{
+        ATTACH_POOL_SLOT, COLUMNS, DELETE_ROLE, DUE_EVER, LOCK_POOL_SLOT, NOTE_ERROR,
+        RETURN_TO_POOL, SET_TREASURY_PAYMENT, TREASURY,
+    };
 
     #[test]
     fn the_attempt_cap_becomes_a_terminal_stalled_state() {
@@ -417,14 +562,25 @@ mod tests {
 
     #[test]
     fn reserve_rows_are_pool_wallets_and_payouts_record_their_amount() {
-        assert!(RESERVE.contains("role='reserve'"));
-        assert!(RESERVE.contains("trade_id IS NULL"));
-        assert!(RESERVE.contains("status='active'"));
-        assert!(SET_RESERVE_PAYMENT.contains("reserve_units=$3"));
-        assert!(SET_RESERVE_PAYMENT.contains("state='payout_submitted'"));
+        assert!(TREASURY.contains("role='treasury'"));
+        assert!(TREASURY.contains("trade_id IS NULL"));
+        assert!(TREASURY.contains("status='active'"));
+        assert!(SET_TREASURY_PAYMENT.contains("reserve_units=$3"));
+        assert!(SET_TREASURY_PAYMENT.contains("payout_signed_transaction=$4"));
+        assert!(SET_TREASURY_PAYMENT.contains("state='payout_submitted'"));
         assert!(DELETE_ROLE.contains("status='deleted'"));
         assert!(DUE_EVER.contains("w.role='ever'"));
         assert!(DUE_EVER.contains("a.instructions->'leg'->>'recipient'=w.address"));
+    }
+
+    #[test]
+    fn usd_pool_slots_are_selected_atomically_and_reassigned_with_the_trade() {
+        assert!(LOCK_POOL_SLOT.contains("role IN ('usd','usd_in')"));
+        assert!(LOCK_POOL_SLOT.contains("trade_id IS NULL"));
+        assert!(LOCK_POOL_SLOT.contains("FOR UPDATE SKIP LOCKED"));
+        assert!(ATTACH_POOL_SLOT.contains("trade_id=$2"));
+        assert!(ATTACH_POOL_SLOT.contains("trade_id IS NULL"));
+        assert!(RETURN_TO_POOL.contains("trade_id=NULL,status='active'"));
     }
 
     #[test]

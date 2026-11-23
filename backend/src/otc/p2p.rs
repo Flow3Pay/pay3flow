@@ -442,7 +442,6 @@ impl Service {
         let pay_by = Utc::now() + Duration::hours(DEAL_LIFETIME_HOURS);
         let temp_plan = if self.cfg.temp_wallets
             && self.p2p_direct_network_available(&payer_network)
-            && self.cfg.fee_recipients.contains_key(payer_network.as_str())
             && (payer_network == output_network || self.near_intents.is_some())
         {
             super::temp_wallet::plan(&payer_network, &output_network)?
@@ -451,11 +450,11 @@ impl Service {
         };
         // A reserve-payout deal must be frontable before Accept creates an
         // address; otherwise it would park in `awaiting_payment` (spec §6.3).
-        if self.cfg.temp_reserve_payout && temp_plan.is_some() && payer_network == output_network {
+        if temp_plan.is_some() && payer_network == output_network {
             let net = fee_policy["net_units"]
                 .as_str()
                 .ok_or_else(|| invalid("deal fee terms are malformed"))?;
-            self.temp_reserve_preflight(&payer_network, &output_contract, amount::integer(net)?)
+            self.temp_treasury_preflight(&payer_network, &output_contract, amount::integer(net)?)
                 .await?;
         }
         let temp_token = match temp_plan {
@@ -512,13 +511,39 @@ impl Service {
             "ever_network_id": 42,
             "fee_policy": fee_policy,
         });
+        let id = Uuid::new_v4();
         let temp_wallet = match (temp_plan, temp_token) {
             (Some(plan), Some((token, asset_id))) => {
                 let mut wallets = Vec::with_capacity(plan.len());
                 for (role, chain) in plan {
-                    let material = super::temp_wallet::WalletMaterial::generate(chain)?;
-                    let sealed = super::temp_wallet::seal(&self.secrets_key, material.seed())?;
-                    let address = material.address()?;
+                    let pooled = if matches!(
+                        role,
+                        super::temp_wallet::Role::Usd | super::temp_wallet::Role::UsdIn
+                    ) {
+                        repo::temp_wallets::lock_pool_slot(&tx, chain.id()).await?
+                    } else {
+                        None
+                    };
+                    let (material, sealed, address, wallet_id) = if let Some(slot) = pooled {
+                        let seed = super::temp_wallet::open(
+                            &self.secrets_key,
+                            &slot.salt,
+                            &slot.key_ciphertext,
+                        )?;
+                        let derivation_index = u32::try_from(slot.derivation_index)
+                            .map_err(|_| invalid("temporary wallet derivation index is invalid"))?;
+                        let material = super::temp_wallet::WalletMaterial::from_seed(
+                            chain,
+                            &seed[..],
+                            derivation_index,
+                        )?;
+                        (material, None, slot.address, Some(slot.id))
+                    } else {
+                        let material = super::temp_wallet::WalletMaterial::generate(chain)?;
+                        let sealed = super::temp_wallet::seal(&self.secrets_key, material.seed())?;
+                        let address = material.address()?;
+                        (material, Some(sealed), address, None)
+                    };
                     let mut wallet = json!({
                         "role": role.as_str(),
                         "chain": chain.id(),
@@ -532,7 +557,7 @@ impl Service {
                         wallet["token"] = json!(token);
                         wallet["asset_id"] = json!(asset_id);
                     }
-                    wallets.push((role, chain, address, sealed, material, wallet));
+                    wallets.push((role, chain, address, sealed, material, wallet, wallet_id));
                 }
                 let primary = wallets
                     .iter()
@@ -552,26 +577,35 @@ impl Service {
             }
             _ => None,
         };
-        let id = Uuid::new_v4();
         repo::p2p::mark_offer_taken(&tx, &offer_id).await?;
         repo::p2p::insert_trade(&tx, &id, &offer_id, &owner, actor, &body, key, &pay_by).await?;
         if let Some(wallets) = temp_wallet {
             let mut primary = None;
-            for (role, chain, address, sealed, material, _) in wallets {
-                let wallet_id = Uuid::new_v4();
-                repo::temp_wallets::insert(
-                    &tx,
-                    &wallet_id,
-                    Some(&id),
-                    role.as_str(),
-                    chain.id(),
-                    &address,
-                    material.derivation_index(),
-                    &sealed.salt,
-                    &sealed.ciphertext,
-                    None,
-                )
-                .await?;
+            for (role, chain, address, sealed, material, _, pooled_id) in wallets {
+                let wallet_id = if let Some(wallet_id) = pooled_id {
+                    repo::temp_wallets::attach_pool_slot(&tx, &wallet_id, &id, role.as_str())
+                        .await?;
+                    wallet_id
+                } else {
+                    let wallet_id = Uuid::new_v4();
+                    let sealed = sealed.ok_or_else(|| {
+                        invalid("new temporary wallet is missing encrypted key material")
+                    })?;
+                    repo::temp_wallets::insert(
+                        &tx,
+                        &wallet_id,
+                        Some(&id),
+                        role.as_str(),
+                        chain.id(),
+                        &address,
+                        material.derivation_index(),
+                        &sealed.salt,
+                        &sealed.ciphertext,
+                        None,
+                    )
+                    .await?;
+                    wallet_id
+                };
                 if matches!(
                     role,
                     super::temp_wallet::Role::Usd | super::temp_wallet::Role::UsdIn
