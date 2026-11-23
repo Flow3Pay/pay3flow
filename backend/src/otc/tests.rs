@@ -1767,3 +1767,62 @@ async fn p2p_publication_rejects_a_testnet_even_when_the_desk_keeps_mainnet() {
     let _ = taker;
     cleanup(peer, task).await;
 }
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn stalled_custody_and_failed_gas_funding_page_the_operator() {
+    let (service, task, _) = fixture().await;
+    let client = service.pool.get().await.unwrap();
+    let offer = Uuid::new_v4();
+    let trade = Uuid::new_v4();
+    let wallet = Uuid::new_v4();
+    client
+        .batch_execute(&format!(
+            "INSERT INTO otc_public_offers(id,actor,seller_ever,body,idempotency_key)
+             VALUES('{offer}','seller','0:{}','{{}}','custody-offer');
+             INSERT INTO otc_p2p_trades(id,offer_id,owner_actor,taker_actor,body,state,idempotency_key,pay_by)
+             VALUES('{trade}','{offer}','seller','buyer','{{}}','delivery_pending','custody-trade',now()+interval '1 hour');
+             INSERT INTO otc_temp_wallets(id,trade_id,role,chain,address,derivation_index,salt,key_ciphertext)
+             VALUES('{wallet}','{trade}','usd','ethereum','0x{}',0,decode(repeat('00',16),'hex'),decode(repeat('01',32),'hex'));
+             INSERT INTO otc_temp_settlements(trade_id,wallet_id,state) VALUES('{trade}','{wallet}','stalled');
+             INSERT INTO otc_temp_gas(trade_id,role,address,state,attempts)
+             VALUES('{trade}','usd','0x{}','failed',10);",
+            "a".repeat(64),
+            "b".repeat(40),
+            "b".repeat(40)
+        ))
+        .await
+        .unwrap();
+    service.alert_tick().await.unwrap();
+    for key in [
+        format!("custody:{trade}"),
+        format!("custody-gas:{trade}:usd"),
+    ] {
+        let severity: String = client
+            .query_one(
+                "SELECT severity FROM otc_incidents WHERE incident_key=$1",
+                &[&key],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(severity, "P1", "{key}");
+    }
+    // Resolving the deal stops the page while the terminal rows stay for audit.
+    client
+        .execute(
+            "UPDATE otc_p2p_trades SET state='completed' WHERE id=$1",
+            &[&trade],
+        )
+        .await
+        .unwrap();
+    assert!(super::repo::workers::stalled_settlements(&client)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(super::repo::workers::failed_gas_funding(&client)
+        .await
+        .unwrap()
+        .is_empty());
+    drop(client);
+    cleanup(service, task).await;
+}
