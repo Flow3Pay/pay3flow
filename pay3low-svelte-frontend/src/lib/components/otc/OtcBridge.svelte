@@ -5,6 +5,7 @@
   import { networkIcon } from "$lib/icons";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
+  import { otcNetworkAllowed } from "$lib/otc/p2p";
   import type { CryptoNetwork } from "$lib/networks";
   import type { PaymentMethod } from "$lib/payment-methods";
   import { markets, formatAmount, formatPrice, prepareDemoOrder, type OtcMarket, type OtcSnapshot, type OrderSide, type OrderType, type OrderDraft } from "$lib/otc/model";
@@ -33,8 +34,11 @@
   $: draft = result.draft;
   $: sendAsset = side === "buy" ? market.quote : market.base;
   $: receiveAsset = side === "buy" ? market.base : market.quote;
-  $: sendNetworks = networks.filter((item) => item.currencies.includes(sendAsset));
-  $: receiveNetworks = networks.filter((item) => item.currencies.includes(receiveAsset));
+  // OTC must not offer TRON, even though the global wallet/network catalog
+  // keeps it for non-OTC address generation and swaps.
+  $: otcNetworks = networks.filter((item) => otcNetworkAllowed(item.id));
+  $: sendNetworks = otcNetworks.filter((item) => item.currencies.includes(sendAsset));
+  $: receiveNetworks = otcNetworks.filter((item) => item.currencies.includes(receiveAsset));
   const nativeNetwork: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "ethereum" };
   $: sendNetwork = sendNetworks.find((item) => item.id === sendNetworkId) ?? sendNetworks.find((item) => item.id === nativeNetwork[sendAsset]) ?? sendNetworks[0];
   $: receiveNetwork = receiveNetworks.find((item) => item.id === receiveNetworkId) ?? receiveNetworks.find((item) => item.id === nativeNetwork[receiveAsset]) ?? receiveNetworks[0];
@@ -91,7 +95,7 @@
   <button class="cta" type="submit" disabled={disabled || !draft || !sendNetwork || !receiveNetwork} data-testid="otc-review">{draft ? copy.review : copy.enterAmount}<span aria-hidden="true">↗</span></button>
 </form>
 {#if assetPicker}
-  <PaymentMethodPicker open title={assetPicker === "send" ? copy.chooseSendAsset : copy.chooseReceiveAsset} role={assetPicker === "send" ? "sender" : "recipient"} {networks} paymentMethods={assetMethods} selected={assetPicker === "send" ? sendMethod : receiveMethod} selectedNetwork={assetPicker === "send" ? sendNetwork : receiveNetwork} onClose={() => assetPicker = null} onSelect={selectAsset} />
+  <PaymentMethodPicker open title={assetPicker === "send" ? copy.chooseSendAsset : copy.chooseReceiveAsset} role={assetPicker === "send" ? "sender" : "recipient"} networks={otcNetworks} paymentMethods={assetMethods} selected={assetPicker === "send" ? sendMethod : receiveMethod} selectedNetwork={assetPicker === "send" ? sendNetwork : receiveNetwork} onClose={() => assetPicker = null} onSelect={selectAsset} />
 {/if}
 {#if networkPicker}
   <NetworkPicker open networks={networkPicker === "send" ? sendNetworks : receiveNetworks} selected={networkPicker === "send" ? sendNetwork : receiveNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />

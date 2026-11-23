@@ -423,7 +423,7 @@ test("quote reuses the header picker; cancelling preserves the ticket without an
   await expect(dialog).toHaveAttribute("id", "wallet-connections");
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(dialog.getByRole("searchbox", { name: "Search wallets" })).toBeFocused();
-  await expect.poll(() => dialog.locator(".optionLogo img").evaluateAll(images => images.length === 19 && images.filter(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0).length >= 4)).toBe(true);
+  await expect.poll(() => dialog.locator(".optionLogo img").evaluateAll(images => images.length === 18 && images.filter(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0).length >= 4)).toBe(true);
   expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.keyboard.press("Shift+Tab");
   await expect(dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeFocused();
@@ -447,7 +447,7 @@ test("quote reuses the header picker; cancelling preserves the ticket without an
   await expect(dialog).toHaveAttribute("id", "wallet-connections");
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(dialog.getByRole("button", { name: "Request exact quote", exact: true })).toHaveCount(0);
-  await expect(dialog.locator(".optionName")).toHaveText(["Ethereum", "BNB Smart Chain", "Optimism", "Polygon", "Base", "Avalanche C-Chain", "Arbitrum One", "Gnosis", "Linea", "Plasma", "Ink", "Sei", "NEAR", "TRON", "Solana", "Sui", "Aptos", "TON", "Everscale"]);
+  await expect(dialog.locator(".optionName")).toHaveText(["Ethereum", "BNB Smart Chain", "Optimism", "Polygon", "Base", "Avalanche C-Chain", "Arbitrum One", "Gnosis", "Linea", "Plasma", "Ink", "Sei", "NEAR", "Solana", "Sui", "Aptos", "TON", "Everscale"]);
   await dialog.locator(".closeButton").click();
   expect(f.requests.filter(request => request.path === "/rfqs")).toHaveLength(0);
   expect(f.auth).toHaveLength(0);
