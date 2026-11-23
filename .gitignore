@@ -76,3 +76,6 @@ searcher/redis-data/
 # Local machine settings and non-production OTC config
 .qoder/settings.local.json
 backend/otc.local.json
+
+# === Move / Aptos build artifacts ===
+contracts/**/build/
