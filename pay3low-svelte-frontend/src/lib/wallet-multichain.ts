@@ -1,6 +1,7 @@
 import { env } from "$env/dynamic/public";
 import type { RouteExecutionAction } from "$lib/exchange";
 import { Buffer } from "buffer";
+import { selectWalletConnector, walletConnectorId } from "./wallet-connector-choice";
 
 type Hex = `0x${string}`;
 type AddressLike = { toBase58(): string };
@@ -36,6 +37,7 @@ interface StandardWallet {
   on?(event: "change", listener: () => void): () => void;
 }
 type SuiWallet = StandardWallet;
+export interface ExtraWalletChoice { id: string; name: string }
 interface SuiClient {
   getBalance(input: { owner: string; coinType: string }): Promise<{ totalBalance: string }>;
   getCoins(input: { owner: string; coinType: string; limit?: number; cursor?: string | null }): Promise<{
@@ -99,6 +101,7 @@ export type ExtraWallet =
 
 let tonUiPromise: Promise<TonConnect> | null = null;
 const suiClients = new Map<string, Promise<SuiClient>>();
+const EXTRA_WALLET_KEY = "pay3flow.extra-wallet";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" ? value as Record<string, unknown> : null;
@@ -126,6 +129,37 @@ async function solanaStandardWallets(): Promise<StandardWallet[]> {
   return (getWallets().get() as unknown as StandardWallet[]).filter(wallet =>
     wallet.chains.includes("solana:mainnet")
     && typeof record(wallet.features["standard:connect"])?.connect === "function");
+}
+
+function standardWalletId(wallet: StandardWallet, index: number): string {
+  return walletConnectorId(wallet.name, index);
+}
+
+function rememberedWallet(family: "solana" | "sui"): string | null {
+  try { return localStorage.getItem(`${EXTRA_WALLET_KEY}.${family}`); }
+  catch { return null; }
+}
+
+function rememberWallet(family: "solana" | "sui", id: string): void {
+  try { localStorage.setItem(`${EXTRA_WALLET_KEY}.${family}`, id); }
+  catch { /* Storage is optional; a reload can ask again. */ }
+}
+
+export async function extraWalletChoices(network: string): Promise<ExtraWalletChoice[]> {
+  if (network === "solana") {
+    const choices: ExtraWalletChoice[] = [];
+    if (legacySolanaProvider()) choices.push({ id: "injected-solana", name: "Injected Solana wallet" });
+    const wallets = await solanaStandardWallets();
+    choices.push(...wallets.map((wallet, index) => ({ id: standardWalletId(wallet, index), name: wallet.name })));
+    return choices;
+  }
+  if (network === "sui") {
+    const { getWallets } = await import("@wallet-standard/app");
+    return getWallets().get()
+      .filter(wallet => wallet.chains.includes("sui:mainnet"))
+      .map((wallet, index) => ({ id: standardWalletId(wallet as unknown as StandardWallet, index), name: wallet.name }));
+  }
+  return [];
 }
 
 function solanaAccount(accounts: StandardAccount[] | undefined, wallet: StandardWallet): StandardAccount | undefined {
@@ -172,16 +206,22 @@ function standardSolanaProvider(wallet: StandardWallet, initial: StandardAccount
   };
 }
 
-async function connectSolanaStandard(): Promise<ExtraWallet> {
+async function connectSolanaStandard(connectorId?: string): Promise<ExtraWallet> {
   const wallets = await solanaStandardWallets();
   if (!wallets.length) throw new Error("Install a Solana browser wallet such as Phantom or MetaMask");
-  if (wallets.length > 1) throw new Error("More than one Solana wallet is available; leave one Solana wallet enabled and retry");
-  const wallet = wallets[0];
+  const selected = selectWalletConnector(wallets.map((wallet, index) => ({
+    id: standardWalletId(wallet, index),
+    name: wallet.name,
+    wallet,
+  })), connectorId)?.wallet;
+  if (!selected) throw new Error("Choose one of the available Solana wallets");
+  const wallet = selected;
   const connect = record(wallet.features["standard:connect"])?.connect;
   if (typeof connect !== "function") throw new Error("The selected Solana wallet does not support connection");
   const result = await (connect as () => Promise<{ accounts?: StandardAccount[] }>)();
   const account = solanaAccount(result.accounts, wallet);
   if (!account?.address) throw new Error("The Solana wallet did not return a mainnet account");
+  rememberWallet("solana", connectorId ?? standardWalletId(wallet, wallets.indexOf(wallet)));
   return { family: "solana", address: account.address, provider: standardSolanaProvider(wallet, account) };
 }
 
@@ -221,12 +261,19 @@ function normalizedTonAddress(address: string): string {
   return address;
 }
 
-async function connectSui(): Promise<ExtraWallet> {
+async function connectSui(connectorId?: string): Promise<ExtraWallet> {
   const { getWallets } = await import("@wallet-standard/app");
   const wallets = getWallets().get().filter(wallet => wallet.chains.includes("sui:mainnet"));
   if (!wallets.length) throw new Error("Install a Sui wallet such as Slush, then retry");
-  if (wallets.length > 1) throw new Error("More than one Sui wallet is available; leave one Sui wallet enabled and retry");
-  const wallet = wallets[0] as unknown as SuiWallet;
+  const indexed = wallets.map((wallet, index) => ({ wallet: wallet as unknown as SuiWallet, index }));
+  const selected = selectWalletConnector(indexed.map(({ wallet, index }) => ({
+    id: standardWalletId(wallet, index),
+    name: wallet.name,
+    wallet,
+    index,
+  })), connectorId);
+  if (!selected) throw new Error("Choose one of the available Sui wallets");
+  const { wallet, index } = selected;
   const connect = record(wallet.features["standard:connect"])?.connect;
   if (typeof connect !== "function") throw new Error("The selected Sui wallet does not support connection");
   const result = await (connect as () => Promise<{ accounts?: StandardAccount[] }>)();
@@ -234,19 +281,37 @@ async function connectSui(): Promise<ExtraWallet> {
   if (!account?.address || !/^0x[0-9a-f]{64}$/i.test(account.address)) {
     throw new Error("The Sui wallet returned an invalid mainnet address");
   }
+  rememberWallet("sui", connectorId ?? standardWalletId(wallet, index));
   return { family: "sui", address: account.address, wallet, account };
 }
 
-export async function connectExtraWallet(network: string): Promise<ExtraWallet> {
+export async function connectExtraWallet(network: string, connectorId?: string): Promise<ExtraWallet> {
   if (network === "solana") {
+    if (connectorId && connectorId !== "injected-solana") return connectSolanaStandard(connectorId);
+    const choices = await extraWalletChoices(network);
+    const remembered = rememberedWallet("solana");
+    const selected = connectorId ?? (choices.length === 1
+      ? choices[0].id
+      : choices.find(choice => choice.id === remembered)?.id);
+    if (choices.length > 1 && !selected) throw new Error("Choose one of the available Solana wallets");
+    if (selected !== "injected-solana") return connectSolanaStandard(selected ?? undefined);
     const provider = legacySolanaProvider();
-    if (!provider) return connectSolanaStandard();
+    if (!provider) throw new Error("The selected Solana wallet is no longer available. Choose another wallet.");
     const result = await provider.connect();
     const address = result.publicKey?.toBase58() ?? provider.publicKey?.toBase58();
     if (!address) throw new Error("Solana wallet did not return an account");
+    rememberWallet("solana", "injected-solana");
     return { family: "solana", address, provider };
   }
-  if (network === "sui") return connectSui();
+  if (network === "sui") {
+    const choices = await extraWalletChoices(network);
+    const remembered = rememberedWallet("sui");
+    const selected = connectorId ?? (choices.length === 1
+      ? choices[0].id
+      : choices.find(choice => choice.id === remembered)?.id);
+    if (choices.length > 1 && !selected) throw new Error("Choose one of the available Sui wallets");
+    return connectSui(selected ?? undefined);
+  }
   if (network === "aptos") {
     const provider = aptosProvider();
     const account = await provider.connect();
@@ -303,22 +368,25 @@ export async function connectExtraWallet(network: string): Promise<ExtraWallet> 
 export async function restoreExtraWallet(family: ExtraWallet["family"]): Promise<ExtraWallet | null> {
   if (family === "solana") {
     const provider = legacySolanaProvider();
-    if (provider) {
+    if (provider && rememberedWallet("solana") === "injected-solana") {
       const address = provider.isConnected ? provider.publicKey?.toBase58() : undefined;
       return address ? { family, address, provider } : null;
     }
     const wallets = (await solanaStandardWallets()).filter(wallet =>
       wallet.accounts.some(account => account.chains?.includes("solana:mainnet")));
-    if (wallets.length !== 1) return null;
-    const wallet = wallets[0];
+    const remembered = rememberedWallet("solana");
+    const wallet = wallets.find((candidate, index) => standardWalletId(candidate, index) === remembered);
+    if (!wallet) return null;
     const account = solanaAccount(wallet.accounts, wallet);
     return account?.address ? { family, address: account.address, provider: standardSolanaProvider(wallet, account) } : null;
   }
   if (family === "sui") {
     const { getWallets } = await import("@wallet-standard/app");
     const wallets = getWallets().get().filter(wallet => wallet.chains.includes("sui:mainnet"));
-    if (wallets.length !== 1) return null;
-    const wallet = wallets[0] as unknown as SuiWallet;
+    const remembered = rememberedWallet("sui");
+    const index = wallets.findIndex((candidate, itemIndex) => standardWalletId(candidate as unknown as StandardWallet, itemIndex) === remembered);
+    if (index < 0) return null;
+    const wallet = wallets[index] as unknown as SuiWallet;
     const account = wallet.accounts.find(item => item.chains?.includes("sui:mainnet")) ?? wallet.accounts[0];
     return account?.address ? { family, address: account.address, wallet, account } : null;
   }
@@ -368,6 +436,10 @@ export async function disconnectExtraWallet(wallet: ExtraWallet): Promise<void> 
   else {
     const disconnect = record(wallet.wallet.features["standard:disconnect"])?.disconnect;
     if (typeof disconnect === "function") await (disconnect as () => Promise<void>)();
+  }
+  if (wallet.family === "solana" || wallet.family === "sui") {
+    try { localStorage.removeItem(`${EXTRA_WALLET_KEY}.${wallet.family}`); }
+    catch { /* Storage is optional. */ }
   }
 }
 

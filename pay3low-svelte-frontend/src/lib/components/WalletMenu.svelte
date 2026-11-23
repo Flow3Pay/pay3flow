@@ -9,7 +9,7 @@
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import { identiconDataUri } from "$lib/otc/identicon";
   import { getAnonymousUserId } from "$lib/anonymous-user";
-  import { chainIdForNetwork, evmWalletChoices, usesAppKitEvm, type EvmWalletChoice, type WalletFamily } from "$lib/wallet-execution";
+import { chainIdForNetwork, evmWalletChoices, extraExecutionWalletChoices, usesAppKitEvm, type EvmWalletChoice, type WalletFamily } from "$lib/wallet-execution";
   import { mobileWalletLinks, type MobileWalletLink } from "$lib/mobile-wallet-links";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
@@ -38,7 +38,7 @@
   $: open = $walletDialogMode !== null;
   $: account = $walletDialogMode === "otc" ? $otcWalletDialog : null;
   let query = "";
-  $: if (!open) { query = ""; error = ""; evmChoices = []; pendingEvmNetwork = ""; }
+  $: if (!open) { query = ""; error = ""; evmChoices = []; pendingEvmNetwork = ""; extraChoices = []; pendingExtraNetwork = ""; }
   let searchInput: HTMLInputElement;
   let busy: WalletFamily | null = null;
   let error = "";
@@ -50,6 +50,8 @@
   let appLinks: MobileWalletLink[] = [];
   let evmChoices: EvmWalletChoice[] = [];
   let pendingEvmNetwork = "";
+  let extraChoices: EvmWalletChoice[] = [];
+  let pendingExtraNetwork = "";
   $: handoff = providerHandoff;
   $: working = Boolean(busy || account?.busy);
   let motionDuration = 160;
@@ -61,6 +63,7 @@
   $: avatar = anonymousUserId ? identiconDataUri(anonymousUserId) : "";
   $: terms = query.normalize("NFKC").toLowerCase().trim().split(/\s+/).filter(Boolean);
   $: visibleChoices = choices.filter(choice => {
+    if ($walletDialogMode === "otc" && choice.network === "tron") return false;
     const text = `${choice.label} ${choice.network} ${choice.family} ${choice.keywords} ${$wallets[choice.family]?.address ?? ''}`.toLowerCase();
     return terms.every(term => text.includes(term));
   });
@@ -148,7 +151,7 @@
 
   async function selectChoice(family: WalletFamily, network: string) {
     if (working) return;
-    evmChoices = []; pendingEvmNetwork = "";
+    evmChoices = []; pendingEvmNetwork = ""; extraChoices = []; pendingExtraNetwork = "";
     const context = account;
     const wallet = $wallets[family];
     if (context && (network === "ethereum" || network === "everscale") && context.enabled && context.chains.includes(network)) {
@@ -177,6 +180,13 @@
         return;
       }
     }
+    if ((family === "solana" || family === "sui") && !wallet) {
+      const available = await extraExecutionWalletChoices(network).catch(() => []);
+      if (available.length > 1) {
+        extraChoices = available; pendingExtraNetwork = network; error = "";
+        return;
+      }
+    }
     if (wallet?.family === "evm") {
       if (wallet.chainId !== chainIdForNetwork(network)) await connect(family, network);
       return;
@@ -189,6 +199,7 @@
     busy = family;
     error = "";
     evmChoices = [];
+    extraChoices = [];
     // Selector UIs mount outside our dialog. Let them receive focus and input
     // while keeping the underlying application locked until they return.
     providerHandoff = family === "near" || family === "ton" || (family === "evm" && usesAppKitEvm());
@@ -276,6 +287,18 @@
                       </button>
                     {/each}
                     <button type="button" class="evmCancel" disabled={working} on:click={() => { evmChoices = []; pendingEvmNetwork = ""; }}>{copy("Back")}</button>
+                  </div>
+                {/if}
+                {#if pendingExtraNetwork === choice.network && extraChoices.length}
+                  <div class="evmWallets" role="group" aria-label={copy("Choose a compatible wallet")}>
+                    <p class="evmWalletsHint">{copy("Choose a compatible wallet")}</p>
+                    {#each extraChoices as walletChoice (walletChoice.id)}
+                      <button type="button" class="evmWallet" disabled={working} on:click={() => connect(choice.family, choice.network, walletChoice.id)}>
+                        <span class="evmWalletBadge" aria-hidden="true">{walletChoice.name.slice(0, 1).toUpperCase()}</span>
+                        <span>{walletChoice.name}</span>
+                      </button>
+                    {/each}
+                    <button type="button" class="evmCancel" disabled={working} on:click={() => { extraChoices = []; pendingExtraNetwork = ""; }}>{copy("Back")}</button>
                   </div>
                 {/if}
                 {#if otcChain && !canVerify}<p class="verificationStatus">{copy("OTC verification is unavailable for this network.")}</p>{/if}

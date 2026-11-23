@@ -13,6 +13,7 @@ import {
   executeExtraDeposit,
   executeSolanaTransfer,
   executeTonTransfer,
+  extraWalletChoices,
   hasExtraExecutionFunds,
   isExtraNetwork,
   observeExtraWallet,
@@ -403,6 +404,10 @@ export async function evmWalletChoices(): Promise<EvmWalletChoice[]> {
   });
 }
 
+export async function extraExecutionWalletChoices(network: string) {
+  return extraWalletChoices(network);
+}
+
 async function connectInjectedEvm(config: unknown, chainId: number, connectorId?: string): Promise<EvmConnection> {
   const { connect, getAccount } = await import("@wagmi/core");
   const account = getAccount(config as Parameters<typeof getAccount>[0]);
@@ -462,11 +467,16 @@ export async function connectEvm(network: string, connectorId?: string): Promise
 async function nearSelector() {
   if (!nearApp) {
     nearApp = (async () => {
-      const [{ setupWalletSelector }, { setupMyNearWallet }] = await Promise.all([
+      const [{ setupWalletSelector }, { setupMyNearWallet }, { setupHereWallet }, { setupMeteorWallet }] = await Promise.all([
         import("@near-wallet-selector/core"),
         import("@near-wallet-selector/my-near-wallet"),
+        import("@near-wallet-selector/here-wallet"),
+        import("@near-wallet-selector/meteor-wallet"),
       ]);
-      return setupWalletSelector({ network: "mainnet", modules: [setupMyNearWallet()] });
+      return setupWalletSelector({
+        network: "mainnet",
+        modules: [setupMyNearWallet(), setupHereWallet(), setupMeteorWallet()],
+      });
     })();
   }
   return nearApp;
@@ -512,7 +522,7 @@ export async function connectForNetwork(network: string, connectorId?: string): 
   if (family === "near") return connectNear();
   if (family === "everscale") return connectEverscale();
   if (family === "evm") return connectEvm(network, connectorId);
-  if (isExtraNetwork(network)) return connectExtraWallet(network);
+  if (isExtraNetwork(network)) return connectExtraWallet(network, connectorId);
   throw new Error(`Wallet execution is not available for ${network}`);
 }
 
