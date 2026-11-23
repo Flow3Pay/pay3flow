@@ -37,6 +37,15 @@ const WALLET_SECRET_FOR_ROLE: &str = "SELECT chain,address,derivation_index,salt
 /// failure moves it to an explicit terminal state instead of freezing in a live
 /// one that still looks actionable.
 const NOTE_ERROR: &str = "UPDATE otc_temp_settlements SET attempts=attempts+1,last_error=$2,state=CASE WHEN attempts+1>=10 THEN 'stalled' ELSE state END,updated_at=now() WHERE trade_id=$1";
+/// Gas funding claims one signer per deal wallet role. A stale claim is
+/// retried after the same two-minute window used by payouts, so a crashed
+/// worker cannot wedge a deal forever.
+const CLAIM_GAS: &str = "INSERT INTO otc_temp_gas(trade_id,role,address,state) VALUES($1,$2,$3,'claim') ON CONFLICT(trade_id,role) DO UPDATE SET state='claim',address=EXCLUDED.address,updated_at=now() WHERE otc_temp_gas.state IN ('pending','failed') OR (otc_temp_gas.state='claim' AND otc_temp_gas.updated_at<now()-interval '2 minutes')";
+/// The signed envelope is written before broadcast; a retry after an
+/// ambiguous RPC response replays exactly these bytes.
+const SET_GAS_SIGNED: &str = "UPDATE otc_temp_gas SET state='submitted',reference=$3,signed_transaction=$4,last_error=NULL,updated_at=now() WHERE trade_id=$1 AND role=$2 AND state='claim'";
+const NOTE_GAS_ERROR: &str = "UPDATE otc_temp_gas SET attempts=attempts+1,state=CASE WHEN attempts+1>=10 THEN 'failed' ELSE 'pending' END,last_error=$3,updated_at=now() WHERE trade_id=$1 AND role=$2";
+const GAS_FUNDING: &str = "SELECT state,reference FROM otc_temp_gas WHERE trade_id=$1 AND role=$2";
 /// EVER payouts start only after the USD net is delivered and the payer's
 /// verified deposit landed on the deal's `ever` temp wallet.
 const DUE_EVER: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.ever_state,s.ever_reference,s.ever_attempts,s.ever_signed_message FROM otc_temp_settlements s JOIN otc_p2p_trades t ON t.id=s.trade_id JOIN otc_temp_wallets w ON w.trade_id=s.trade_id AND w.role='ever' WHERE t.state='delivery_pending' AND s.state IN ('settled','fee_retained') AND w.status='active' AND (s.ever_state IS NULL OR s.ever_state='pending' OR (s.ever_state IN ('claim','submitted') AND s.updated_at<now()-interval '2 minutes')) AND s.ever_attempts<60 AND EXISTS(SELECT 1 FROM otc_p2p_attempts a WHERE a.trade_id=s.trade_id AND a.kind='payout' AND a.state='verified' AND a.instructions->'leg'->>'recipient'=w.address) ORDER BY s.updated_at LIMIT 20";
@@ -388,6 +397,56 @@ pub(crate) async fn note_error(
     Ok(())
 }
 
+/// Atomically takes the right to sign one treasury-to-temp gas transfer for
+/// a deal wallet role.
+pub(crate) async fn claim_gas(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    role: &str,
+    address: &str,
+) -> Result<bool> {
+    Ok(client
+        .execute(CLAIM_GAS, &[trade_id, &role, &address])
+        .await?
+        == 1)
+}
+
+pub(crate) async fn gas_funding(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    role: &str,
+) -> Result<Option<(String, Option<String>)>> {
+    Ok(client
+        .query_opt(GAS_FUNDING, &[trade_id, &role])
+        .await?
+        .map(|row| (row.get(0), row.get(1))))
+}
+
+pub(crate) async fn set_gas_signed(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    role: &str,
+    reference: &str,
+    signed: &[u8],
+) -> Result<()> {
+    client
+        .execute(SET_GAS_SIGNED, &[trade_id, &role, &reference, &signed])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn note_gas_error(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    role: &str,
+    error: &str,
+) -> Result<()> {
+    client
+        .execute(NOTE_GAS_ERROR, &[trade_id, &role, &error])
+        .await?;
+    Ok(())
+}
+
 pub(crate) async fn for_trade(
     client: &(impl GenericClient + Sync),
     trade_id: &Uuid,
@@ -576,8 +635,9 @@ pub(crate) async fn delete_role(
 #[cfg(test)]
 mod tests {
     use super::{
-        ATTACH_POOL_SLOT, CLAIM_EVER, COLUMNS, DELETE_ROLE, DUE_EVER, LOCK_POOL_SLOT, NOTE_ERROR,
-        RETURN_TO_POOL, SET_EVER_SIGNED, SET_TREASURY_PAYMENT, TREASURY,
+        ATTACH_POOL_SLOT, CLAIM_EVER, CLAIM_GAS, COLUMNS, DELETE_ROLE, DUE_EVER, GAS_FUNDING,
+        LOCK_POOL_SLOT, NOTE_ERROR, NOTE_GAS_ERROR, RETURN_TO_POOL, SET_EVER_SIGNED,
+        SET_GAS_SIGNED, SET_TREASURY_PAYMENT, TREASURY,
     };
 
     #[test]
@@ -610,6 +670,16 @@ mod tests {
         assert!(ATTACH_POOL_SLOT.contains("trade_id=$2"));
         assert!(ATTACH_POOL_SLOT.contains("trade_id IS NULL"));
         assert!(RETURN_TO_POOL.contains("trade_id=NULL,status='active'"));
+    }
+
+    #[test]
+    fn gas_funding_persists_the_envelope_and_replays_it() {
+        assert!(CLAIM_GAS.contains("ON CONFLICT(trade_id,role)"));
+        assert!(CLAIM_GAS.contains("state IN ('pending','failed')"));
+        assert!(SET_GAS_SIGNED.contains("signed_transaction=$4"));
+        assert!(SET_GAS_SIGNED.contains("state='claim'"));
+        assert!(NOTE_GAS_ERROR.contains("attempts+1>=10"));
+        assert!(GAS_FUNDING.contains("FROM otc_temp_gas"));
     }
 
     #[test]

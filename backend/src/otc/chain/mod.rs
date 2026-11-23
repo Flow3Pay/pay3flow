@@ -293,6 +293,43 @@ impl Service {
         Ok(raw)
     }
 
+    /// Builds and signs a native-coin transfer from the treasury to a
+    /// temporary wallet without broadcasting it. Gas funding persists these
+    /// bytes and their hash before sending so an ambiguous response can be
+    /// retried with the same transaction.
+    pub(crate) async fn evm_sign_temp_native_transfer(
+        &self,
+        material: &WalletMaterial,
+        net: &EvmNet,
+        to: &str,
+        value: u128,
+    ) -> Result<Vec<u8>> {
+        if value == 0 {
+            return Err(invalid("EVM native transfer amount must be positive"));
+        }
+        self.evm_chain_matches(net).await?;
+        let from = material.address()?;
+        let to = wallet::address("ethereum", to)?;
+        let gas = self.evm_estimate_gas(net, &from, &to, &[], value).await?;
+        let gas_limit = gas.saturating_add(gas / 4);
+        let priority = self.evm_max_priority_fee(net).await?;
+        let max_fee = fee_cap(self.evm_base_fee(net).await?, priority)?;
+        let nonce = self.evm_pending_nonce(net, &from).await?;
+        let transfer = EvmTransfer {
+            chain_id: net.chain_id,
+            nonce: u64::try_from(nonce)
+                .map_err(|_| invalid("Ethereum nonce exceeds the signing range"))?,
+            gas_limit: u64::try_from(gas_limit)
+                .map_err(|_| invalid("Ethereum gas estimate exceeds the signing range"))?,
+            max_fee_per_gas: max_fee,
+            max_priority_fee_per_gas: priority,
+            to: address_bytes(&to)?,
+            value,
+            calldata: Vec::new(),
+        };
+        material.sign_evm_transfer(&transfer)
+    }
+
     /// Publishes one already-signed external message to the Everscale network.
     /// Sending stays separate from signing so a caller persists the message
     /// hash before retrying an ambiguous broadcast.

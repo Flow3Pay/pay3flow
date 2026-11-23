@@ -285,8 +285,8 @@ import { otcNetworkAllowed } from "$lib/otc/p2p";
           .map(([network, readiness]) => `${networkLabels[network] || network}: ${readiness.reason || "route readiness check failed"}`);
         custodyNotice = result.custody?.enabled && unavailable.length
           ? say(
-            `OTC custody is paused: ${unavailable.join("; ")}.`,
-            `Кастодиальный OTC приостановлен: ${unavailable.join("; ")}.`,
+            `OTC custody unavailable on ${unavailable.join("; ")}.`,
+            `Кастодиальный OTC недоступен: ${unavailable.join("; ")}.`,
           )
           : "";
       })

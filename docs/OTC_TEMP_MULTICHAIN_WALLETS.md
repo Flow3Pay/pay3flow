@@ -28,11 +28,13 @@ from the stablecoin side only; sub-$1 balances stay on the reusable slot.
 
 The `ever` temp deposit and forward worker exist, with the network reserve
 included in the incoming amount and no 3% EVER fee. The API reports treasury
-native balances and reasons a custody route is paused. New EVM custody deals
-remain paused until treasury-to-deal-wallet gas funding has a persisted,
-recoverable transaction path. Native coin auto-top-up from collected fees,
-alerting, and settlement workers for NEAR, TON, Solana and Aptos are not
-implemented.
+native balances and reasons a custody route is paused. Deal wallets that lack
+the configured native reserve are funded from the permanent treasury by a
+signed transfer persisted in `otc_temp_gas` before broadcast; a retry after an
+ambiguous RPC response replays the same envelope. Accept requires the treasury
+to hold two reserves so it can fund the deal wallet and still pay its own
+transaction. Treasury top-up from collected fees, alerting, and settlement
+workers for NEAR, TON, Solana and Aptos are not implemented.
 Everscale payout now persists the exact signed external message before
 broadcast and retries that message after an ambiguous send. Recovery still
 requires operator review if the message expires without inclusion. Do not
@@ -557,10 +559,12 @@ recipient on that network must be configured, and the flag must be on.
   Everscale GraphQL `sendMessage` mutation. State lives in
   `otc_temp_settlements.ever_state/ever_reference/ever_error/ever_attempts`;
   the trade stays `delivery_pending` until the forward is included.
-- Not implemented: non-EVM stablecoin sources and automated native-gas top-up
-  from treasury (the worker waits for native gas and records the need),
-  quote/status expiry for a permanently pending Intents swap (the ten-attempt
-  cap now ends in terminal `stalled`), and stale-claim operator tooling.
+- Treasury-to-deal-wallet gas funding is implemented with a persisted signed
+  envelope (`otc_temp_gas`); a retry replays the same transaction. Not
+  implemented: automatic top-up of the treasury itself from collected fees,
+  alerting, quote/status expiry for a permanently pending Intents swap (the
+  ten-attempt cap now ends in terminal `stalled`), and stale-claim operator
+  tooling.
 - Settlement for Solana, NEAR, TON and Aptos has SDK-built signed
   transactions but still no nonce/seqno reader or broadcaster, so those sources
   keep the legacy direct/routed flow.

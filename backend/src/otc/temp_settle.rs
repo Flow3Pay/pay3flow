@@ -37,7 +37,8 @@ impl Service {
             }
         };
         let mut status = serde_json::Map::new();
-        let threshold = amount::units(&self.cfg.temp_gas_reserve, 18).unwrap_or(u128::MAX);
+        let reserve = amount::units(&self.cfg.temp_gas_reserve, 18).unwrap_or(u128::MAX);
+        let threshold = reserve.saturating_mul(2);
         for chain in networks {
             let Some(rpcs) = self.cfg.p2p_evm_rpcs(chain).filter(|rpcs| rpcs.len() >= 2) else {
                 status.insert(
@@ -80,15 +81,15 @@ impl Service {
                     status.insert(
                         chain.to_string(),
                         json!({
-                            "ready": false,
+                            "ready": balance >= threshold,
                             "treasury_gas_ready": balance >= threshold,
                             "treasury_address": treasury.address,
                             "native_balance_wei": balance.to_string(),
                             "required_native_balance_wei": threshold.to_string(),
                             "reason": if balance < threshold {
-                                json!("treasury native gas reserve is below the configured minimum")
+                                json!("treasury native gas reserve must cover deal-wallet funding plus the treasury payout")
                             } else {
-                                json!("automatic treasury-to-deal-wallet gas funding is not implemented; custodial route is paused")
+                                Value::Null
                             },
                         }),
                     );
@@ -105,7 +106,7 @@ impl Service {
             "enabled": self.cfg.temp_wallets,
             "minimum_native_reserve": self.cfg.temp_gas_reserve,
             "networks": status,
-            "note": "Readiness checks the permanent treasury's native balance against OTC_TEMP_GAS_RESERVE. It does not report token inventory or guarantee a route quote.",
+            "note": "Readiness checks the permanent treasury's native balance against twice OTC_TEMP_GAS_RESERVE: one reserve funds the deal wallet, the other pays the treasury's own transaction. It does not report token inventory or guarantee a route quote.",
         })
     }
 
@@ -173,6 +174,83 @@ impl Service {
         WalletMaterial::from_seed(chain, &seed[..], index)
     }
 
+    /// Makes sure a deal wallet can pay its own transaction. Gas comes from
+    /// the permanent treasury through a signed envelope that is persisted
+    /// before broadcast, so an ambiguous RPC response replays the same
+    /// transfer instead of signing a second one. Returns `true` once the
+    /// wallet holds the configured reserve.
+    async fn ensure_temp_gas(
+        &self,
+        client: &deadpool_postgres::Client,
+        trade_id: &uuid::Uuid,
+        role: &str,
+        chain: &str,
+        net: &super::chain::EvmNet,
+        address: &str,
+    ) -> Result<bool> {
+        let latest = json!("latest");
+        let required = amount::units(&self.cfg.temp_gas_reserve, 18)?;
+        let balance = super::chain::number(
+            &self
+                .evm_agree(net, "eth_getBalance", json!([address, latest]))
+                .await?,
+        )?;
+        if balance >= required {
+            return Ok(true);
+        }
+        match repo::temp_wallets::gas_funding(client, trade_id, role).await? {
+            Some((state, reference)) if state == "submitted" => {
+                let reference =
+                    reference.ok_or_else(|| invalid("gas funding reference is missing"))?;
+                let receipt = self
+                    .evm_agree(net, "eth_getTransactionReceipt", json!([reference]))
+                    .await?;
+                if receipt.is_null() {
+                    return Ok(false);
+                }
+                if super::chain::number(&receipt["status"])? != 1 {
+                    repo::temp_wallets::note_gas_error(
+                        client,
+                        trade_id,
+                        role,
+                        "gas funding transaction reverted",
+                    )
+                    .await?;
+                    return Ok(false);
+                }
+                let balance = super::chain::number(
+                    &self
+                        .evm_agree(net, "eth_getBalance", json!([address, latest]))
+                        .await?,
+                )?;
+                return Ok(balance >= required);
+            }
+            Some((state, _)) if state == "claim" || state == "failed" => return Ok(false),
+            _ => {}
+        }
+        let treasury = self.ensure_treasury(client, chain).await?;
+        if !repo::temp_wallets::claim_gas(client, trade_id, role, address).await? {
+            return Ok(false);
+        }
+        let funded = async {
+            let material = self.treasury_material(&treasury)?;
+            let signed = self
+                .evm_sign_temp_native_transfer(&material, net, address, required)
+                .await?;
+            let reference = super::chain::evm_transaction_hash(&signed);
+            repo::temp_wallets::set_gas_signed(client, trade_id, role, &reference, &signed).await?;
+            self.evm_send_raw(net, &signed).await?;
+            tracing::info!(trade=%trade_id, treasury=%treasury.address, to=%address, amount=required, reference, "otc.temp.gas_funded");
+            Ok::<(), super::error::Error>(())
+        }
+        .await;
+        if let Err(error) = funded {
+            repo::temp_wallets::note_gas_error(client, trade_id, role, &error.to_string()).await?;
+            return Err(error);
+        }
+        Ok(false)
+    }
+
     async fn settle_temp(&self, row: &repo::temp_wallets::SettlementRow) -> Result<()> {
         let net = self.temp_net(&row.chain, &row.body)?;
         let gross = amount::integer(
@@ -199,17 +277,22 @@ impl Service {
                         .await?;
                     return Ok(());
                 }
-                let gas = super::chain::number(
-                    &self
-                        .evm_agree(&net, "eth_getBalance", json!([row.address, latest]))
-                        .await?,
-                )?;
-                if gas < amount::units(&self.cfg.temp_gas_reserve, 18)? {
+                if !self
+                    .ensure_temp_gas(
+                        &client,
+                        &row.trade_id,
+                        &row.role,
+                        &row.chain,
+                        &net,
+                        &row.address,
+                    )
+                    .await?
+                {
                     repo::temp_wallets::set_state(
                         &client,
                         &row.trade_id,
                         "awaiting_payment",
-                        Some("temporary wallet needs native gas before payout"),
+                        Some("temporary wallet gas funding is in progress"),
                     )
                     .await?;
                     return Ok(());
@@ -542,17 +625,25 @@ impl Service {
             .await?;
             return Ok(());
         }
-        let gas = super::chain::number(
-            &self
-                .evm_agree(&net, "eth_getBalance", json!([output_wallet, "latest"]))
-                .await?,
-        )?;
-        if gas < amount::units(&self.cfg.temp_gas_reserve, 18)? {
+        let output_chain = row.body["stablecoin_network"]
+            .as_str()
+            .ok_or_else(|| invalid("deal output network is missing"))?;
+        if !self
+            .ensure_temp_gas(
+                client,
+                &row.trade_id,
+                "usd_out",
+                output_chain,
+                &net,
+                output_wallet,
+            )
+            .await?
+        {
             repo::temp_wallets::set_state(
                 client,
                 &row.trade_id,
                 "intents_submitted",
-                Some("USD output temporary wallet needs native gas before payout"),
+                Some("USD output temporary wallet gas funding is in progress"),
             )
             .await?;
             return Ok(());
@@ -665,12 +756,39 @@ impl Service {
             .ok_or_else(|| invalid("the treasury wallet could not be provisioned"))
     }
 
-    /// Blocks new custody deals until the treasury-to-temp gas transfer has a
-    /// persisted and recoverable signer path.
+    /// Accept-time guard: the treasury must hold enough native gas to fund a
+    /// deal wallet and still pay its own transactions. This keeps a new deal
+    /// from parking in `awaiting_payment` for lack of gas.
     pub(crate) async fn temp_treasury_gas_preflight(&self, chain: &str) -> Result<()> {
-        Err(super::error::Error::Conflict(format!(
-            "custodial OTC on {chain} is paused until automatic treasury-to-deal-wallet gas funding is enabled"
-        )))
+        let chain_id = super::config::evm_chain_id(chain)
+            .ok_or_else(|| invalid("temporary wallet network is not EVM"))?;
+        let rpcs = self
+            .cfg
+            .p2p_evm_rpcs(chain)
+            .filter(|endpoints| endpoints.len() >= 2)
+            .ok_or_else(|| invalid("two independent OTC EVM endpoints are required"))?;
+        let net = super::chain::EvmNet {
+            rpcs: rpcs.to_vec(),
+            chain_id,
+            usdt: self.cfg.p2p_usdt().to_string(),
+        };
+        let client = self.pool.get().await?;
+        let treasury = self.ensure_treasury(&client, chain).await?;
+        let balance = super::chain::number(
+            &self
+                .evm_agree(&net, "eth_getBalance", json!([treasury.address, "latest"]))
+                .await?,
+        )?;
+        let required = amount::units(&self.cfg.temp_gas_reserve, 18)?.saturating_mul(2);
+        if balance < required {
+            return Err(super::error::Error::Conflict(format!(
+                "the {chain} treasury {} holds {} native but needs {} for deal-wallet gas plus its own payout; fund it before accepting",
+                treasury.address,
+                amount::decimal(balance, 18),
+                amount::decimal(required, 18)
+            )));
+        }
+        Ok(())
     }
 
     /// Accept-time guard: a same-network deal the treasury cannot front fails
@@ -712,9 +830,10 @@ impl Service {
                 .evm_agree(&net, "eth_getBalance", json!([treasury.address, latest]))
                 .await?,
         )?;
-        if gas < amount::units(&self.cfg.temp_gas_reserve, 18)? {
+        let required = amount::units(&self.cfg.temp_gas_reserve, 18)?.saturating_mul(2);
+        if gas < required {
             return Err(super::error::Error::Conflict(format!(
-                "the {chain} treasury {} needs native gas before accepting same-network deals",
+                "the {chain} treasury {} needs native gas for the deal wallet and its own payout before accepting same-network deals",
                 treasury.address
             )));
         }

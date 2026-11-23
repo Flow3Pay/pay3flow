@@ -38,3 +38,21 @@ ALTER TABLE otc_temp_settlements ADD CONSTRAINT otc_temp_settlements_state_check
 -- Earlier builds had a narrower state check; widen it in place.
 CREATE INDEX IF NOT EXISTS otc_temp_settlements_due
  ON otc_temp_settlements(state, updated_at);
+
+-- Treasury-to-deal-wallet native gas funding, one row per deal wallet role.
+-- The signed envelope is stored before broadcast so an ambiguous RPC response
+-- can replay the same transfer instead of signing a second one.
+CREATE TABLE IF NOT EXISTS otc_temp_gas (
+ trade_id UUID NOT NULL REFERENCES otc_p2p_trades(id) ON DELETE CASCADE,
+ role TEXT NOT NULL,
+ address TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'pending'
+   CHECK(state IN ('pending','claim','submitted','failed')),
+ reference TEXT,
+ signed_transaction BYTEA,
+ attempts INTEGER NOT NULL DEFAULT 0,
+ last_error TEXT,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ PRIMARY KEY(trade_id, role)
+);
+CREATE INDEX IF NOT EXISTS otc_temp_gas_due ON otc_temp_gas(state, updated_at);
