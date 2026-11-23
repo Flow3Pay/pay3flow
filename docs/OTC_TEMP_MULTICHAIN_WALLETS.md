@@ -14,20 +14,25 @@ Related baselines:
 - [NEAR Intents routes](near-intents-routes.md)
 - [Temporary wallet incident runbook](otc-temp-wallet-runbook.md)
 
-Status: **partially implemented**. Phases A–E are implemented for EVM stablecoin
-sources behind the off-by-default `OTC_TEMP_WALLETS` flag. Accept creates the
-planned 2–3 rows (`ever` + `usd`, or `ever` + `usd_in` + `usd_out`). A
-same-network payout is a direct ERC-20 transfer from the USD input wallet, or
-from the platform `reserve` when `OTC_TEMP_RESERVE_PAYOUT=1` (preflighted at
-Accept); a cross-network payout is an exact-output NEAR Intents quote signed
-from that wallet. Phase B key material and signed transaction builders exist for
-every chain family through the maintained SDKs, but only the EVM source can be
-broadcast today. The USD input row and the deal's `ever` row are funded: the
-EVER payer deposits on `temp_ever`, and once the USD net is delivered a worker
-signs an EverWallet ABI 2.0 external message and forwards the booked EVER
-amount to `ever_payee` before the deal completes. `usd_out` remains a reserved
-address retired at settlement. Non-EVM stablecoin sources are not created yet;
-their SDK signers exist but no worker broadcasts them.
+Status: **partially implemented; production custodial enablement is not ready**.
+The flag is off by default. Signed USD custody currently supports Ethereum,
+Polygon and Avalanche C only, when two RPC endpoints are configured. Accept
+creates two or three rows and serializes concurrent reuse of eligible USD
+deposit slots. Same-network USD is paid from the permanent per-chain treasury;
+the gross deposit remains on the temp wallet until the payout confirms and is
+then swept. Cross-network EVM settlement sends the exact-output Intents quote
+to a separate `usd_out` temp address, then pays the recipient after confirming
+the output balance. The signed EVM payout and sweep bytes are persisted before
+broadcast so recovery can resend the same transaction. The 3% fee is withheld
+from the stablecoin side only; sub-$1 balances stay on the reusable slot.
+
+The `ever` temp deposit and forward worker exist, with the network reserve
+included in the incoming amount and no 3% EVER fee. Native gas auto-top-up,
+treasury balance/readiness reporting, alerting, and signing / broadcast /
+recovery workers for NEAR, TON, Solana, TRON and Aptos are not implemented.
+Everscale payout recovery still needs a persisted signed-message handoff before
+broadcast. Do not enable production custody until those gaps and the
+operational checklist in §10 are closed. TRON remains unsupported for OTC.
 Operational recovery is in [the runbook](otc-temp-wallet-runbook.md). See §10 for
 the checklist and §10.1 for the shipped code paths and deviations.
 
@@ -231,10 +236,9 @@ Operator env (names illustrative):
 
 - `OTC_TEMP_WALLETS=1` feature flag (default off).
 - Per-chain gas RPC already via `p2p_evm_rpcs` / `p2p_chain_rpcs`.
-- Main treasury / reserve signing material: same salt+ciphertext table
-  (`role = treasury|reserve|fee`) **or** sealed env — implementer picks one and
-  documents it in ops runbook.
-- Same-chain path **requires** a funded reserve on `get_chain_usd`.
+- Permanent treasury signing material uses the same salt+ciphertext table
+  (`role = treasury`); legacy reserve rows are migrated in place.
+- Same-chain payouts require a funded treasury on `get_chain_usd`.
 
 ---
 
@@ -258,11 +262,10 @@ if send_chain_usd == get_chain_usd:
 temps -> mains (as above)
 
 if temp_usd balance < $1:
-  new = create_based_on(old_usd_temp)
-  delete(old_usd_temp)   // status=deleted; may leave dust
+  return old_usd_temp to sequential pool, retaining its dust
 else:
-  sendcommission()       // to main p3f / fee recipient
-  delete(usd temp)
+  sweep full balance to permanent treasury
+  retain old row as recycled; create a child slot
 
 delete(ever temp)
 ```
@@ -270,9 +273,9 @@ delete(ever temp)
 ### 6.1 Cross-network USD (`send_chain_usd != get_chain_usd`) — 3 wallets
 
 > Accept persists the full planned set (`ever`, `usd_in`, `usd_out`).
-> `usd_in` and `ever` are funded: Intents pays the payee's main USD wallet, and
-> the EVER worker forwards `temp_ever` to `ever_payee` after the USD net is
-> delivered. `usd_out` stays a reserved address retired at settlement.
+> `usd_in`, `usd_out`, and `ever` are funded: Intents pays the separate USD
+> output temp, the worker forwards it to the payee, and the EVER worker
+> forwards `temp_ever` after the USD net is delivered.
 
 Step-by-step:
 
@@ -296,34 +299,35 @@ Step-by-step:
    of USD gross on `usd_in` (do not forward fee through Intents).
 8. Backend requests NEAR Intents **exact-output** quote:
    - source: `usd_in` address / asset on `send_chain_usd`;
-   - destination: EVER seller **main** USD wallet on `get_chain_usd`;
+   - destination: `usd_out` on `get_chain_usd`;
    - refund address: `usd_in` (our temp);
    - amount out: `net_units` (gross − 3%).
 9. Backend **decrypts**, signs, broadcasts deposit from `usd_in` to Intents
    `depositAddress` (+ memo if required).
 10. Poll Intents until SUCCESS with `amountOut ≥ net_units`, or FAILED/REFUNDED.
-11. In parallel or after USD principal path is safe: sign EVER transfer
+11. Verify `usd_out` received `net_units`, then sign its stablecoin transfer to
+    the EVER seller's main USD wallet. Persist the signed envelope before send.
+12. In parallel or after USD principal path is safe: sign EVER transfer
     `temp_ever` → USD seller main Ever wallet for the booked EVER amount.
-12. Record attempts in `otc_attempts` with `temp_wallet_id`, tx hashes, quote id.
-13. **Lifecycle** (§7).
+13. Record attempts in `otc_attempts` with `temp_wallet_id`, tx hashes, quote id.
+14. **Lifecycle** (§7).
 
 ### 6.2 Same-network USD (`send_chain_usd == get_chain_usd`) — 2 wallets
 
 > Accept persists `ever` + `usd`. The EVER payer deposits on `temp_ever`;
 > after the USD net is delivered the worker forwards the booked EVER amount to
-> `ever_payee` and completes the deal. With `OTC_TEMP_RESERVE_PAYOUT=1` the USD
-> net is paid from the `reserve` wallet row instead of the funded temp, and
-> Accept preflights that reserve.
+> `ever_payee` and completes the deal. The USD net is always paid from the
+> permanent per-chain treasury, and Accept preflights its balance and gas.
 
 1. Accept creates `ever` + `usd` on that single USD network.
 2. Users fund `temp_ever` and `temp_usd` as above.
 3. After both funded:
    - **Do not** require Intents for the USD leg.
-   - Pay EVER seller’s main USD wallet from **main p3f reserve** for `net_units`.
+   - Pay EVER seller’s main USD wallet from the **per-chain treasury** for `net_units`.
    - **Withhold** the USD seller’s deposit on `temp_usd` (including the 3%).
 4. Sign EVER: `temp_ever` → USD seller main Ever wallet.
 5. Later: sweep commission from `temp_usd` / recycle dust (§7).
-6. Reserve inventory accounting must debit the reserve and credit when
+6. Treasury inventory accounting must debit the treasury and credit when
    withheld funds are swept (ops metric + DB ledger row recommended).
 
 ### 6.3 Failure and refund
@@ -418,7 +422,8 @@ defined verification path before marking funded.
 ### Feature flag
 
 - `OTC_TEMP_WALLETS=0` (default): keep current non-custodial Intents/direct path.
-- `OTC_TEMP_WALLETS=1`: Accept creates temps and settlement uses this spec.
+- `OTC_TEMP_WALLETS=1`: enables only the EVM USD signer paths configured with
+  two RPC endpoints; it does not enable unimplemented chains or auto-top-up.
 - Demo and live DBs stay separate; do not flip live until §10 checklist is green.
 
 ---
@@ -467,12 +472,10 @@ defined verification path before marking funded.
 - [x] The existing EVM observer verifies the transfer into the temp address
 - [x] Cross-chain: exact-output Intents quote, signed deposit from the temp,
       status polling, fee withhold/recycle on success
-- [x] Same-chain reserve pay behind `OTC_TEMP_RESERVE_PAYOUT`: the net is paid
-      from one `reserve` wallet per chain, the payer's whole deposit stays
-      withheld, and the sweep in §7 sends that deposit to the fee recipient.
-      Accept preflights the reserve balance and native gas and returns a 409
-      before creating an address when the reserve cannot front the net. With
-      the flag off the net is paid from the funded temp as before
+- [x] Same-chain treasury pay: the net is paid from one permanent treasury
+      wallet per chain, the payer's whole deposit stays withheld, and the sweep
+      sends that deposit to the treasury. Accept preflights token balance and
+      native gas before creating an address.
 - [x] Attempts link `temp_wallet_id`: a custodial payment attempt stores the
       wallet row that received the deposit (`otc_p2p_attempts.temp_wallet_id`,
       nullable for legacy and non-custodial attempts; existing rows are
@@ -482,9 +485,11 @@ defined verification path before marking funded.
 
 ### Phase E — Lifecycle
 
-- [x] After a settled sweep, `create_based_on` creates the next address and the
-      old wallet is marked `recycled` (no $1 balance probe; the fee sweep sends
-      whatever is left, including a partial fee after cross-network route cost)
+- [x] Reuse one USD slot sequentially while its token balance is below $1;
+      Accept locks the slot with `FOR UPDATE SKIP LOCKED`, so simultaneous deals
+      cannot share a deposit address
+- [x] At $1 accumulated token balance, sweep the full remaining balance and
+      derive a child address; the swept address is retained as `recycled`
 - [x] The withheld 3% is sent to the configured fee recipient; without one it is
       marked `fee_retained` for ops
 - [x] `usd_out` is deleted when the USD leg terminates, and `ever` is deleted
@@ -519,26 +524,24 @@ The custody layer only creates temp wallets when an EVM signer can sweep them:
 the payer must be on Ethereum/Polygon/Avalanche, two RPC endpoints and a fee
 recipient on that network must be configured, and the flag must be on.
 
-- Accept creates the planned set for an EVM payer: `ever` + `usd` when both
-  stablecoin legs share a network, `ever` + `usd_in` + `usd_out` when they
-  differ (a payout network outside the custody set gets `ever` + `usd_in`).
-  Only the input row (`usd`/`usd_in`) is funded and settled today, so `ever`
-  and `usd_out` are reserved addresses retired at settlement. A same-network payout
-  pays the payee directly from the temp wallet, or from the platform `reserve`
-  when `OTC_TEMP_RESERVE_PAYOUT=1` (the payer's whole deposit is then swept to
-  the fee recipient and `otc_temp_settlements.reserve_units` records the fronted
-  net); a cross-network payout asks NEAR Intents for an exact-output quote and
-  the worker signs the source-token deposit from the temp wallet. The quote is only accepted when the delivered amount equals the deal
-  `net_units` and the required input does not exceed the gross deposit.
+- Accept creates two wallets for same-network deals and three for cross-network
+  deals on supported EVM chains. Cross-network `usd_in` deposits through NEAR
+  Intents to `usd_out`; the output temp then pays the deal recipient. Same-
+  network payouts are sent from the permanent treasury while the full payer
+  deposit remains on the USD temp. The quote must deliver exactly the deal's
+  `net_units`, and its required input cannot exceed the gross deposit.
 - `otc::temp_settle` claims the payout, checks the source token balance and
-  native gas, then either transfers directly or submits the Intents deposit.
+  native gas, then either pays from treasury or submits the Intents deposit.
   The settlement row stores `deposit_address`, `deposit_memo`, `quote_id`,
   `source_units` and `minimum_units`, so a restart resumes polling
-  (`intents_submitted`) instead of quoting again.
-- On Intents `SUCCESS` the worker records the 3% as collected, sweeps the
-  remaining token balance to the fee recipient, and recycles the address. If a
-  route cost consumed part of the fee, the shortfall is logged and only the
-  remaining balance is swept. `REFUNDED` stops the worker in `intents_refunded`
+  (`intents_submitted`) instead of quoting again. Cross-network output signing
+  persists the signed envelope and hash before broadcast; a restart re-broadcasts
+  the same envelope until a receipt is known.
+- On Intents `SUCCESS` the worker records the fee as collected. If the
+  remaining token balance is below $1, it detaches the address into the reusable
+  pool so later fees accumulate on the same slot. At $1 or more it sweeps the
+  full remaining balance to the configured recipient and creates a child slot.
+  `REFUNDED` stops the worker in `intents_refunded`
   (funds are back on the temp wallet for ops); `FAILED` stops it in `failed`.
 - The EVER leg is custodial: when Accept reserved an `ever` row, the payout
   handoff points the EVER payer at `temp_ever`, and a worker forwards the
@@ -549,19 +552,17 @@ recipient on that network must be configured, and the flag must be on.
   Everscale GraphQL `sendMessage` mutation. State lives in
   `otc_temp_settlements.ever_state/ever_reference/ever_error/ever_attempts`;
   the trade stays `delivery_pending` until the forward is included.
-- Not implemented: non-EVM stablecoin sources, a separate `usd_out` custody
-  wallet (Intents pays the payee directly and refunds to the source temp), gas
-  top-up from a reserve (the worker waits for native gas and records the need),
+- Not implemented: non-EVM stablecoin sources and automated native-gas top-up
+  from treasury (the worker waits for native gas and records the need),
   quote/status expiry for a permanently pending Intents swap (the ten-attempt
   cap now ends in terminal `stalled`), and stale-claim operator tooling.
 - Settlement for Solana, NEAR, TON, TRON and Aptos has SDK-built signed
   transactions but still no nonce/seqno reader or broadcaster, so those sources
   keep the legacy direct/routed flow.
-- The reserve is generated and sealed on first use. With
-  `OTC_TEMP_RESERVE_PAYOUT=1`, Accept preflights the reserve balance and native
-  gas for a same-network deal and returns a 409 before creating an address when
-  it cannot front the net. The three percent fee is recorded as collected once
-  the net is delivered, and the sweep reimburses the reserve.
+- A permanent treasury is generated and sealed for each configured EVM temp
+  network. Accept preflights its stablecoin balance and native gas for a
+  same-network deal and returns a 409 before creating an address when it cannot
+  front the net. Fees are swept back to treasury.
 - Phase G: demo/live enablement and end-to-end runs are not done; the incident
   runbook exists at [`otc-temp-wallet-runbook.md`](otc-temp-wallet-runbook.md).
 
