@@ -562,10 +562,13 @@ recipient on that network must be configured, and the flag must be on.
 - Treasury-to-deal-wallet gas funding is implemented with a persisted signed
   envelope (`otc_temp_gas`); a retry replays the same transaction. Metrics
   expose `pay3flow_otc_custody_gas_funding{state}` and
-  `pay3flow_otc_custody_stalled_settlements` for alerting. Not implemented:
-  automatic top-up of the treasury itself from collected fees, alert delivery
-  wiring, and a way to abandon a stuck claim by hand (stale claims release on
-  their own after two minutes). A funded Intents swap that remains `PENDING`
+  `pay3flow_otc_custody_stalled_settlements` for alerting. The alert tick also
+  raises a P1 incident per live deal that stalls (`custody:<trade>`) or whose
+  gas funding fails (`custody-gas:<trade>:<role>`), so the page goes out
+  through `alert_webhook` without a metrics scrape. Not implemented: automatic
+  top-up of the treasury itself from collected fees and a way to abandon a
+  stuck claim by hand (stale claims release on their own after two minutes).
+  A funded Intents swap that remains `PENDING`
   for two hours moves to `stalled` for manual reconciliation; the quote window
   itself is not yet consumed as an exact status deadline.
 - Settlement for Solana, NEAR, TON and Aptos has SDK-built signed

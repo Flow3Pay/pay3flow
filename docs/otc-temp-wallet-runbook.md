@@ -10,12 +10,19 @@ USD deposit and payout are custodial; for a cross-network deal, Intents pays
 the `usd_out` temp, which then pays the recipient. Same-chain payouts come
 from the per-chain treasury while the full deposit remains on the USD temp.
 The EVER payer deposits on `temp_ever`; the worker forwards the booked amount
-to `ever_payee` after USD settlement. Native gas auto-top-up is not
-implemented, and non-EVM stablecoin custody is not available.
+to `ever_payee` after USD settlement. Automatic top-up of the treasury itself
+is not implemented, and non-EVM stablecoin custody is not available.
+
+A settlement that stops moving pages the operator without any scrape. The
+worker's alert tick raises a P1 incident for each live `delivery_pending` deal
+whose settlement is `stalled` (key `custody:<trade-id>`) or whose gas funding
+gave up after ten attempts (key `custody-gas:<trade-id>:<role>`), and delivers
+it through the configured `alert_webhook` using the normal incident
+notification and escalation path. Resolved or completed trades stop paging.
 
 The desk-only `GET /api/otc/desk/metrics` endpoint requires its bearer session
-and exposes Prometheus text. Alert on any stalled settlement or failed gas
-funding row; these require operator triage:
+and exposes Prometheus text. Treat any stalled settlement or failed gas funding
+row there as a backstop for a missed page; these require operator triage:
 
 ```yaml
 groups:

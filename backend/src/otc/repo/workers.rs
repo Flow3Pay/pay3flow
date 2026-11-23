@@ -34,6 +34,11 @@ const STALE_UPDATES: &str = "SELECT trade_id,incident_key FROM otc_incidents WHE
 const FEE_MISMATCHES: &str = "SELECT t.id FROM otc_trades t LEFT JOIN otc_ledger l ON l.trade_id=t.id AND l.kind='fee_accrued' WHERE (t.state='completed' AND (l.id IS NULL OR l.amount!=(t.terms->'fee_policy'->>'fee_units')::numeric)) OR (t.state IN ('refunded','rejected','expired') AND l.id IS NOT NULL)";
 const EXPIRE_QUOTES: &str =
     "UPDATE otc_trades SET state='expired',updated_at=now() WHERE state='quoted' AND (terms->>'quote_by')::timestamptz<now()";
+/// Custody stalls and failed gas funding are terminal for the worker, so an
+/// operator must be paged; only live deals qualify, otherwise resolved trades
+/// would page forever.
+const STALLED_SETTLEMENTS: &str = "SELECT s.trade_id FROM otc_temp_settlements s JOIN otc_p2p_trades t ON t.id=s.trade_id WHERE s.state='stalled' AND t.state='delivery_pending' ORDER BY s.updated_at LIMIT 50";
+const FAILED_GAS_FUNDING: &str = "SELECT g.trade_id,g.role FROM otc_temp_gas g JOIN otc_p2p_trades t ON t.id=g.trade_id WHERE g.state='failed' AND t.state='delivery_pending' ORDER BY g.updated_at LIMIT 50";
 
 pub(crate) async fn open_trades(client: &(impl GenericClient + Sync)) -> Result<i64> {
     Ok(client.query_one(OPEN_TRADES, &[]).await?.get(0))
@@ -210,4 +215,34 @@ pub(crate) async fn fee_mismatches(client: &(impl GenericClient + Sync)) -> Resu
 pub(crate) async fn expire_quotes(client: &(impl GenericClient + Sync)) -> Result<()> {
     client.execute(EXPIRE_QUOTES, &[]).await?;
     Ok(())
+}
+
+pub(crate) async fn stalled_settlements(client: &(impl GenericClient + Sync)) -> Result<Vec<Uuid>> {
+    let rows = client.query(STALLED_SETTLEMENTS, &[]).await?;
+    Ok(rows.iter().map(|row| row.get(0)).collect())
+}
+
+/// Returns `(trade_id, wallet_role)` per deal whose gas funding gave up.
+pub(crate) async fn failed_gas_funding(
+    client: &(impl GenericClient + Sync),
+) -> Result<Vec<(Uuid, String)>> {
+    let rows = client.query(FAILED_GAS_FUNDING, &[]).await?;
+    Ok(rows.iter().map(|row| (row.get(0), row.get(1))).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FAILED_GAS_FUNDING, STALLED_SETTLEMENTS};
+
+    #[test]
+    fn custody_alerts_only_cover_live_deals() {
+        for query in [STALLED_SETTLEMENTS, FAILED_GAS_FUNDING] {
+            assert!(query.contains("t.state='delivery_pending'"));
+            assert!(query.contains("JOIN otc_p2p_trades t ON t.id="));
+            assert!(query.ends_with("LIMIT 50"));
+        }
+        assert!(STALLED_SETTLEMENTS.contains("s.state='stalled'"));
+        assert!(FAILED_GAS_FUNDING.contains("g.state='failed'"));
+        assert!(FAILED_GAS_FUNDING.contains("g.trade_id,g.role"));
+    }
 }

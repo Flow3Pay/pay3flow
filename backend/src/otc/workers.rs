@@ -261,6 +261,26 @@ impl Service {
             self.incident(&format!("fee:{id}"), "P2", Some(id), "fees", json!({}))
                 .await?;
         }
+        for id in repo::workers::stalled_settlements(&client).await? {
+            self.incident(
+                &format!("custody:{id}"),
+                "P1",
+                Some(id),
+                "payout",
+                json!({"settlement":"stalled","runbook":"docs/otc-temp-wallet-runbook.md"}),
+            )
+            .await?;
+        }
+        for (id, role) in repo::workers::failed_gas_funding(&client).await? {
+            self.incident(
+                &format!("custody-gas:{id}:{role}"),
+                "P1",
+                Some(id),
+                "payout",
+                json!({"gas_funding":"failed","role":role,"runbook":"docs/otc-temp-wallet-runbook.md"}),
+            )
+            .await?;
+        }
         repo::workers::expire_quotes(&client).await?;
         Ok(())
     }
