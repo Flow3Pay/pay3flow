@@ -759,6 +759,13 @@ impl Service {
                 .as_array()
                 .and_then(|rows| rows.first())
             else {
+                if let Some(signed) = row.ever_signed_message.as_deref() {
+                    let boc = std::str::from_utf8(signed)
+                        .map_err(|_| invalid("persisted EVER message is malformed"))?;
+                    // The exact signed message is durable before this call;
+                    // replaying it is safe if the first RPC response was lost.
+                    self.ever_send_boc(boc).await?;
+                }
                 repo::temp_wallets::note_ever_error(
                     &client,
                     &row.trade_id,
@@ -782,6 +789,9 @@ impl Service {
             repo::p2p::complete_trade(&client, &row.trade_id).await?;
             repo::temp_wallets::set_ever_state(&client, &row.trade_id, "paid", None, None).await?;
             tracing::info!(trade=%row.trade_id, reference, "otc.temp.ever_paid");
+            return Ok(());
+        }
+        if !repo::temp_wallets::claim_ever_payout(&client, &row.trade_id).await? {
             return Ok(());
         }
         let units = amount::integer(
@@ -819,15 +829,13 @@ impl Service {
             &row.salt,
             &row.key_ciphertext,
         )?;
-        let reference = self.ever_temp_transfer(&material, payee, units).await?;
-        repo::temp_wallets::set_ever_state(
-            &client,
-            &row.trade_id,
-            "submitted",
-            Some(&reference),
-            None,
-        )
-        .await?;
+        let (reference, boc) = self.ever_sign_temp_transfer(&material, payee, units)?;
+        if !repo::temp_wallets::set_ever_signed(&client, &row.trade_id, &reference, boc.as_bytes())
+            .await?
+        {
+            return Ok(());
+        }
+        self.ever_send_boc(&boc).await?;
         tracing::info!(trade=%row.trade_id, reference, attempts=%row.ever_attempts, "otc.temp.ever_submitted");
         Ok(())
     }

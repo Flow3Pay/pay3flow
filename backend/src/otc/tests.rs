@@ -360,7 +360,7 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
@@ -374,7 +374,8 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
             include_str!("../../migrations/otc_p2p_chat.sql"),
             include_str!("../../migrations/otc_temp_wallets.sql"),
             include_str!("../../migrations/otc_temp_treasury.sql"),
-            include_str!("../../migrations/otc_temp_settlements.sql")
+            include_str!("../../migrations/otc_temp_settlements.sql"),
+            include_str!("../../migrations/otc_temp_ever.sql")
         ))
         .await
         .unwrap();
@@ -1077,7 +1078,7 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
@@ -1091,7 +1092,8 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
             include_str!("../../migrations/otc_p2p_chat.sql"),
             include_str!("../../migrations/otc_temp_wallets.sql"),
             include_str!("../../migrations/otc_temp_treasury.sql"),
-            include_str!("../../migrations/otc_temp_settlements.sql")
+            include_str!("../../migrations/otc_temp_settlements.sql"),
+            include_str!("../../migrations/otc_temp_ever.sql")
         ))
         .await
         .unwrap();

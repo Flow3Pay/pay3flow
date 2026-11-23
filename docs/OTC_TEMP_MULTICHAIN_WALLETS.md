@@ -33,9 +33,11 @@ remain paused until treasury-to-deal-wallet gas funding has a persisted,
 recoverable transaction path. Native coin auto-top-up from collected fees,
 alerting, and settlement workers for NEAR, TON, Solana and Aptos are not
 implemented.
-Everscale payout recovery still needs a persisted signed-message handoff before
-broadcast. Do not enable production custody until those gaps and the
-operational checklist in §10 are closed. TRON remains unsupported for OTC.
+Everscale payout now persists the exact signed external message before
+broadcast and retries that message after an ambiguous send. Recovery still
+requires operator review if the message expires without inclusion. Do not
+enable production custody until the remaining gaps and operational checklist
+in §10 are closed. TRON remains unsupported for OTC.
 Operational recovery is in [the runbook](otc-temp-wallet-runbook.md). See §10 for
 the checklist and §10.1 for the shipped code paths and deviations.
 

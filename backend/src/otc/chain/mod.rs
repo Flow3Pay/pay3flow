@@ -320,15 +320,14 @@ impl Service {
         Ok(())
     }
 
-    /// Signs and broadcasts an EVER transfer from a temporary wallet. The
-    /// caller checks the balance and gas reserve first; this only builds the
-    /// transfer and records nothing.
-    pub(crate) async fn ever_temp_transfer(
+    /// Signs an EVER transfer without broadcasting. Callers persist the BOC
+    /// before handing it to `ever_send_boc` so uncertain sends can be replayed.
+    pub(crate) fn ever_sign_temp_transfer(
         &self,
         material: &WalletMaterial,
         to: &str,
         amount: u128,
-    ) -> Result<String> {
+    ) -> Result<(String, String)> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| invalid("system clock is before the Unix epoch"))?;
@@ -337,7 +336,18 @@ impl Service {
         let expire = u32::try_from(now.as_secs().saturating_add(600))
             .map_err(|_| invalid("EVER message expiry overflow"))?;
         let secret = material.ed25519_secret()?;
-        let (hash, boc) = super::everwallet::transfer(&secret, to, amount, now_ms, expire)?;
+        super::everwallet::transfer(&secret, to, amount, now_ms, expire)
+    }
+
+    /// Signs and broadcasts an EVER transfer from a temporary wallet. The
+    /// caller checks the balance and gas reserve first.
+    pub(crate) async fn ever_temp_transfer(
+        &self,
+        material: &WalletMaterial,
+        to: &str,
+        amount: u128,
+    ) -> Result<String> {
+        let (hash, boc) = self.ever_sign_temp_transfer(material, to, amount)?;
         self.ever_send_boc(&boc).await?;
         Ok(hash)
     }

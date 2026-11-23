@@ -39,7 +39,9 @@ const WALLET_SECRET_FOR_ROLE: &str = "SELECT chain,address,derivation_index,salt
 const NOTE_ERROR: &str = "UPDATE otc_temp_settlements SET attempts=attempts+1,last_error=$2,state=CASE WHEN attempts+1>=10 THEN 'stalled' ELSE state END,updated_at=now() WHERE trade_id=$1";
 /// EVER payouts start only after the USD net is delivered and the payer's
 /// verified deposit landed on the deal's `ever` temp wallet.
-const DUE_EVER: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.ever_state,s.ever_reference,s.ever_attempts FROM otc_temp_settlements s JOIN otc_p2p_trades t ON t.id=s.trade_id JOIN otc_temp_wallets w ON w.trade_id=s.trade_id AND w.role='ever' WHERE t.state='delivery_pending' AND s.state IN ('settled','fee_retained') AND w.status='active' AND (s.ever_state IS NULL OR s.ever_state IN ('pending','submitted')) AND s.ever_attempts<60 AND EXISTS(SELECT 1 FROM otc_p2p_attempts a WHERE a.trade_id=s.trade_id AND a.kind='payout' AND a.state='verified' AND a.instructions->'leg'->>'recipient'=w.address) ORDER BY s.updated_at LIMIT 20";
+const DUE_EVER: &str = "SELECT s.trade_id,s.wallet_id,w.chain,w.address,w.derivation_index,w.salt,w.key_ciphertext,t.body,s.ever_state,s.ever_reference,s.ever_attempts,s.ever_signed_message FROM otc_temp_settlements s JOIN otc_p2p_trades t ON t.id=s.trade_id JOIN otc_temp_wallets w ON w.trade_id=s.trade_id AND w.role='ever' WHERE t.state='delivery_pending' AND s.state IN ('settled','fee_retained') AND w.status='active' AND (s.ever_state IS NULL OR s.ever_state='pending' OR (s.ever_state IN ('claim','submitted') AND s.updated_at<now()-interval '2 minutes')) AND s.ever_attempts<60 AND EXISTS(SELECT 1 FROM otc_p2p_attempts a WHERE a.trade_id=s.trade_id AND a.kind='payout' AND a.state='verified' AND a.instructions->'leg'->>'recipient'=w.address) ORDER BY s.updated_at LIMIT 20";
+const CLAIM_EVER: &str = "UPDATE otc_temp_settlements SET ever_state='claim',ever_error=NULL,updated_at=now() WHERE trade_id=$1 AND (ever_state IS NULL OR ever_state='pending' OR (ever_state='claim' AND updated_at<now()-interval '2 minutes'))";
+const SET_EVER_SIGNED: &str = "UPDATE otc_temp_settlements SET ever_state='submitted',ever_reference=$2,ever_signed_message=$3,ever_error=NULL,updated_at=now() WHERE trade_id=$1 AND ever_state='claim'";
 const SET_EVER_STATE: &str = "UPDATE otc_temp_settlements SET ever_state=$2,ever_reference=COALESCE($3,ever_reference),ever_error=$4,updated_at=now() WHERE trade_id=$1";
 const NOTE_EVER_ERROR: &str = "UPDATE otc_temp_settlements SET ever_attempts=ever_attempts+1,ever_error=$2,ever_state=CASE WHEN ever_attempts+1>=60 THEN 'failed' WHEN ever_state='submitted' THEN 'submitted' ELSE 'pending' END,updated_at=now() WHERE trade_id=$1";
 
@@ -172,6 +174,7 @@ pub(crate) struct EverPayoutRow {
     pub ever_state: Option<String>,
     pub ever_reference: Option<String>,
     pub ever_attempts: i32,
+    pub ever_signed_message: Option<Vec<u8>>,
 }
 
 pub(crate) async fn insert_settlement(
@@ -510,8 +513,31 @@ pub(crate) async fn due_ever_payouts(
             ever_state: row.get(8),
             ever_reference: row.get(9),
             ever_attempts: row.get(10),
+            ever_signed_message: row.get(11),
         })
         .collect())
+}
+
+/// Claims one payout so competing workers cannot create distinct signed
+/// messages for the same temporary wallet.
+pub(crate) async fn claim_ever_payout(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+) -> Result<bool> {
+    Ok(client.execute(CLAIM_EVER, &[trade_id]).await? == 1)
+}
+
+/// Stores the exact signed message and its chain reference before broadcast.
+pub(crate) async fn set_ever_signed(
+    client: &(impl GenericClient + Sync),
+    trade_id: &Uuid,
+    reference: &str,
+    signed_message: &[u8],
+) -> Result<bool> {
+    Ok(client
+        .execute(SET_EVER_SIGNED, &[trade_id, &reference, &signed_message])
+        .await?
+        == 1)
 }
 
 pub(crate) async fn set_ever_state(
@@ -550,8 +576,8 @@ pub(crate) async fn delete_role(
 #[cfg(test)]
 mod tests {
     use super::{
-        ATTACH_POOL_SLOT, COLUMNS, DELETE_ROLE, DUE_EVER, LOCK_POOL_SLOT, NOTE_ERROR,
-        RETURN_TO_POOL, SET_TREASURY_PAYMENT, TREASURY,
+        ATTACH_POOL_SLOT, CLAIM_EVER, COLUMNS, DELETE_ROLE, DUE_EVER, LOCK_POOL_SLOT, NOTE_ERROR,
+        RETURN_TO_POOL, SET_EVER_SIGNED, SET_TREASURY_PAYMENT, TREASURY,
     };
 
     #[test]
@@ -571,6 +597,9 @@ mod tests {
         assert!(DELETE_ROLE.contains("status='deleted'"));
         assert!(DUE_EVER.contains("w.role='ever'"));
         assert!(DUE_EVER.contains("a.instructions->'leg'->>'recipient'=w.address"));
+        assert!(CLAIM_EVER.contains("ever_state='claim'"));
+        assert!(SET_EVER_SIGNED.contains("ever_signed_message=$3"));
+        assert!(SET_EVER_SIGNED.contains("WHERE trade_id=$1 AND ever_state='claim'"));
     }
 
     #[test]
