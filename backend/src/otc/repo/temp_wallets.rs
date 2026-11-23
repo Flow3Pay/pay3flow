@@ -715,3 +715,172 @@ mod tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Treasury gas top-up (automatic USDT->native swap when treasury runs low)
+// ---------------------------------------------------------------------------
+
+const INSERT_GAS_TOPUP: &str =
+    "INSERT INTO otc_temp_gas_topups(id,chain,treasury_address) VALUES($1,$2,$3)";
+const ACTIVE_GAS_TOPUP: &str =
+    "SELECT id,state,reference,deposit_address,deposit_memo,quote_id,source_units,target_units,intents_started_at,attempts \
+     FROM otc_temp_gas_topups \
+     WHERE chain=$1 AND state NOT IN ('completed','failed') \
+     ORDER BY created_at DESC LIMIT 1";
+const SET_GAS_TOPUP_SUBMITTED: &str =
+    "UPDATE otc_temp_gas_topups SET state='submitted',reference=$2,signed_transaction=$3,last_error=NULL,updated_at=now() \
+     WHERE id=$1 AND state='claim'";
+const SET_GAS_TOPUP_INTENTS: &str = "UPDATE otc_temp_gas_topups \
+     SET state='intents_submitted',deposit_address=$2,deposit_memo=$3,quote_id=$4,\
+         source_units=$5,target_units=$6,intents_started_at=now(),last_error=NULL,updated_at=now() \
+     WHERE id=$1 AND state IN ('claim','submitted')";
+const SET_GAS_TOPUP_COMPLETED: &str =
+    "UPDATE otc_temp_gas_topups SET state='completed',last_error=NULL,updated_at=now() WHERE id=$1";
+const NOTE_GAS_TOPUP_ERROR: &str = "UPDATE otc_temp_gas_topups \
+     SET attempts=attempts+1,last_error=$2,\
+         state=CASE WHEN attempts+1>=10 THEN 'failed' ELSE state END,updated_at=now() \
+     WHERE id=$1";
+const STALL_EXPIRED_GAS_TOPUP: &str =
+    "UPDATE otc_temp_gas_topups \
+     SET state='failed',last_error='NEAR Intents status remained pending for over 2 hours',updated_at=now() \
+     WHERE id=$1 AND state='intents_submitted' AND intents_started_at < now()-interval '2 hours'";
+const GET_TOPUP_SIGNED: &str = "SELECT signed_transaction FROM otc_temp_gas_topups WHERE id=$1";
+
+#[derive(Clone, Debug)]
+pub(crate) struct GasTopupRow {
+    pub id: Uuid,
+    pub state: String,
+    pub reference: Option<String>,
+    pub deposit_address: Option<String>,
+    pub deposit_memo: Option<String>,
+    pub quote_id: Option<String>,
+    pub source_units: Option<String>,
+    pub target_units: Option<String>,
+    pub intents_started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub attempts: i32,
+}
+
+pub(crate) async fn insert_gas_topup(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+    chain: &str,
+    treasury_address: &str,
+) -> Result<()> {
+    client
+        .execute(INSERT_GAS_TOPUP, &[id, &chain, &treasury_address])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn active_gas_topup(
+    client: &(impl GenericClient + Sync),
+    chain: &str,
+) -> Result<Option<GasTopupRow>> {
+    Ok(client
+        .query_opt(ACTIVE_GAS_TOPUP, &[&chain])
+        .await?
+        .map(|row| GasTopupRow {
+            id: row.get(0),
+            state: row.get(1),
+            reference: row.get(2),
+            deposit_address: row.get(3),
+            deposit_memo: row.get(4),
+            quote_id: row.get(5),
+            source_units: row.get(6),
+            target_units: row.get(7),
+            intents_started_at: row.get(8),
+            attempts: row.get(9),
+        }))
+}
+
+pub(crate) async fn set_gas_topup_submitted(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+    reference: &str,
+    signed: &[u8],
+) -> Result<()> {
+    client
+        .execute(SET_GAS_TOPUP_SUBMITTED, &[id, &reference, &signed])
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn set_gas_topup_intents(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+    deposit_address: &str,
+    deposit_memo: Option<&str>,
+    quote_id: &str,
+    source_units: &str,
+    target_units: &str,
+) -> Result<()> {
+    client
+        .execute(
+            SET_GAS_TOPUP_INTENTS,
+            &[
+                id,
+                &deposit_address,
+                &deposit_memo,
+                &quote_id,
+                &source_units,
+                &target_units,
+            ],
+        )
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn set_gas_topup_completed(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+) -> Result<()> {
+    client.execute(SET_GAS_TOPUP_COMPLETED, &[id]).await?;
+    Ok(())
+}
+
+pub(crate) async fn note_gas_topup_error(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+    error: &str,
+) -> Result<()> {
+    client.execute(NOTE_GAS_TOPUP_ERROR, &[id, &error]).await?;
+    Ok(())
+}
+
+pub(crate) async fn stall_expired_gas_topup(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+) -> Result<bool> {
+    Ok(client.execute(STALL_EXPIRED_GAS_TOPUP, &[id]).await? == 1)
+}
+
+/// Returns the persisted signed transaction bytes for a topup row, used to
+/// re-broadcast after an ambiguous RPC response.
+pub(crate) async fn gas_topup_signed(
+    client: &(impl GenericClient + Sync),
+    id: &Uuid,
+) -> Result<Option<Vec<u8>>> {
+    Ok(client
+        .query_opt(GET_TOPUP_SIGNED, &[id])
+        .await?
+        .and_then(|row| row.get(0)))
+}
+
+#[cfg(test)]
+mod topup_tests {
+    use super::{
+        ACTIVE_GAS_TOPUP, INSERT_GAS_TOPUP, NOTE_GAS_TOPUP_ERROR, SET_GAS_TOPUP_COMPLETED,
+        SET_GAS_TOPUP_INTENTS, SET_GAS_TOPUP_SUBMITTED, STALL_EXPIRED_GAS_TOPUP,
+    };
+
+    #[test]
+    fn gas_topup_state_machine_queries_are_consistent() {
+        assert!(INSERT_GAS_TOPUP.contains("otc_temp_gas_topups"));
+        assert!(ACTIVE_GAS_TOPUP.contains("state NOT IN ('completed','failed')"));
+        assert!(SET_GAS_TOPUP_SUBMITTED.contains("state='submitted'"));
+        assert!(SET_GAS_TOPUP_INTENTS.contains("intents_started_at=now()"));
+        assert!(SET_GAS_TOPUP_COMPLETED.contains("state='completed'"));
+        assert!(NOTE_GAS_TOPUP_ERROR.contains("attempts+1>=10"));
+        assert!(STALL_EXPIRED_GAS_TOPUP.contains("2 hours"));
+    }
+}

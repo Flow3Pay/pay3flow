@@ -121,6 +121,13 @@ impl Service {
         for chain in self.cfg.temp_wallet_networks() {
             self.ensure_treasury(&client, &chain).await?;
         }
+        drop(client);
+        // Top up treasury gas before processing settlements so deal wallets can
+        // always be funded.
+        if let Err(error) = self.treasury_gas_topup_tick().await {
+            tracing::warn!(error=%error, "otc.temp.gas_topup_tick_failed");
+        }
+        let client = self.pool.get().await?;
         let rows = repo::temp_wallets::due_settlements(&client).await?;
         drop(client);
         for row in rows {
@@ -757,6 +764,248 @@ impl Service {
         repo::temp_wallets::treasury(client, chain)
             .await?
             .ok_or_else(|| invalid("the treasury wallet could not be provisioned"))
+    }
+
+    /// Checks every configured EVM treasury and, when the native balance drops
+    /// below `temp_gas_low_threshold`, initiates an exact-output NEAR Intents
+    /// swap from the treasury USDT balance targeting `temp_gas_target` native
+    /// units.  Uses `otc_temp_gas_topups` for idempotent, crash-safe execution.
+    async fn treasury_gas_topup_tick(&self) -> Result<()> {
+        let Some(provider) = &self.near_intents else {
+            return Ok(());
+        };
+        let low = amount::units(&self.cfg.temp_gas_low_threshold, 18)?;
+        let target = amount::units(&self.cfg.temp_gas_target, 18)?;
+        if low == 0 || target == 0 || target <= low {
+            return Ok(());
+        }
+        for chain in self.cfg.temp_wallet_networks() {
+            if let Err(error) = self.topup_chain_gas(&chain, provider, low, target).await {
+                tracing::warn!(chain, error=%error, "otc.temp.gas_topup_chain_failed");
+            }
+        }
+        Ok(())
+    }
+
+    async fn topup_chain_gas(
+        &self,
+        chain: &str,
+        provider: &crate::route_engine::NearIntentsProvider,
+        low: u128,
+        target: u128,
+    ) -> Result<()> {
+        use crate::route_engine::{Amount, Asset, NearQuoteRequest};
+
+        let chain_id = super::config::evm_chain_id(chain)
+            .ok_or_else(|| invalid("temporary wallet network is not EVM"))?;
+        let rpcs = self
+            .cfg
+            .p2p_evm_rpcs(chain)
+            .filter(|e| e.len() >= 2)
+            .ok_or_else(|| invalid("two independent EVM endpoints are required"))?;
+        let net = super::chain::EvmNet {
+            rpcs: rpcs.to_vec(),
+            chain_id,
+            usdt: self.cfg.p2p_usdt().to_string(),
+        };
+
+        let client = self.pool.get().await?;
+        let treasury = self.ensure_treasury(&client, chain).await?;
+
+        let balance = super::chain::number(
+            &self
+                .evm_agree(&net, "eth_getBalance", json!([treasury.address, "latest"]))
+                .await?,
+        )?;
+        if balance >= low {
+            return Ok(());
+        }
+
+        // Resume an existing active topup if one is in progress.
+        if let Some(row) = repo::temp_wallets::active_gas_topup(&client, chain).await? {
+            return self
+                .resume_gas_topup(&row, &treasury, chain, &net, provider)
+                .await;
+        }
+
+        // Native gas is obtained by swapping USDT for wrapped native tokens via
+        // NEAR Intents.  The wrapped token is automatically unwrapped to the
+        // treasury address on delivery.
+        let native_symbol = match chain {
+            "polygon-pos" => "WMATIC",
+            "avalanche-c" => "WAVAX",
+            _ => "WETH",
+        };
+        let usdt_asset = Asset::new("USDT", Some("ethereum"))
+            .map_err(|_| invalid("cannot build USDT asset for gas topup"))?;
+        let native_asset = Asset::new(native_symbol, Some(chain))
+            .map_err(|_| invalid("cannot build native asset for gas topup"))?;
+
+        let target_decimal = amount::decimal(target, 18);
+        let quote = provider
+            .executable_quote(NearQuoteRequest {
+                from: usdt_asset.clone(),
+                to: native_asset.clone(),
+                origin_asset_id: None,
+                destination_asset_id: None,
+                amount: Amount::new(target_decimal, native_asset)
+                    .map_err(|_| invalid("invalid gas topup target amount"))?,
+                recipient: treasury.address.clone(),
+                refund_to: treasury.address.clone(),
+                slippage_bps: 200,
+                app_fees: Vec::new(),
+                dry: false,
+            })
+            .await
+            .map_err(|error| {
+                tracing::warn!(chain, error=%error, "otc.temp.gas_topup_quote_failed");
+                super::error::Error::RouteUnavailable
+            })?;
+
+        let source_units = amount::units(&quote.input.value, 6)?;
+
+        // Guard: the treasury must hold enough USDT to cover the swap.
+        let usdt_balance = self
+            .erc20_balance_of(&net, &treasury.address, &json!("latest"))
+            .await?;
+        if usdt_balance < source_units {
+            tracing::warn!(
+                chain,
+                usdt_balance,
+                source_units,
+                "otc.temp.gas_topup_insufficient_usdt"
+            );
+            return Ok(());
+        }
+
+        let deposit = quote
+            .deposit_address
+            .as_deref()
+            .filter(|a| !a.trim().is_empty())
+            .ok_or(super::error::Error::RouteUnavailable)?;
+        let memo = crate::route_engine::first_string(&quote.raw, &["depositMemo", "deposit_memo"]);
+
+        // Persist the row before signing so a crash after signing cannot lose
+        // the reference entirely.
+        let topup_id = uuid::Uuid::new_v4();
+        repo::temp_wallets::insert_gas_topup(&client, &topup_id, chain, &treasury.address).await?;
+
+        let material = self.treasury_material(&treasury)?;
+        let signed = self
+            .evm_sign_temp_token_transfer(&material, &net, &net.usdt, deposit, source_units)
+            .await?;
+        let reference = super::chain::evm_transaction_hash(&signed);
+
+        repo::temp_wallets::set_gas_topup_submitted(&client, &topup_id, &reference, &signed)
+            .await?;
+        self.evm_send_raw(&net, &signed).await?;
+
+        repo::temp_wallets::set_gas_topup_intents(
+            &client,
+            &topup_id,
+            deposit,
+            memo.as_deref(),
+            &quote.quote_id,
+            &source_units.to_string(),
+            &target.to_string(),
+        )
+        .await?;
+
+        tracing::info!(
+            chain,
+            treasury = treasury.address,
+            source_units,
+            target_units = target,
+            reference,
+            "otc.temp.gas_topup_submitted"
+        );
+        Ok(())
+    }
+
+    async fn resume_gas_topup(
+        &self,
+        row: &repo::temp_wallets::GasTopupRow,
+        treasury: &repo::temp_wallets::TreasuryWallet,
+        chain: &str,
+        net: &super::chain::EvmNet,
+        provider: &crate::route_engine::NearIntentsProvider,
+    ) -> Result<()> {
+        let client = self.pool.get().await?;
+        match row.state.as_str() {
+            "claim" => {
+                // Row exists but signing never completed; mark as failed so the
+                // next tick starts a fresh topup.
+                repo::temp_wallets::note_gas_topup_error(
+                    &client,
+                    &row.id,
+                    "topup claim was not completed before the worker stopped; retrying",
+                )
+                .await?;
+            }
+            "submitted" => {
+                // Re-broadcast the persisted envelope in case the first send
+                // was lost.
+                if let Some(raw) = repo::temp_wallets::gas_topup_signed(&client, &row.id).await? {
+                    self.evm_send_raw(net, &raw).await?;
+                }
+                // If we also have Intents metadata already, advance the state.
+                if row.deposit_address.is_some() && row.quote_id.is_some() {
+                    repo::temp_wallets::set_gas_topup_intents(
+                        &client,
+                        &row.id,
+                        row.deposit_address.as_deref().unwrap_or(""),
+                        row.deposit_memo.as_deref(),
+                        row.quote_id.as_deref().unwrap_or(""),
+                        row.source_units.as_deref().unwrap_or(""),
+                        row.target_units.as_deref().unwrap_or(""),
+                    )
+                    .await?;
+                }
+            }
+            "intents_submitted" => {
+                // Expire rows that have been pending for over two hours.
+                if repo::temp_wallets::stall_expired_gas_topup(&client, &row.id).await? {
+                    tracing::warn!(chain, topup=%row.id, "otc.temp.gas_topup_stalled");
+                    return Ok(());
+                }
+                let deposit = match row.deposit_address.as_deref() {
+                    Some(d) if !d.is_empty() => d,
+                    _ => return Ok(()),
+                };
+                let status = match provider
+                    .status_with_memo(deposit, row.deposit_memo.as_deref())
+                    .await
+                {
+                    Ok(s) => s,
+                    Err(error) => {
+                        tracing::warn!(chain, error=%error, "otc.temp.gas_topup_status_failed");
+                        return Ok(());
+                    }
+                };
+                match status.status.to_ascii_uppercase().as_str() {
+                    "SUCCESS" => {
+                        repo::temp_wallets::set_gas_topup_completed(&client, &row.id).await?;
+                        tracing::info!(
+                            chain,
+                            treasury = treasury.address,
+                            "otc.temp.gas_topup_completed"
+                        );
+                    }
+                    "REFUNDED" | "FAILED" => {
+                        repo::temp_wallets::note_gas_topup_error(
+                            &client,
+                            &row.id,
+                            &format!("NEAR Intents {}", status.status),
+                        )
+                        .await?;
+                    }
+                    // PENDING: nothing to do, check again next tick.
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     /// Accept-time guard: the treasury must hold enough native gas to fund a

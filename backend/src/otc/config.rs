@@ -87,6 +87,18 @@ fn default_ever_fee_reserve() -> String {
 fn default_temp_gas_reserve() -> String {
     "0.0005".into()
 }
+/// Treasury native balance below which an auto top-up swap is triggered.
+/// Expressed in the chain's native token (e.g. ETH).  Default is 0.001 which
+/// at $3000/ETH equals roughly $3 — enough headroom for several deal-wallet
+/// gas fills.  Tune per deployment via OTC config JSON.
+fn default_temp_gas_low_threshold() -> String {
+    "0.001".into()
+}
+/// How much native token to buy per top-up swap.  Default is 0.005 (≈$15 at
+/// $3000/ETH) which covers ten deal-wallet fills at the default reserve level.
+fn default_temp_gas_target() -> String {
+    "0.005".into()
+}
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Config {
@@ -100,6 +112,12 @@ pub(crate) struct Config {
     /// Native gas a temporary wallet must hold before a sweep is signed.
     #[serde(default = "default_temp_gas_reserve")]
     pub temp_gas_reserve: String,
+    /// Treasury native balance that triggers an automatic USDT->native swap.
+    #[serde(default = "default_temp_gas_low_threshold")]
+    pub temp_gas_low_threshold: String,
+    /// How much native token to buy per automatic top-up swap.
+    #[serde(default = "default_temp_gas_target")]
+    pub temp_gas_target: String,
     /// Deprecated compatibility setting. Custodial same-network payouts always
     /// use the permanent treasury when `temp_wallets` is enabled.
     #[serde(default)]
@@ -170,6 +188,8 @@ impl Default for Config {
             p2p_enabled: false,
             temp_wallets: false,
             temp_gas_reserve: default_temp_gas_reserve(),
+            temp_gas_low_threshold: default_temp_gas_low_threshold(),
+            temp_gas_target: default_temp_gas_target(),
             temp_reserve_payout: false,
             demo: false,
             ethereum_chain_id: default_evm_chain(),
@@ -492,6 +512,8 @@ impl Config {
         super::amount::units(&self.ever_gas_reserve, 9)?;
         super::amount::units(&self.eth_gas_reserve, 18)?;
         super::amount::units(&self.temp_gas_reserve, 18)?;
+        super::amount::units(&self.temp_gas_low_threshold, 18)?;
+        super::amount::units(&self.temp_gas_target, 18)?;
         if !self.demo {
             for endpoints in [&self.ethereum_rpc, &self.everscale_graphql] {
                 if endpoints.len() < 2 || endpoints[0] == endpoints[1] {

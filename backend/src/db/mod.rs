@@ -103,6 +103,10 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .await
         .context("apply OTC temporary EVER settlement migration")?;
     client
+        .batch_execute(include_str!("../../migrations/otc_temp_gas_topup.sql"))
+        .await
+        .context("apply OTC treasury gas top-up migration")?;
+    client
         .batch_execute(include_str!("../../migrations/otc_history.sql"))
         .await?;
     client
