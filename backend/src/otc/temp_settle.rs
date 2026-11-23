@@ -18,6 +18,97 @@ use serde_json::{json, Value};
 const FEE_SWEEP_THRESHOLD_UNITS: u128 = 1_000_000;
 
 impl Service {
+    /// Reports whether every configured EVM custody route has an existing,
+    /// readable treasury with the configured minimum native gas reserve.
+    /// This is an observation only; it does not provision wallets or sign.
+    pub(crate) async fn temp_custody_readiness(&self) -> Value {
+        if !self.cfg.temp_wallets {
+            return json!({"enabled": false, "networks": {}});
+        }
+        let networks = ["ethereum", "polygon-pos", "avalanche-c"];
+        let client = match self.pool.get().await {
+            Ok(client) => client,
+            Err(error) => {
+                return json!({
+                    "enabled": self.cfg.temp_wallets,
+                    "networks": {},
+                    "error": format!("treasury database unavailable: {error}"),
+                });
+            }
+        };
+        let mut status = serde_json::Map::new();
+        let threshold = amount::units(&self.cfg.temp_gas_reserve, 18).unwrap_or(u128::MAX);
+        for chain in networks {
+            let Some(rpcs) = self.cfg.p2p_evm_rpcs(chain).filter(|rpcs| rpcs.len() >= 2) else {
+                status.insert(
+                    chain.to_string(),
+                    json!({"ready": false, "reason": "two independent RPC endpoints are not configured"}),
+                );
+                continue;
+            };
+            let treasury = match repo::temp_wallets::treasury(&client, chain).await {
+                Ok(Some(treasury)) => treasury,
+                Ok(None) => {
+                    status.insert(
+                        chain.to_string(),
+                        json!({"ready": false, "reason": "treasury wallet has not been provisioned"}),
+                    );
+                    continue;
+                }
+                Err(error) => {
+                    status.insert(
+                        chain.to_string(),
+                        json!({"ready": false, "reason": format!("treasury lookup failed: {error}")}),
+                    );
+                    continue;
+                }
+            };
+            let net = super::chain::EvmNet {
+                rpcs: rpcs.to_vec(),
+                chain_id: super::config::evm_chain_id(chain).unwrap_or_default(),
+                usdt: self.cfg.p2p_usdt().to_string(),
+            };
+            let reading = async {
+                self.evm_chain_matches(&net).await?;
+                self.evm_agree(&net, "eth_getBalance", json!([treasury.address, "latest"]))
+                    .await
+                    .and_then(|value| super::chain::number(&value))
+            }
+            .await;
+            match reading {
+                Ok(balance) => {
+                    status.insert(
+                        chain.to_string(),
+                        json!({
+                            "ready": false,
+                            "treasury_gas_ready": balance >= threshold,
+                            "treasury_address": treasury.address,
+                            "native_balance_wei": balance.to_string(),
+                            "required_native_balance_wei": threshold.to_string(),
+                            "reason": if balance < threshold {
+                                json!("treasury native gas reserve is below the configured minimum")
+                            } else {
+                                json!("automatic treasury-to-deal-wallet gas funding is not implemented; custodial route is paused")
+                            },
+                        }),
+                    );
+                }
+                Err(error) => {
+                    status.insert(
+                        chain.to_string(),
+                        json!({"ready": false, "treasury_address": treasury.address, "reason": format!("independent RPC readiness check failed: {error}")}),
+                    );
+                }
+            }
+        }
+        json!({
+            "enabled": self.cfg.temp_wallets,
+            "minimum_native_reserve": self.cfg.temp_gas_reserve,
+            "networks": status,
+            "note": "Readiness checks the permanent treasury's native balance against OTC_TEMP_GAS_RESERVE. It does not report token inventory or guarantee a route quote.",
+        })
+    }
+
     pub(crate) async fn temp_settlement_tick(&self) -> Result<()> {
         if !self.cfg.temp_wallets {
             return Ok(());
@@ -572,6 +663,14 @@ impl Service {
         repo::temp_wallets::treasury(client, chain)
             .await?
             .ok_or_else(|| invalid("the treasury wallet could not be provisioned"))
+    }
+
+    /// Blocks new custody deals until the treasury-to-temp gas transfer has a
+    /// persisted and recoverable signer path.
+    pub(crate) async fn temp_treasury_gas_preflight(&self, chain: &str) -> Result<()> {
+        Err(super::error::Error::Conflict(format!(
+            "custodial OTC on {chain} is paused until automatic treasury-to-deal-wallet gas funding is enabled"
+        )))
     }
 
     /// Accept-time guard: a same-network deal the treasury cannot front fails

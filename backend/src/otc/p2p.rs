@@ -452,6 +452,13 @@ impl Service {
         } else {
             None
         };
+        if let Some(wallets) = &temp_plan {
+            for (_, chain) in wallets {
+                if *chain != super::temp_wallet::Chain::Everscale {
+                    self.temp_treasury_gas_preflight(chain.id()).await?;
+                }
+            }
+        }
         // A reserve-payout deal must be frontable before Accept creates an
         // address; otherwise it would park in `awaiting_payment` (spec §6.3).
         if temp_plan.is_some() && payer_network == output_network {

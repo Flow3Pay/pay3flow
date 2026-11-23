@@ -952,7 +952,7 @@ const OPERATIONS: &[Operation] = &[
         "/api/otc/p2p/assets",
         "get",
         "List executable OTC stablecoin routes",
-        "Return USDT/USDC routes available from the current token catalog and NEAR Intents provider; excludes TRON. min_stablecoin_amount is the $30 product floor; each asset includes effective_minimum and swap_minimums reports route technical floors. custody reports configured signer networks, but treasury funding is checked during deal preflight and is not asserted by this catalog. When custodial settlement is enabled, routes are limited to configured signer networks.",
+        "Return USDT/USDC routes available from the current token catalog and NEAR Intents provider; excludes TRON. min_stablecoin_amount is the $30 product floor; each asset includes effective_minimum and swap_minimums reports route technical floors. custody.readiness reports permanent EVM treasury balances and why custody routes are paused. Routes stay unavailable until recoverable treasury-to-deal-wallet gas funding is implemented; token inventory remains amount-specific and is checked during deal preflight.",
         "Catalogs",
         false,
         false,

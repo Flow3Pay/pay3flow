@@ -483,24 +483,12 @@ mod tests {
             30_000_000
         );
 
-        // TRON as the source keeps 1Click's $100 technical minimum; when it is
-        // only the destination, the Ethereum-origin fee determines the floor.
+        // TRON stays unsupported even when its address and token are valid.
         item.stablecoin_network = "tron".into();
         item.stablecoin_asset_id = Some("nep141:trx-usdt.omft.near".into());
         item.usdt_address = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb".into();
         item.direction = Direction::Buy;
-        item.usdt_amount = "99".into();
-        assert!(item.terms(&cfg).is_err());
         item.usdt_amount = "100.2".into();
-        assert!(item.terms(&cfg).is_err());
-        assert_eq!(
-            required_stablecoin_units("tron", StablecoinLeg::Incoming),
-            100_100_000
-        );
-        item.direction = Direction::Sell;
-        item.usdt_amount = "0.3".into();
-        assert!(item.terms(&cfg).is_err());
-        item.usdt_amount = "0.300001".into();
         assert!(item.terms(&cfg).is_err());
     }
 
@@ -511,7 +499,6 @@ mod tests {
         };
         assert_eq!(stablecoin_withdraw_fee_units("ethereum"), 300_000);
         assert_eq!(stablecoin_withdraw_fee_units("solana"), 10_039);
-        assert_eq!(stablecoin_withdraw_fee_units("tron"), 200_451);
         assert_eq!(stablecoin_withdraw_fee_units("near"), 0);
         assert_eq!(
             minimum_stablecoin_units("ethereum", StablecoinLeg::Outgoing),
@@ -524,14 +511,6 @@ mod tests {
         assert_eq!(
             minimum_stablecoin_units("solana", StablecoinLeg::Incoming),
             300_065
-        );
-        assert_eq!(
-            minimum_stablecoin_units("tron", StablecoinLeg::Incoming),
-            100_100_000
-        );
-        assert_eq!(
-            minimum_stablecoin_units("tron", StablecoinLeg::Outgoing),
-            300_001
         );
         assert_eq!(
             minimum_stablecoin_units("near", StablecoinLeg::Incoming),

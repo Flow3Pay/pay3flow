@@ -25,6 +25,7 @@ import { otcNetworkAllowed } from "$lib/otc/p2p";
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
   let stablecoinNetwork = "ethereum";
   let stablecoinAssets: Array<{ asset: string; symbol: Stablecoin; network: string; asset_id: string }> = [];
+  let custodyNotice = "";
   let swapMinimums: Record<string, { incoming: string; outgoing: string; fee?: { incoming: string; outgoing: string } }> = {};
   // Server-owned product floor: fees must not dominate a small deal.
   let minStablecoinAmount = "30";
@@ -274,13 +275,22 @@ import { otcNetworkAllowed } from "$lib/otc/p2p";
   }
   onMount(() => {
     mounted = true;
-    void request<{ destination_assets: typeof stablecoinAssets; swap_minimums?: typeof swapMinimums; min_stablecoin_amount?: string }>("/p2p/assets")
+    void request<{ destination_assets: typeof stablecoinAssets; swap_minimums?: typeof swapMinimums; min_stablecoin_amount?: string; custody?: { enabled?: boolean; readiness?: { networks?: Record<string, { ready?: boolean; reason?: string }> } } }>("/p2p/assets")
       .then(result => {
         stablecoinAssets = (result.destination_assets || []).filter(asset => otcNetworkAllowed(asset.network));
         swapMinimums = result.swap_minimums || {};
         minStablecoinAmount = result.min_stablecoin_amount || "30";
+        const unavailable = Object.entries(result.custody?.readiness?.networks || {})
+          .filter(([, readiness]) => !readiness.ready)
+          .map(([network, readiness]) => `${networkLabels[network] || network}: ${readiness.reason || "route readiness check failed"}`);
+        custodyNotice = result.custody?.enabled && unavailable.length
+          ? say(
+            `OTC custody is paused: ${unavailable.join("; ")}.`,
+            `Кастодиальный OTC приостановлен: ${unavailable.join("; ")}.`,
+          )
+          : "";
       })
-      .catch(() => { stablecoinAssets = []; });
+      .catch(() => { stablecoinAssets = []; custodyNotice = ""; });
     const timer = setInterval(() => { if (enabled && !posting && !busy) void refresh(); }, 5000);
     const controller = new AbortController();
     marketAbort = controller;
@@ -331,4 +341,9 @@ import { otcNetworkAllowed } from "$lib/otc/p2p";
   } satisfies SaleTicketState;
 </script>
 
+{#if custodyNotice}<p class="custodyNotice" role="status">{custodyNotice}</p>{/if}
 <slot {ticket} {offers} {mine} {history} offerError={error} onCancel={cancel} />
+
+<style>
+  .custodyNotice { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--color-warning, #b7791f); border-radius: 9px; color: var(--color-text); font-size: 12px; line-height: 1.5; }
+</style>

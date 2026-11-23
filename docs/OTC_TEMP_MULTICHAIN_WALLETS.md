@@ -27,9 +27,12 @@ broadcast so recovery can resend the same transaction. The 3% fee is withheld
 from the stablecoin side only; sub-$1 balances stay on the reusable slot.
 
 The `ever` temp deposit and forward worker exist, with the network reserve
-included in the incoming amount and no 3% EVER fee. Native gas auto-top-up,
-treasury balance/readiness reporting, alerting, and signing / broadcast /
-recovery workers for NEAR, TON, Solana, TRON and Aptos are not implemented.
+included in the incoming amount and no 3% EVER fee. The API reports treasury
+native balances and reasons a custody route is paused. New EVM custody deals
+remain paused until treasury-to-deal-wallet gas funding has a persisted,
+recoverable transaction path. Native coin auto-top-up from collected fees,
+alerting, and settlement workers for NEAR, TON, Solana and Aptos are not
+implemented.
 Everscale payout recovery still needs a persisted signed-message handoff before
 broadcast. Do not enable production custody until those gaps and the
 operational checklist in §10 are closed. TRON remains unsupported for OTC.

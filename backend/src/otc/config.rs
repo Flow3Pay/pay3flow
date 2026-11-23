@@ -18,9 +18,7 @@ pub(crate) enum StablecoinLeg {
 /// Smallest cross-network stablecoin amount in six-decimal units.
 ///
 /// Every cross-network deal has an Ethereum leg, so the Ethereum fixed fee
-/// (0.3 USDT) sets the floor for most networks. TRON is the exception: 1Click
-/// rejects origin amounts below $100, so a TRON source needs roughly 100.1
-/// USDT before the fee is even considered. The per-network values are the
+/// (0.3 USDT) sets the floor for most networks. The per-network values are the
 /// fixed fees measured against the live 1Click quote API on 2026-11-16; bridge
 /// floors move, so this is a lower bound rather than a live quote.
 pub(crate) fn minimum_stablecoin_units(network: &str, leg: StablecoinLeg) -> u128 {
@@ -28,8 +26,6 @@ pub(crate) fn minimum_stablecoin_units(network: &str, leg: StablecoinLeg) -> u12
     const ETH_DESTINATION_WITHDRAW: u128 = 300_065;
     let (origin, destination) = match network {
         "ethereum" => (ETH_ORIGIN_REFUND, ETH_DESTINATION_WITHDRAW),
-        // $100 protocol minimum on TRON as origin plus the TRON withdrawal fee.
-        "tron" => (100_100_000, 200_451),
         "ton" => (42_912, 42_912),
         "sui" => (20_001, 20_000),
         "avalanche-c" => (14_302, 14_307),
@@ -67,7 +63,6 @@ pub(crate) fn required_stablecoin_units(network: &str, leg: StablecoinLeg) -> u1
 pub(crate) fn stablecoin_withdraw_fee_units(network: &str) -> u128 {
     match network {
         "ethereum" => 300_000,
-        "tron" => 200_451,
         "ton" => 42_912,
         "sui" => 20_000,
         "avalanche-c" => 14_307,
@@ -125,7 +120,7 @@ pub(crate) struct Config {
     pub p2p_ethereum_rpc: Vec<String>,
     #[serde(default)]
     pub p2p_evm_rpcs: BTreeMap<String, Vec<String>>,
-    /// Direct non-EVM contours, keyed by `tron`, `ton` or `solana`.
+    /// Legacy direct non-EVM contours, keyed by `ton` or `solana`.
     #[serde(default)]
     pub p2p_chain_rpcs: BTreeMap<String, Vec<String>>,
     pub origin: String,
@@ -274,7 +269,7 @@ impl Config {
             }
         }
         for (network, endpoints) in &self.p2p_chain_rpcs {
-            if !matches!(network.as_str(), "tron" | "ton" | "solana")
+            if !matches!(network.as_str(), "ton" | "solana")
                 || endpoints.len() < 2
                 || endpoints[0] == endpoints[1]
                 || (!self.demo && endpoints.iter().any(|url| !url.starts_with("https://")))
@@ -713,16 +708,9 @@ mod config_tests {
     }
 
     #[test]
-    fn validates_independent_endpoint_pairs_for_direct_non_evm_networks() {
+    fn validates_independent_endpoint_pairs_for_legacy_direct_non_evm_networks() {
         let mut cfg = Config {
             p2p_chain_rpcs: [
-                (
-                    "tron".into(),
-                    vec![
-                        "https://tron-a.example".into(),
-                        "https://tron-b.example".into(),
-                    ],
-                ),
                 (
                     "ton".into(),
                     vec![
@@ -743,6 +731,16 @@ mod config_tests {
         };
         assert!(cfg.validate_network().is_ok());
         assert_eq!(cfg.p2p_chain_endpoints("solana").unwrap().len(), 2);
+
+        cfg.p2p_chain_rpcs.insert(
+            "tron".into(),
+            vec![
+                "https://tron-a.example".into(),
+                "https://tron-b.example".into(),
+            ],
+        );
+        assert!(cfg.validate_network().is_err());
+        cfg.p2p_chain_rpcs.remove("tron");
 
         cfg.p2p_chain_rpcs.insert(
             "solana".into(),

@@ -275,11 +275,12 @@ async fn p2p_trades(State(state): State<AppState>, headers: HeaderMap) -> Result
     Ok(Json(state.otc.p2p_trades(&actor).await?))
 }
 async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
+    let custody_readiness = state.otc.temp_custody_readiness().await;
     let Some(provider) = state.otc.near_intents.as_ref() else {
         return Json(json!({
             "assets":[],"destination_assets":[],"buy_destination_assets":[],
             "min_stablecoin_amount":super::amount::decimal(super::config::P2P_PRODUCT_MIN_STABLECOIN_UNITS,6),
-            "custody":{"enabled":state.otc.cfg.temp_wallets,"supported_networks":state.otc.cfg.temp_wallet_networks(),"treasury_funding":"not_reported_by_catalog","note":"Intents provider unavailable; no routes are executable."}
+            "custody":{"enabled":state.otc.cfg.temp_wallets,"supported_networks":state.otc.cfg.temp_wallet_networks(),"readiness":custody_readiness,"note":"Intents provider unavailable; no routes are executable."}
         }));
     };
     let tokens = provider.supported_tokens().await;
@@ -298,6 +299,9 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
                 .iter()
                 .any(|configured| configured == &network)
         {
+            continue;
+        }
+        if state.otc.cfg.temp_wallets && custody_readiness["networks"][&network]["ready"] != true {
             continue;
         }
         if !matches!(symbol.as_str(), "USDT" | "USDC")
@@ -590,8 +594,8 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         "custody": {
             "enabled": state.otc.cfg.temp_wallets,
             "supported_networks": state.otc.cfg.temp_wallet_networks(),
-            "treasury_funding": "not_reported_by_catalog",
-            "note": "A network is listed as supported only when two RPC endpoints are configured. Actual treasury token and native-gas balances are checked during deal preflight."
+            "readiness": custody_readiness,
+            "note": "Readiness reports permanent treasury native-gas balances. Deal preflight independently checks the token inventory required for the selected amount."
         },
         "swap_minimums":swap_minimums
     }))

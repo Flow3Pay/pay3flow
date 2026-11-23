@@ -1,6 +1,7 @@
-//! TRON key material and TRC-20 transfers built with `anychain-tron`
-//! (spec §5.1.1): Base58Check addresses, the protobuf contract and the raw
-//! transaction all come from the SDK.
+//! TRON address derivation for the general-purpose address generator.
+//!
+//! TRON is not an OTC settlement network; this module intentionally contains
+//! no transaction construction or signing support.
 use crate::otc::error::{invalid, Result};
 use anychain_core::Address;
 use anychain_tron::{TronAddress, TronFormat, TronPublicKey};
