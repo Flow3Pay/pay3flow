@@ -303,6 +303,11 @@ impl Service {
             owner.as_str()
         };
         let offer_network = terms["stablecoin_network"].as_str().unwrap_or("ethereum");
+        if offer_network == "tron" {
+            return Err(Error::Conflict(
+                "TRON is no longer available for new OTC deals".into(),
+            ));
+        }
         // Offers published before the limits changed can still be small. Refuse
         // them at acceptance rather than letting the swap fail at the provider.
         let leg = match direction {

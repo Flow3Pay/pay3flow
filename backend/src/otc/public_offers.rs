@@ -109,6 +109,9 @@ impl PublicOfferDraft {
             return Err(invalid("USDT offer total exceeds the 1,000,000 USDT limit"));
         }
         let network = crate::route_engine::canonical_network_id(&self.stablecoin_network);
+        if network == "tron" {
+            return Err(invalid("TRON is not available for new OTC offers"));
+        }
         if !crate::route_execution::supports_otc_wallet_network(&network) {
             return Err(invalid("unsupported stablecoin receiving network"));
         }
@@ -462,14 +465,14 @@ mod tests {
     }
 
     #[test]
-    fn offer_minimums_follow_network_technical_floors_without_product_floor() {
+    fn offer_minimums_enforce_product_and_network_technical_floors() {
         use super::super::config::{required_stablecoin_units, StablecoinLeg};
         let cfg = super::super::config::Config::default();
-        // Ethereum's technical route floor, not a $30 product floor, applies.
+        // The $30 product floor applies in addition to technical route floors.
         let mut item = draft();
-        item.usdt_amount = "0.300064".into();
+        item.usdt_amount = "29.999999".into();
         assert!(item.terms(&cfg).is_err());
-        item.usdt_amount = "0.300065".into();
+        item.usdt_amount = "30".into();
         assert!(item.terms(&cfg).is_ok());
         assert_eq!(
             required_stablecoin_units("ethereum", StablecoinLeg::Outgoing),
@@ -489,7 +492,7 @@ mod tests {
         item.usdt_amount = "99".into();
         assert!(item.terms(&cfg).is_err());
         item.usdt_amount = "100.2".into();
-        assert!(item.terms(&cfg).is_ok());
+        assert!(item.terms(&cfg).is_err());
         assert_eq!(
             required_stablecoin_units("tron", StablecoinLeg::Incoming),
             100_100_000

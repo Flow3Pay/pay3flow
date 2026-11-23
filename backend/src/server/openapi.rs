@@ -949,6 +949,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/otc/p2p/assets",
+        "get",
+        "List executable OTC stablecoin routes",
+        "Return only USDT/USDC routes currently executable by the OTC wallet and NEAR Intents flow. The catalog excludes TRON. min_stablecoin_amount is the $30 product floor; swap_minimums reports additional network and leg technical floors.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
         "/api/p2p/search",
         "get",
         "Search P2P offers",

@@ -191,7 +191,10 @@ rule: every new P2P offer must also list at least **30 USDT/USDC**
 it is accepted (older offers can predate both floors), and for desk RFQs, whose
 `min_usdt` defaults to `"30"` and cannot be configured below the product floor.
 A deal may therefore clear $30 and still be rejected on a specific route: TRON
-as a source keeps its ~100.1 USDT technical minimum. Rejection is a 400 with the
+as a source keeps its ~100.1 USDT technical minimum. TRON is currently omitted
+from the OTC asset catalog and new offer publication/acceptance is rejected;
+the underlying TRON address generator remains available for wallet tooling.
+Rejection is a 400 with the
 amount, network, and minimum in the message. `GET /api/otc/p2p/assets` returns
 the technical numbers as `swap_minimums`, with the fixed fee per leg, and the
 product floor as `min_stablecoin_amount`, so the offer ticket can show both from

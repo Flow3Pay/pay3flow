@@ -51,11 +51,9 @@ pub(crate) fn minimum_stablecoin_units(network: &str, leg: StablecoinLeg) -> u12
     }
 }
 
-/// Additional P2P product floor in six-decimal stablecoin units.
-///
-/// Keep this at zero while the flow is being developed. Positive amount
-/// validation and per-network technical settlement floors still apply.
-pub(crate) const P2P_PRODUCT_MIN_STABLECOIN_UNITS: u128 = 0;
+/// Minimum stablecoin value accepted by the OTC P2P product, in six-decimal
+/// units. Per-network technical route minimums may raise this floor.
+pub(crate) const P2P_PRODUCT_MIN_STABLECOIN_UNITS: u128 = 30_000_000;
 
 /// Effective minimum for a P2P deal: the product floor or technical route
 /// minimum, whichever is larger.

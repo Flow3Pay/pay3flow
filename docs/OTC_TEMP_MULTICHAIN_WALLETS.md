@@ -94,9 +94,9 @@ Aliases when accepting config/UI input: `polygon` → `polygon-pos`,
 
 ### 3.1 P2P product minimum
 
-There is no additional product minimum while P2P is being developed. Amounts
-must be positive. Private desk RFQs retain their separately configured
-`min_usdt` minimum.
+The P2P product minimum is **30 USDT/USDC**. Per-network technical route
+minimums can raise this floor. Private desk RFQs retain their separately
+configured `min_usdt` minimum.
 
 ### 3.2 Technical Intents floors
 
@@ -109,7 +109,7 @@ and technical minimum.
 Effective rule:
 
 ```text
-required = max(0 product floor, network/leg Intents technical floor)
+required = max(30 USDT product floor, network/leg Intents technical floor)
 ```
 
 ### 3.3 Service fee
@@ -493,10 +493,9 @@ defined verification path before marking funded.
 
 ### Phase F — P2P amount floors + docs/API
 
-- [x] Keep positive-amount validation and technical Intents floors; remove the
-      additional $30 P2P product floor while the flow is in development
-- [x] Expose route floors via `swap_minimums`; `min_stablecoin_amount` is `0`
-      because there is no additional product floor
+- [x] Enforce a $30 P2P product floor alongside technical Intents floors
+- [x] Expose the product floor as `min_stablecoin_amount`; expose technical
+      route floors via `swap_minimums`
 - [x] Update `otc-service.md` and `OTC_MULTI_CHAIN_REQUIREMENTS.md`; the assets
       payload reports the product floor as `min_stablecoin_amount` (OpenAPI has
       no OTC P2P paths to extend)

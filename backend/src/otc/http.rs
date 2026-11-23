@@ -284,6 +284,7 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         let symbol = token.symbol.to_ascii_uppercase();
         let network = crate::route_engine::canonical_network_id(&token.blockchain);
         if !matches!(symbol.as_str(), "USDT" | "USDC")
+            || network == "tron"
             || token.decimals.is_none()
             || token
                 .contract_address
