@@ -251,7 +251,87 @@ Operator env (names illustrative):
 
 ## 6. End-to-end workflow (happy paths)
 
-Pseudo-workflow from product:
+### 6.0 User-facing workflow
+
+This section describes the deal flow from the perspective of the two
+participants: the **EVER buyer** (wants to receive EVER, pays stablecoin) and
+the **EVER seller** (wants to receive stablecoin, pays EVER).
+
+**Roles:**
+
+| Role | Sends | Receives |
+| --- | --- | --- |
+| EVER buyer | USDT/USDC on a stablecoin network | EVER on Everscale |
+| EVER seller | EVER on Everscale | USDT/USDC on a stablecoin network |
+
+**Step-by-step:**
+
+1. **EVER seller creates an offer.** They specify the EVER amount, the desired
+   stablecoin, and the receiving network for that stablecoin.
+
+2. **EVER buyer agrees to the offer.** They specify the stablecoin network they
+   will pay from, connect a wallet, and confirm the terms.
+
+3. **Both parties accept.** The backend freezes the deal terms and generates
+   the temporary intermediary wallets (2 or 3 depending on whether both sides
+   use the same stablecoin network — see §4).
+
+4. **Both sides fund their temp wallets asynchronously.** The backend watches
+   both chains independently; neither party waits for the other before
+   sending.
+
+   4.1. **EVER buyer sends 100% of the stablecoin amount** to the temp USD
+        wallet (`temp_usd` or `temp_usd_in`). The platform monitors the
+        incoming transfer via chain observers. While the stablecoin deposit is
+        unconfirmed, it is not forwarded and can still be returned to the
+        sender by expiry.
+
+   4.2. **EVER seller sends EVER** to `temp_ever`. The platform monitors the
+        Everscale network independently.
+
+   4.3. **Gate: stablecoin is not forwarded until EVER is deposited.** Until
+        the observer confirms EVER on `temp_ever`, the backend withholds the
+        stablecoin on `temp_usd_in`. This protects the EVER buyer: if the EVER
+        seller never sends, the stablecoin expires on the temp and returns to
+        the buyer when the deal times out. The platform never touches the
+        stablecoin principal before both legs are funded.
+
+   4.4. **Once both temps are funded** the backend freezes the 3% fee on the
+        USD temp and begins settlement.
+
+5. **Stablecoin conversion (if networks differ).** The backend submits an
+   exact-output NEAR Intents quote from `temp_usd_in` to `temp_usd_out` on
+   the EVER seller's receiving network, waits for `SUCCESS`, then forwards
+   the net amount to the EVER seller's main wallet.
+
+   5.1. **If both sides use the same stablecoin network** there is no Intents
+        hop. The backend pays the net directly from the per-chain treasury to
+        the EVER seller's main wallet, and withholds the EVER buyer's deposit
+        on `temp_usd` until the deal is complete.
+
+6. **EVER payout.** After the stablecoin leg is confirmed, the backend signs
+   a transfer from `temp_ever` to the EVER buyer's main Everscale wallet for
+   the booked EVER amount.
+
+7. **Final delivery to main wallets.** Once both transfers are confirmed:
+   - `temp_ever` is marked `deleted`.
+   - USD temp balance ≥ $1 → commission is swept to the treasury, temp marked
+     `deleted`.
+   - USD temp balance < $1 → address enters the reusable pool for the next
+     deal (§7).
+
+**Stablecoin safety rule:** the platform never converts or forwards the EVER
+buyer's stablecoin principal before the EVER seller's deposit is confirmed on
+`temp_ever`. An unconfirmed or missing EVER deposit leaves the stablecoin on
+the temp until deal expiry, at which point it is returned.
+
+**Gas note:** all gas for temp-wallet transactions comes from the platform
+treasury, not from users. Users only need gas to send to the temp address;
+all subsequent hops are paid by the platform (see §8).
+
+---
+
+Pseudo-workflow (internal):
 
 ```text
 [Intent: receive USDT on chain1]
@@ -400,14 +480,57 @@ Differences from today’s user-signed Intents deposit:
 | --- | --- | --- |
 | Who sends to `depositAddress` | User wallet | Backend from `usd_in` / `usd` |
 | Refund address | User source | Temp address we control |
-| Gas on source chain | User | Platform must keep gas on temp or sponsor before send |
+| Gas on source chain | User | Platform keeps gas on temp or sponsors from treasury |
 | Fee 3% | Separate user fee transfer when possible | Withheld on temp; not bridged |
 
-Gas policy:
+### 8.1 Gas policy for temp wallets
 
-- Before signing the Intents deposit, ensure native gas on the temp (top-up
-  from reserve if below threshold).
-- Document per-chain top-up minimums next to `eth_gas_reserve` / chain RPCs.
+Gas for every temp-wallet transaction comes from the platform treasury.
+Users never pay gas for the intermediate hops; they only need gas to send
+their asset to the initial temp address.
+
+**Treasury gas thresholds (per EVM network):**
+
+| Condition | Action |
+| --- | --- |
+| Treasury native balance ≥ `temp_gas_reserve × 2` | Normal operation |
+| Treasury native balance < **$1 equivalent** | Auto-swap: convert platform USDT/USDC to native gas via NEAR Intents up to **$5 equivalent**; suspend new deal creation until top-up confirms |
+| Treasury native balance = 0 | Block new deals on that network; page the operator; do not attempt a gas top-up from an empty treasury |
+
+**Auto-swap rule (< $1 → top up to $5):**
+
+Before creating any new temp wallet or signing any transfer, the worker checks
+the treasury native balance on the relevant chain. If it is below $1 worth of
+the native token at the current rate:
+
+1. Request a NEAR Intents exact-output quote: source = platform USDT/USDC on
+   the same or any cheaper network; destination = native token on the target
+   chain; amount out = $5 equivalent in native gas units.
+2. Sign and submit the deposit from the platform treasury stablecoin wallet.
+3. Wait for `SUCCESS`; credit the native balance.
+4. If Intents returns `FAILED`/`REFUNDED` or no quote is available, fall back
+   to operator alert and suspend deal creation on that chain until the treasury
+   is funded manually.
+
+The $1 low-water and $5 target are product defaults; they can be overridden per
+network via `gas_refill_low_usd` and `gas_refill_target_usd` in config.
+
+> **Not yet implemented.** The persisted gas-funding envelope (`otc_temp_gas`)
+> covers treasury-to-deal-wallet top-up. The auto-swap of stablecoin to native
+> gas via NEAR Intents for the treasury itself is **not implemented**; the
+> operator must fund the treasury gas manually. This section records the
+> intended behavior for the next implementation phase. See the runbook §7 for
+> current operator steps.
+
+**Per-chain top-up minimums** (document next to `eth_gas_reserve` / chain RPCs):
+
+| Network | `temp_gas_reserve` default | Suggested manual top-up batch |
+| --- | --- | --- |
+| Ethereum | 0.001 ETH | ≥ 0.01 ETH |
+| Polygon | 0.01 MATIC | ≥ 1 MATIC |
+| Avalanche C | 0.005 AVAX | ≥ 0.05 AVAX |
+
+Add rows as new networks are enabled.
 
 ---
 

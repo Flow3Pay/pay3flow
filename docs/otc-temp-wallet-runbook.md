@@ -255,17 +255,69 @@ SELECT chain, address, status FROM otc_temp_wallets
 WHERE role = 'treasury' ORDER BY chain;
 ```
 
-Fund each address with stablecoins for a same-chain payout plus a native-gas
-buffer before enabling custody. Accept preflights the stablecoin and native gas
-balances and returns a 409 naming the treasury when it cannot front the payout.
-The payer's full deposit remains on the USD temp and its accumulated balance is
-swept to treasury. If a deal wallet lacks its configured native reserve, the
-worker funds it from the permanent treasury. The signed transfer is stored in
-`otc_temp_gas` before broadcast; an ambiguous RPC response retries the same
-signed bytes. A failed or exhausted gas-funding row is visible in
-`pay3flow_otc_custody_gas_funding{state}`. The worker does not yet replenish the
-treasury from collected stablecoin fees, so operators must maintain its native
-gas reserve and pause custody if it is depleted.
+### 7.1 Starting capital requirements
+
+Before enabling `OTC_TEMP_WALLETS=1` on any network, fund each treasury with:
+
+| Network | Minimum stablecoin | Minimum native gas | Recommended initial gas |
+| --- | --- | --- | --- |
+| Ethereum | ≥ 1× expected deal net (≥ $30) | ≥ 0.01 ETH | 0.05 ETH |
+| Polygon | ≥ $30 USDC/USDT | ≥ 1 MATIC | 5 MATIC |
+| Avalanche C | ≥ $30 USDC/USDT | ≥ 0.05 AVAX | 0.2 AVAX |
+
+These are hard minimums. Accept will return 409 and block deal creation if
+the stablecoin or native balance is below the preflight threshold. Add rows
+for new networks as they are enabled, keeping at least five deals worth of
+gas at current market rates.
+
+### 7.2 Replenishing gas
+
+Accept preflights the stablecoin and native gas balances and returns a 409
+naming the treasury when it cannot front the payout. The payer's full deposit
+remains on the USD temp and its accumulated balance is swept to treasury. If a
+deal wallet lacks its configured native reserve, the worker funds it from the
+permanent treasury. The signed transfer is stored in `otc_temp_gas` before
+broadcast; an ambiguous RPC response retries the same signed bytes. A failed or
+exhausted gas-funding row is visible in
+`pay3flow_otc_custody_gas_funding{state}`. **The worker does not yet replenish
+the treasury from collected stablecoin fees**, so operators must maintain its
+native gas reserve manually.
+
+**When to top up:** when `pay3flow_otc_treasury_native_balance_usd` drops below
+$5 on any configured chain, top up before the $1 hard-block is reached.
+
+**How to top up manually:**
+1. Check the treasury address for each chain:
+   ```sql
+   SELECT chain, address FROM otc_temp_wallets WHERE role = 'treasury';
+   ```
+2. Send native gas to that address from an external wallet. The worker resumes
+   automatically on the next tick once the balance is above the preflight
+   threshold.
+3. Record the top-up transaction in the ops log with the trade-id if it
+   unblocked a specific deal.
+
+**Planned auto-swap (not yet implemented):** when the treasury native balance
+falls below $1, the backend will automatically request a NEAR Intents quote to
+convert platform USDT/USDC to native gas up to $5. Until that is shipped,
+operators must top up manually. See `OTC_TEMP_MULTICHAIN_WALLETS.md §8.1` for
+the intended behavior.
+
+Add the following alert to your Prometheus config alongside the existing
+custody alerts:
+
+```yaml
+- alert: OtcTreasuryGasLow
+  expr: pay3flow_otc_treasury_native_balance_usd < 5
+  for: 2m
+  labels:
+    severity: warning
+- alert: OtcTreasuryGasCritical
+  expr: pay3flow_otc_treasury_native_balance_usd < 1
+  for: 1m
+  labels:
+    severity: page
+```
 
 ## 7.1 EVER temporary leg
 
@@ -308,3 +360,42 @@ Before flipping the flag on live:
    double payout.
 4. Verify `temp_wallets` and `temp_wallet_id` appear on deal details and attempts.
 5. Confirm dual RPCs, fee recipients and gas balances for every enabled network.
+
+## 10. User-facing flow reference
+
+This section summarizes what each party does and when. It is the support-desk
+view of the same flow described technically in
+`OTC_TEMP_MULTICHAIN_WALLETS.md §6.0`.
+
+**Roles in a custody deal:**
+
+| Role | Sends to temp | Receives on main wallet |
+| --- | --- | --- |
+| EVER buyer | Stablecoin → `temp_usd` / `temp_usd_in` | EVER on Everscale |
+| EVER seller | EVER → `temp_ever` | Stablecoin on their chosen network |
+
+**Flow in order:**
+
+1. EVER seller publishes an offer (EVER amount, desired stablecoin, receiving
+   network).
+2. EVER buyer accepts the offer (selects source stablecoin network, connects
+   wallet).
+3. Backend generates temp wallets and shows deposit addresses to both parties.
+4. Both parties fund their respective temp wallets. The backend watches both
+   chains independently; neither party has to wait for the other before sending.
+5. **Gate:** stablecoin is not forwarded until `temp_ever` is confirmed funded.
+   If the EVER seller never sends, the stablecoin remains on the temp and
+   expires back to the buyer when the deal times out.
+6. Once both temps are funded, the backend settles:
+   - Same network: pays stablecoin net from treasury to the EVER seller's main
+     wallet; withholds buyer's deposit on the temp.
+   - Cross-network: routes stablecoin through NEAR Intents from `temp_usd_in`
+     to `temp_usd_out`, then forwards to the EVER seller's main wallet.
+7. After stablecoin is confirmed, backend forwards EVER from `temp_ever` to the
+   EVER buyer's main Everscale wallet.
+8. Both temps are recycled or swept. Deal is `completed`.
+
+**What users never do:**
+- Pay gas for temp-wallet hops. All intermediate gas comes from the platform
+  treasury.
+- Interact with Intents directly. The backend signs and submits on their behalf.
