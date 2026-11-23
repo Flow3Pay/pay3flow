@@ -563,9 +563,9 @@ recipient on that network must be configured, and the flag must be on.
   envelope (`otc_temp_gas`); a retry replays the same transaction. Metrics
   expose `pay3flow_otc_custody_gas_funding{state}` and
   `pay3flow_otc_custody_stalled_settlements` for alerting. Not implemented:
-  automatic top-up of the treasury itself from collected fees, quote/status
-  automated treasury top-up from collected fees, alert delivery wiring, and
-  stale-claim operator tooling. A funded Intents swap that remains `PENDING`
+  automatic top-up of the treasury itself from collected fees, alert delivery
+  wiring, and a way to abandon a stuck claim by hand (stale claims release on
+  their own after two minutes). A funded Intents swap that remains `PENDING`
   for two hours moves to `stalled` for manual reconciliation; the quote window
   itself is not yet consumed as an exact status deadline.
 - Settlement for Solana, NEAR, TON and Aptos has SDK-built signed
