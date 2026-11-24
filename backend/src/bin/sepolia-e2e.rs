@@ -568,8 +568,11 @@ async fn main() -> Result<()> {
     wait_mined(&http, &rpc_urls[0], &hash).await?;
     println!("    confirmed ✓");
 
-    // Verify balance landed
-    let bal = erc20_balance(&http, &rpc_urls[0], &usdt, &usd_in_addr).await?;
+    // Give the node a moment to process state, then check both RPCs.
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+    // Verify balance landed — check second RPC to avoid stale cache.
+    let bal = erc20_balance(&http, &rpc_urls[1], &usdt, &usd_in_addr).await?;
     println!("    usd_in USDT balance: {}", decimal(bal, 6));
     if bal < gross {
         bail!("USDT did not land on usd_in");

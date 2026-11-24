@@ -4198,6 +4198,7 @@ dependencies = [
  "evernode-multisig",
  "everscale-types",
  "futures",
+ "hex",
  "hmac 0.12.1",
  "jsonwebtoken",
  "k256 0.13.4",
