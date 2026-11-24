@@ -12,7 +12,7 @@
   let {
     size = 44,
     label = "Loading…",
-    duration = 2200,
+    duration = 1800,
     ghost = true,
   }: {
     /** Rendered width and height in pixels. */
@@ -48,12 +48,8 @@
         pathLength="1"
         d="M148 135H300C330 135 350 148 358 170C368 196 352 214 328 225L271 251"
       />
-      <path class="trace t2" pathLength="1" d="M237 200L118 280" />
-      <path
-        class="trace t3"
-        pathLength="1"
-        d="M200 288L330 276C350 278 360 300 355 320C350 340 332 350 305 350L150 368"
-      />
+      <path class="trace t2" pathLength="1" d="M237 200L118 280" />      <path class="trace t3" pathLength="1" d="M200 288L330 276C350 278 360 300 355 320C350 340 332 350 305 350L150 368" />
+      <rect class="fillAll" width="500" height="500" fill="#fff" />
     </mask>
   </defs>
 
@@ -82,7 +78,7 @@
   }
 
   .mark {
-    animation: logoCycle var(--duration, 2200ms) linear infinite;
+    animation: logoCycle var(--duration, 1800ms) linear infinite;
   }
 
   .trace {
@@ -93,7 +89,7 @@
     stroke-linejoin: round;
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation-duration: var(--duration, 2200ms);
+    animation-duration: var(--duration, 1800ms);
     animation-timing-function: linear;
     animation-iteration-count: infinite;
   }
@@ -108,6 +104,11 @@
 
   .t3 {
     animation-name: traceThree;
+  }
+
+  .fillAll {
+    opacity: 0;
+    animation: fillAll var(--duration, 1800ms) linear infinite;
   }
 
   @keyframes traceUpper {
@@ -143,6 +144,17 @@
     }
   }
 
+  @keyframes fillAll {
+    0%,
+    82% {
+      opacity: 0;
+    }
+    92%,
+    100% {
+      opacity: 1;
+    }
+  }
+
   @keyframes logoCycle {
     0%,
     92% {
@@ -156,12 +168,17 @@
 
   @media (prefers-reduced-motion: reduce) {
     .mark,
-    .trace {
+    .trace,
+    .fillAll {
       animation: none;
     }
 
     .trace {
       stroke-dashoffset: 0;
+    }
+
+    .fillAll {
+      opacity: 1;
     }
 
     .mark {
