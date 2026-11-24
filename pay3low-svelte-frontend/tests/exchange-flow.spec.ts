@@ -369,7 +369,7 @@ test("routes can be hidden while the bridge stays centered and restored after re
   }
 });
 
-test("search placeholders stay inside the route panel", async ({ page }) => {
+test("search loader stays inside the route panel", async ({ page }) => {
   await mockBackend(page);
   let releaseSearch!: () => void;
   const holdSearch = new Promise<void>((resolve) => { releaseSearch = resolve; });
@@ -382,17 +382,20 @@ test("search placeholders stay inside the route panel", async ({ page }) => {
   });
   await openApp(page);
   await page.getByLabel("Amount to send").fill("100000");
-  const skeletons = page.locator("#routes .skeletonCard");
-  await expect(skeletons).toHaveCount(5);
+  const loader = page.locator("#routes .routeLoading");
+  await expect(loader).toBeVisible();
+  await expect(loader).toHaveAttribute("aria-label", "Searching live routes");
+  await expect(loader.locator("svg")).toBeVisible();
+  await expect(page.locator("#routes .skeletonCard")).toHaveCount(0);
   await expect(page.getByTestId("start-search")).toBeDisabled();
   await expect(page.getByTestId("start-search")).toHaveCSS("background-color", "rgb(181, 245, 0)");
-  const bounds = await page.evaluate(() => ({
-    panelBottom: document.querySelector("#routes .panel")!.getBoundingClientRect().bottom,
-    lastBottom: [...document.querySelectorAll("#routes .skeletonCard")].at(-1)!.getBoundingClientRect().bottom,
-    lastContentBottom: [...document.querySelectorAll("#routes .skeletonCard")].at(-1)!.lastElementChild!.getBoundingClientRect().bottom,
-  }));
-  expect(bounds.lastBottom).toBeLessThanOrEqual(bounds.panelBottom - 1);
-  expect(bounds.lastContentBottom).toBeLessThanOrEqual(bounds.lastBottom - 1);
+  const bounds = await page.evaluate(() => {
+    const panel = document.querySelector("#routes .panel")!.getBoundingClientRect();
+    const box = document.querySelector("#routes .routeLoading")!.getBoundingClientRect();
+    return { panelBottom: panel.bottom, panelTop: panel.top, loaderTop: box.top, loaderBottom: box.bottom };
+  });
+  expect(bounds.loaderTop).toBeGreaterThanOrEqual(bounds.panelTop);
+  expect(bounds.loaderBottom).toBeLessThanOrEqual(bounds.panelBottom - 1);
   releaseSearch();
 });
 

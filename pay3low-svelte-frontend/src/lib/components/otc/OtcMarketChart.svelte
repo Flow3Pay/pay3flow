@@ -5,6 +5,7 @@
   import { saleRate, type OfferHistoryPoint } from "$lib/otc/public-offers";
   import { candleIntervalLabel, chartRanges, chartWindow, chartWindows, markCandles, marketCandles, sparseSeries, type ChartRange, type ChartWindow } from "$lib/otc/market";
   import { dispose, init, registerLocale, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
+  import LogoLoader from "../LogoLoader.svelte";
 
   // klinecharts ships `minute: ""`, so a 15-minute series renders as a bare "15".
   registerLocale("en-US", {
@@ -36,6 +37,7 @@
   let mounted = false;
   let swapping = false;
   let chart: Chart | null = null;
+  let loading = true;
   let signature = "";
   let candleType: "candle_solid" | "area" = "candle_solid";
 
@@ -177,11 +179,15 @@
   async function load() {
     // A slower response for a previous range must not replace the current one.
     const version = ++loadVersion, requested = range;
+    // Periodic refreshes keep the chart in place; only an empty/switch load shows the logo.
+    if (history === null) loading = true;
     try {
       const next = await getHistory(requested);
       if (version === loadVersion && range === requested) history = next;
     } catch {
       if (version === loadVersion && range === requested) history = null;
+    } finally {
+      if (version === loadVersion) loading = false;
     }
   }
 
@@ -299,7 +305,12 @@
   </div>
 
   <div class="chartPlot" bind:this={plot} role="img" aria-label={say("EVER price history in USDT per EVER", "История цены EVER в USDT за EVER")}>
-    {#if !bars.length}
+    {#if loading}
+      <div class="chartLoading" class:veiled={bars.length > 0} role="status" aria-live="polite">
+        <LogoLoader size={bars.length > 0 ? 34 : 56} label={say("Loading price history…", "Загружаем историю цен…")} />
+        <span>{say("Loading price history…", "Загружаем историю цен…")}</span>
+      </div>
+    {:else if !bars.length}
       <div class="empty">
         <strong>{publicOffers === null ? say("No quote history yet", "Истории котировок пока нет") : say("No offer history yet", "Истории предложений пока нет")}</strong>
         <p>{say("Prices appear here as the desk quotes and offers publish.", "Здесь появятся цены котировок деска и опубликованных предложений.")}</p>
@@ -325,6 +336,9 @@
   .ranges button.active { color: #152016; font-weight: 650; }
   .chartPlot { position: relative; width: 100%; height: clamp(320px, 34vw, 460px); padding: 0 4px 4px; transition: opacity .22s ease; }
   .marketChart.swapping .chartPlot { opacity: .5; }
+  .chartLoading { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; text-align: center; pointer-events: none; }
+  .chartLoading.veiled { background: color-mix(in srgb, var(--color-paper) 55%, transparent); }
+  .chartLoading span { padding: 4px 10px; border-radius: 999px; background: var(--exchange-card-bg); }
   .empty { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; pointer-events: none; }
   .empty strong { background: var(--exchange-card-bg); font-size: 14px; font-weight: 650; padding: 5px 12px; }
   .empty p { max-width: 320px; background: var(--exchange-card-bg); color: var(--color-text-soft); font-size: 12px; line-height: 1.6; padding: 5px; }

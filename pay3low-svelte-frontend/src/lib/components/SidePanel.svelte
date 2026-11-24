@@ -8,6 +8,7 @@
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
   import { assetIcon, dislikeIcon, likeIcon, venueIcon, warningIcon } from "$lib/icons";
   import WorkflowControl from "$lib/components/WorkflowControl.svelte";
+  import LogoLoader from "$lib/components/LogoLoader.svelte";
   import { routeWorkflowSteps } from "$lib/workflow-steps";
   import { routeScrollColor } from "$lib/route-scroll-color";
   import { fiatFlagUrl } from "$lib/currency-flags";
@@ -225,10 +226,11 @@
         {#if selectedVenueId && visibleRoutes.length === 0}<p class="venueFilterEmpty">No ranked routes from {selectedVenueName} for this amount and payment method.</p>{/if}
       </div>
     {:else if searching}
-      <div class="skeletonList" aria-label="Searching live routes">
-        {#each [0, 1, 2, 3, 4] as item}
-          <div class="skeletonCard" style:animation-delay={`${item * 80}ms`}><span class="skeletonShort"></span><span class="skeletonLong"></span><span class="skeletonMedium"></span></div>
-        {/each}
+      <div class="routeLoading" role="status" aria-live="polite" aria-label={t("Searching live routes", {}, $locale)}>
+        <div class="routeLoadingMark">
+          <LogoLoader size={46} label={t("Searching live routes", {}, $locale)} />
+        </div>
+        <p>{t("Searching live routes", {}, $locale)}</p>
       </div>
     {:else}
       <div class="emptyState">
@@ -821,42 +823,35 @@
   height: 100%;
 }
 
-.skeletonList {
-  position: relative;
+.routeLoading {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 9px;
-  margin-top: 14px;
-  overflow: hidden;
-}
-
-.skeletonCard {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 0;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: clamp(6px, 1vh, 12px);
-  padding: clamp(10px, 1.3vh, 17px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  animation: skeletonPulse 1.2s ease-in-out infinite alternate;
+  gap: 16px;
+  padding: 32px 8px;
+  color: var(--color-text-soft);
+  text-align: center;
 }
 
-.skeletonShort,
-.skeletonLong,
-.skeletonMedium {
-  height: 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.09);
+.routeLoadingMark {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 26px;
+  background: var(--color-panel-soft);
 }
 
-.skeletonShort { width: 24%; }
-.skeletonLong { width: 62%; height: 19px; }
-.skeletonMedium { width: 78%; }
+.routeLoading p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
 
 .emptyState {
   display: flex;
@@ -903,11 +898,6 @@
 @keyframes pulse {
   0%, 100% { opacity: 0.5; transform: scale(0.8); }
   50% { opacity: 1; transform: scale(1.15); }
-}
-
-@keyframes skeletonPulse {
-  from { opacity: 0.55; }
-  to { opacity: 1; }
 }
 
 @media (max-width: 980px) {
@@ -1037,17 +1027,6 @@
   border-bottom-color: var(--color-border);
 }
 
-.skeletonCard {
-  border-color: var(--color-border);
-  background: #f4f8f1;
-}
-
-.skeletonShort,
-.skeletonLong,
-.skeletonMedium {
-  background: #dfe9db;
-}
-
 @media (max-width: 640px) {
   .panel {
     height: 520px;
@@ -1095,8 +1074,7 @@
   box-shadow: none;
 }
 
-:global(html[data-theme="dark"]) .routeCard,
-:global(html[data-theme="dark"]) .skeletonCard {
+:global(html[data-theme="dark"]) .routeCard {
   border-color: #383838;
   background: #202020;
 }
@@ -1144,12 +1122,6 @@
 :global(html[data-theme="dark"]) .workflow,
 :global(html[data-theme="dark"]) .workflowPart {
   background: transparent;
-}
-
-:global(html[data-theme="dark"]) .skeletonShort,
-:global(html[data-theme="dark"]) .skeletonLong,
-:global(html[data-theme="dark"]) .skeletonMedium {
-  background: #383838;
 }
 
 
