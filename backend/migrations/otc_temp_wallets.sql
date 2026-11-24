@@ -27,10 +27,12 @@ CREATE INDEX IF NOT EXISTS otc_temp_wallets_pool
 CREATE UNIQUE INDEX IF NOT EXISTS otc_temp_wallets_child
  ON otc_temp_wallets(parent_wallet_id, role) WHERE parent_wallet_id IS NOT NULL;
 -- Same-network payouts can be fronted from one platform reserve per chain. A
--- previous build restricted the role list, so widen it in place.
+-- previous build restricted the role list, so widen it in place. The treasury
+-- role is added here too so reruns after otc_temp_treasury.sql do not violate
+-- existing treasury rows.
 ALTER TABLE otc_temp_wallets DROP CONSTRAINT IF EXISTS otc_temp_wallets_role_check;
 ALTER TABLE otc_temp_wallets ADD CONSTRAINT otc_temp_wallets_role_check
- CHECK(role IN ('ever','usd','usd_in','usd_out','reserve'));
+ CHECK(role IN ('ever','usd','usd_in','usd_out','reserve','treasury'));
 CREATE UNIQUE INDEX IF NOT EXISTS otc_temp_wallets_reserve
  ON otc_temp_wallets(chain) WHERE role='reserve' AND trade_id IS NULL;
 -- Attempt rows link the custody row that received the deposit (spec §6.1 step
