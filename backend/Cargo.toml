@@ -10,6 +10,7 @@ anyhow = "1"
 aes-gcm = "0.10"
 alloy-primitives = "1"
 alloy-sol-types = "1"
+hex = "0.4"
 async-trait = "0.1"
 axum = { version = "0.7", features = ["ws", "macros"] }
 base64 = "0.22"

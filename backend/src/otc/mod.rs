@@ -30,7 +30,7 @@ mod reporting;
 mod review;
 mod route_provider;
 mod temp_settle;
-mod temp_wallet;
+pub(crate) mod temp_wallet;
 #[cfg(test)]
 mod tests;
 mod transfers;

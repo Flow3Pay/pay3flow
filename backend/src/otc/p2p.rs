@@ -170,7 +170,9 @@ pub(crate) struct DealSubmitRequest {
 impl Service {
     pub(crate) fn p2p_available(&self) -> bool {
         self.cfg.p2p_enabled
-            && self.public_offers_available()
+            // In demo mode public offers are intentionally off (testnet/no mainnet
+            // tokens), but the full P2P booking and settlement flow must still work.
+            && (self.public_offers_available() || self.cfg.demo)
             && self.wallet_login_chain_available("ethereum")
             && self.cfg.p2p_rpc().len() >= 2
     }
@@ -326,8 +328,8 @@ impl Service {
                 amount::decimal(minimum, 6)
             )));
         }
-        if self.cfg.p2p_chain() != 1
-            || terms["ethereum_chain_id"] != json!(1)
+        if (!self.cfg.demo && self.cfg.p2p_chain() != 1)
+            || terms["ethereum_chain_id"] != json!(self.cfg.p2p_chain())
             || (offer_network == "ethereum" && token_contract != stablecoin.contract())
         {
             return Err(Error::Conflict(
