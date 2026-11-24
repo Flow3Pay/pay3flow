@@ -345,10 +345,12 @@ impl Config {
         }
     }
     pub fn p2p_evm_rpcs(&self, network: &str) -> Option<&[String]> {
-        if network == "ethereum" {
+        // "sepolia" is a testnet alias for the ethereum RPC slot in demo mode.
+        let key = if network == "sepolia" { "ethereum" } else { network };
+        if key == "ethereum" {
             Some(self.p2p_rpc())
         } else {
-            self.p2p_evm_rpcs.get(network).map(Vec::as_slice)
+            self.p2p_evm_rpcs.get(key).map(Vec::as_slice)
         }
     }
     pub fn p2p_chain_endpoints(&self, network: &str) -> Option<&[String]> {

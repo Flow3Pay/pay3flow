@@ -20,6 +20,8 @@
 //!   AMOUNT_USDT     – test amount, default "10"
 
 use anyhow::{bail, Context, Result};
+use bip32::{DerivationPath, XPrv};
+use bip39::{Language, Mnemonic};
 use serde_json::{json, Value};
 use std::{env, str::FromStr};
 use tokio_postgres::NoTls;
@@ -33,6 +35,26 @@ use alloy::{
     primitives::{Address, U256},
     signers::local::PrivateKeySigner,
 };
+
+fn signer_from_env() -> anyhow::Result<PrivateKeySigner> {
+    // Accept either FUNDER_KEY (hex private key) or MNEMONIC (BIP39 phrase,
+    // derives m/44'/60'/0'/0/0).
+    if let Ok(hex) = env::var("FUNDER_KEY") {
+        let bytes = hex::decode(hex.trim_start_matches("0x"))?;
+        return Ok(PrivateKeySigner::from_slice(&bytes)?);
+    }
+    if let Ok(phrase) = env::var("MNEMONIC") {
+        let mn = Mnemonic::parse_in(Language::English, phrase.trim())
+            .map_err(|e| anyhow::anyhow!("invalid mnemonic: {e}"))?;
+        let seed = mn.to_seed("");
+        let path = DerivationPath::from_str("m/44'/60'/0'/0/0")?;
+        let derived = XPrv::derive_from_path(&seed, &path)
+            .map_err(|e| anyhow::anyhow!("key derivation: {e}"))?;
+        let key_bytes: [u8; 32] = derived.private_key().to_bytes().into();
+        return Ok(PrivateKeySigner::from_slice(&key_bytes)?);
+    }
+    anyhow::bail!("set FUNDER_KEY (hex private key) or MNEMONIC (BIP39 phrase)")
+}
 
 // temp_wallet primitives — inline to avoid pub(crate) visibility issues
 mod wallet {
@@ -153,7 +175,7 @@ fn decimal(v: u128, decimals: u32) -> String {
 
 // ── RPC helpers ───────────────────────────────────────────────────────────────
 
-async fn rpc(http: &reqwest::Client, url: &str, method: &str, params: Value) -> Result<Value> {
+async fn rpc_call(http: &reqwest::Client, url: &str, method: &str, params: Value) -> Result<Value> {
     let resp = http
         .post(url)
         .json(&json!({"jsonrpc":"2.0","method":method,"params":params,"id":1}))
@@ -183,7 +205,7 @@ async fn erc20_balance(
         holder.trim_start_matches("0x").to_ascii_lowercase()
     );
     parse_hex_u128(
-        &rpc(
+        &rpc_call(
             http,
             rpc_url,
             "eth_call",
@@ -194,12 +216,12 @@ async fn erc20_balance(
 }
 
 async fn eth_balance(http: &reqwest::Client, rpc_url: &str, addr: &str) -> Result<u128> {
-    parse_hex_u128(&rpc(http, rpc_url, "eth_getBalance", json!([addr, "latest"])).await?)
+    parse_hex_u128(&rpc_call(http, rpc_url, "eth_getBalance", json!([addr, "latest"])).await?)
 }
 
 async fn eth_nonce(http: &reqwest::Client, rpc_url: &str, addr: &str) -> Result<u64> {
     Ok(parse_hex_u128(
-        &rpc(
+        &rpc_call(
             http,
             rpc_url,
             "eth_getTransactionCount",
@@ -210,7 +232,7 @@ async fn eth_nonce(http: &reqwest::Client, rpc_url: &str, addr: &str) -> Result<
 }
 
 async fn suggest_fees(http: &reqwest::Client, rpc_url: &str) -> Result<(u128, u128)> {
-    let gas_price = parse_hex_u128(&rpc(http, rpc_url, "eth_gasPrice", json!([])).await?)?;
+    let gas_price = parse_hex_u128(&rpc_call(http, rpc_url, "eth_gasPrice", json!([])).await?)?;
     let priority = 1_500_000_000u128; // 1.5 gwei tip
     let max_fee = gas_price.saturating_mul(2).saturating_add(priority);
     Ok((max_fee, priority))
@@ -245,7 +267,7 @@ async fn send_erc20(
     let mut tx = TxEip1559 {
         chain_id: CHAIN_ID,
         nonce,
-        gas_limit: 100_000,
+        gas_limit: 200_000,
         max_fee_per_gas: max_fee,
         max_priority_fee_per_gas: priority,
         to: alloy::primitives::TxKind::Call(token_addr),
@@ -257,7 +279,7 @@ async fn send_erc20(
     let envelope = TxEnvelope::from(tx.into_signed(sig));
     let mut raw = Vec::new();
     envelope.encode_2718(&mut raw);
-    let result = rpc(
+    let result = rpc_call(
         http,
         rpc_url,
         "eth_sendRawTransaction",
@@ -270,7 +292,7 @@ async fn send_erc20(
 async fn wait_mined(http: &reqwest::Client, rpc_url: &str, hash: &str) -> Result<()> {
     for _ in 0..30 {
         tokio::time::sleep(std::time::Duration::from_secs(8)).await;
-        let r = rpc(http, rpc_url, "eth_getTransactionReceipt", json!([hash])).await?;
+        let r = rpc_call(http, rpc_url, "eth_getTransactionReceipt", json!([hash])).await?;
         if !r.is_null() {
             if parse_hex_u128(&r["status"])? == 1 {
                 return Ok(());
@@ -285,11 +307,71 @@ async fn wait_mined(http: &reqwest::Client, rpc_url: &str, hash: &str) -> Result
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+async fn cmd_mint_usdt() -> Result<()> {
+    let rpc = env::var("SEPOLIA_RPC")
+        .unwrap_or_else(|_| DEFAULT_RPC.split(',').next().unwrap().to_string());
+    let rpc = rpc.split(',').next().unwrap().trim().to_string();
+    let usdt = env::var("USDT_CONTRACT")
+        .unwrap_or_else(|_| DEFAULT_USDT.into())
+        .to_ascii_lowercase();
+    let amount: u128 = env::var("AMOUNT_USDT")
+        .ok()
+        .and_then(|s| units(&s, 6).ok())
+        .unwrap_or(10_000_000_000); // 10,000 USDT default for faucet
+    let signer = signer_from_env()?;
+    let addr   = format!("{:#x}", signer.address());
+    let http   = reqwest::Client::new();
+
+    println!("Minting {} USDT to {addr} via Aave Sepolia faucet…", decimal(amount, 6));
+
+    // Aave faucet: mint(address token, address to, uint256 amount) → 0xc6c3bbe6
+    let token_padded = usdt.trim_start_matches("0x").to_ascii_lowercase();
+    let to_padded    = addr.trim_start_matches("0x").to_ascii_lowercase();
+    let amount_hex   = format!("{amount:064x}");
+    let calldata_hex = format!("c6c3bbe6{token_padded:0>64}{to_padded:0>64}{amount_hex}");
+    let calldata     = hex::decode(&calldata_hex)?;
+
+    let faucet = "0xC959483DBa39aa9E78757139af0e9a2EDEb3f42D";
+    let (max_fee, priority) = suggest_fees(&http, &rpc).await?;
+    let nonce = eth_nonce(&http, &rpc, &addr).await?;
+    let faucet_addr = Address::from_str(faucet)?;
+    let mut tx = TxEip1559 {
+        chain_id: CHAIN_ID,
+        nonce,
+        gas_limit: 300_000,
+        max_fee_per_gas: max_fee,
+        max_priority_fee_per_gas: priority,
+        to: alloy::primitives::TxKind::Call(faucet_addr),
+        value: U256::ZERO,
+        access_list: Default::default(),
+        input: calldata.into(),
+    };
+    let sig = signer.sign_transaction_sync(&mut tx)?;
+    let envelope = TxEnvelope::from(tx.into_signed(sig));
+    let mut raw = Vec::new();
+    envelope.encode_2718(&mut raw);
+
+    let hash = rpc_call(&http, &rpc, "eth_sendRawTransaction",
+        json!([format!("0x{}", hex::encode(&raw))])).await?;
+    let hash = hash.as_str().unwrap_or("").to_string();
+    println!("tx: {hash}");
+    println!("waiting for confirmation…");
+    wait_mined(&http, &rpc, &hash).await?;
+
+    let bal = erc20_balance(&http, &rpc, &usdt, &addr).await?;
+    println!("✓ minted — {addr} now has {} USDT", decimal(bal, 6));
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // mint-usdt subcommand: derive key from MNEMONIC and mint via Aave faucet
+    if env::args().any(|a| a == "--mint-usdt") {
+        return cmd_mint_usdt().await;
+    }
+
     let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DB.into());
     let secrets_key = env::var("SECRETS_KEY").context("SECRETS_KEY required")?;
-    let funder_hex = env::var("FUNDER_KEY").context("FUNDER_KEY required")?;
     let payee = env::var("PAYEE_ADDRESS")
         .context("PAYEE_ADDRESS required")?
         .to_ascii_lowercase();
@@ -311,8 +393,7 @@ async fn main() -> Result<()> {
     let fee = (gross * 25 / 10_000).max(5_000_000);
     let net = gross.saturating_sub(fee);
 
-    let funder_signer =
-        PrivateKeySigner::from_slice(&hex::decode(funder_hex.trim_start_matches("0x"))?)?;
+    let funder_signer = signer_from_env()?;
     let funder_addr = format!("{:#x}", funder_signer.address());
 
     let http = reqwest::Client::new();
@@ -392,11 +473,11 @@ async fn main() -> Result<()> {
         "INSERT INTO otc_public_offers
            (id, actor, seller_ever, body, idempotency_key, expires_at)
          VALUES ($1,'https://e2e.local/actors/seller',$2,
-                 $3::jsonb,$4,now()+interval '1 day')",
+                 $3,$4,now()+interval '1 day')",
         &[
             &offer_id,
             &fake_ever,
-            &json!({"direction":"sell","ever_amount":"1","usdt_amount":amount_str}).to_string(),
+            &json!({"direction":"sell","ever_amount":"1","usdt_amount":amount_str}),
             &format!("e2e-offer-{offer_id}"),
         ],
     )
@@ -407,7 +488,7 @@ async fn main() -> Result<()> {
         "usdt_units": gross.to_string(),
         "usdt_payee": payee,
         "usdt_payer": funder_addr,
-        "stablecoin_network": "ethereum",
+        "stablecoin_network": "sepolia",
         "stablecoin_contract": usdt,
         "temp_wallet": { "token": usdt, "asset_id": null },
         "fee_policy": {
@@ -443,7 +524,7 @@ async fn main() -> Result<()> {
     db.execute(
         "INSERT INTO otc_temp_wallets
            (id, trade_id, role, chain, address, derivation_index, salt, key_ciphertext)
-         VALUES ($1,$2,'usd','ethereum',$3,$4,$5,$6)",
+         VALUES ($1,$2,'usd','sepolia',$3,$4,$5,$6)",
         &[
             &usd_in_id,
             &trade_id,
