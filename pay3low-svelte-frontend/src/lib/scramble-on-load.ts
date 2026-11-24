@@ -29,6 +29,19 @@ export const scramblingNodes = new WeakSet<Text>();
 /** The load pass waits for the startup animation on the product page. */
 export const introFinished = writable(true);
 
+const INTRO_DONE_KEY = "pay3flow.intro.done";
+
+/** Mark the startup animation as permanently finished for this browser session. */
+export function markIntroDone() {
+  try { sessionStorage.setItem(INTRO_DONE_KEY, "1"); } catch { /* ignore */ }
+  introFinished.set(true);
+}
+
+/** Returns true if the animation was already played in this session. */
+export function wasIntroDone(): boolean {
+  try { return sessionStorage.getItem(INTRO_DONE_KEY) === "1"; } catch { return false; }
+}
+
 export function countLetters(value: string) {
   let total = 0;
   for (const char of value) if (LETTER.test(char)) total++;

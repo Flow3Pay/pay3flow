@@ -10,14 +10,14 @@
   import { COMMUNITY_URL, PROJECT_URL, SITE_URL, homeContent } from "$lib/home-content";
   import BelarusP2pWarning from "$lib/components/BelarusP2pWarning.svelte";
   import { generatePuzzleBackground } from "$lib/puzzle-background";
-  import { introFinished } from "$lib/scramble-on-load";
+  import { introFinished, markIntroDone, wasIntroDone } from "$lib/scramble-on-load";
   import { localize, locale, t } from "$lib/i18n";
   let guideActive = false;
   let otcActive = false;
   let startupPlaying = false;
   let startupCompleted = false;
   let startupMode: "swap" | "otc" = "swap";
-  function finishStartup() { startupPlaying = false; startupCompleted = true; introFinished.set(true); }
+  function finishStartup() { startupPlaying = false; startupCompleted = true; markIntroDone(); }
   let OtcWorkspace: typeof OtcWorkspaceType | null = null;
   let swapHref = "/#/swap";
   let otcPreview: OtcPreview | null = null;
@@ -40,7 +40,7 @@
   }
   onMount(() => {
     startupMode = /^#\/otc(?:[/?]|$)/.test(window.location.hash) ? "otc" : "swap";
-    startupCompleted = Boolean(parseExchangeHash(window.location.hash)?.guide) || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    startupCompleted = wasIntroDone() || Boolean(parseExchangeHash(window.location.hash)?.guide) || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     startupPlaying = !startupCompleted;
     if (startupPlaying) introFinished.set(false);
     void syncProductPage();
