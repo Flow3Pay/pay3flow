@@ -1,0 +1,1 @@
+https://asset-metadata-service-production.s3.amazonaws.com/asset_icons/92e7d2cd979d6bcd8627b74c19c51cc157e25585df3f8c728daf941aeee64b9d.png
