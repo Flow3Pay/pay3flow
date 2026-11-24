@@ -4,9 +4,6 @@ use std::collections::BTreeMap;
 
 pub(crate) const USDT: &str = "0xdac17f958d2ee523a2206206994597c13d831ec7";
 pub(crate) const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
-/// Sepolia testnet USDT – Aave faucet token used for integration tests.
-pub(crate) const USDT_SEPOLIA: &str = "0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0";
-pub(crate) const CHAIN_ID_SEPOLIA: u64 = 11_155_111;
 pub(crate) const PROFILE: &str = "pay3flow-otc-fep0837-v1";
 
 /// Direction of the stablecoin leg relative to the desk.
@@ -304,19 +301,7 @@ impl Config {
     }
     fn check_evm_network(&self, chain_id: u64, contract: &str) -> Result<()> {
         let canonical = super::wallet::address("ethereum", contract)?;
-        if canonical != contract {
-            return Err(invalid("OTC EVM contract address is not in canonical form"));
-        }
-        // Demo mode allows Sepolia for integration testing.
-        if self.demo && chain_id == CHAIN_ID_SEPOLIA {
-            if canonical != USDT_SEPOLIA {
-                return Err(invalid(
-                    "Sepolia demo must use the canonical Sepolia USDT contract",
-                ));
-            }
-            return Ok(());
-        }
-        if chain_id != 1 {
+        if canonical != contract || chain_id != 1 {
             return Err(invalid("OTC base network must be Ethereum mainnet"));
         }
         if canonical != USDT {
@@ -379,7 +364,6 @@ impl Config {
 pub(crate) fn evm_chain_id(network: &str) -> Option<u64> {
     match network {
         "ethereum" => Some(1),
-        "sepolia" => Some(CHAIN_ID_SEPOLIA),
         "optimism" => Some(10),
         "bnb-smart-chain" => Some(56),
         "gnosis" => Some(100),
@@ -699,38 +683,6 @@ mod config_tests {
         cfg.p2p_usdt_contract = Some(USDT.into());
         cfg.p2p_ethereum_chain_id = Some(8453);
         assert!(cfg.validate_network().is_err());
-    }
-
-    #[test]
-    fn demo_mode_allows_sepolia_with_its_usdt_contract() {
-        use super::{CHAIN_ID_SEPOLIA, USDT_SEPOLIA};
-        let mut cfg = Config {
-            demo: true,
-            ..Config::default()
-        };
-        // Sepolia chain id + canonical Sepolia USDT passes in demo mode.
-        cfg.ethereum_chain_id = CHAIN_ID_SEPOLIA;
-        cfg.usdt_contract = USDT_SEPOLIA.into();
-        cfg.p2p_ethereum_chain_id = Some(CHAIN_ID_SEPOLIA);
-        cfg.p2p_usdt_contract = Some(USDT_SEPOLIA.into());
-        assert!(cfg.validate_network().is_ok());
-        // Wrong contract on Sepolia is still rejected.
-        cfg.usdt_contract = USDT.into();
-        assert!(cfg.validate_network().is_err());
-        // Mainnet chain id with Sepolia contract is rejected.
-        cfg.ethereum_chain_id = 1;
-        cfg.usdt_contract = USDT_SEPOLIA.into();
-        assert!(cfg.validate_network().is_err());
-        // Sepolia without demo=true is rejected.
-        let non_demo = Config {
-            demo: false,
-            ethereum_chain_id: CHAIN_ID_SEPOLIA,
-            usdt_contract: USDT_SEPOLIA.into(),
-            ..Config::default()
-        };
-        assert!(non_demo.validate_network().is_err());
-        // evm_chain_id recognises sepolia by name.
-        assert_eq!(evm_chain_id("sepolia"), Some(CHAIN_ID_SEPOLIA));
     }
 
     #[test]
