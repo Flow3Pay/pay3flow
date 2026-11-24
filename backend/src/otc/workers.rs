@@ -7,6 +7,13 @@ impl Service {
             if let Err(error) = self.p2p_tick().await {
                 tracing::warn!(error=%error,"otc.p2p.tick_failed");
             }
+        } else if self.cfg.temp_wallets {
+            // p2p_tick is not running (demo/testnet or public offers disabled),
+            // but the settlement worker still needs to provision treasuries and
+            // process active custody rows.
+            if let Err(error) = self.temp_settlement_tick().await {
+                tracing::warn!(error=%error,"otc.p2p.temp_settlement_failed");
+            }
         }
         if !self.cfg.enabled {
             let pending = repo::workers::open_trades(&self.pool.get().await?).await?;
