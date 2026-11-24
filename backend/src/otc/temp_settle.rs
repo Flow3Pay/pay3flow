@@ -742,10 +742,13 @@ impl Service {
         client: &deadpool_postgres::Client,
         chain: &str,
     ) -> Result<repo::temp_wallets::TreasuryWallet> {
-        if let Some(treasury) = repo::temp_wallets::treasury(client, chain).await? {
+        // Normalize chain to its canonical id (e.g. "sepolia" → "ethereum") so
+        // testnet wallets share the same treasury row as their EVM family.
+        let parsed = temp_wallet::Chain::parse(chain)?;
+        let canonical = parsed.id();
+        if let Some(treasury) = repo::temp_wallets::treasury(client, canonical).await? {
             return Ok(treasury);
         }
-        let parsed = temp_wallet::Chain::parse(chain)?;
         let material = WalletMaterial::generate(parsed)?;
         let sealed = temp_wallet::seal(&self.secrets_key, material.seed())?;
         repo::temp_wallets::insert(
@@ -753,7 +756,7 @@ impl Service {
             &uuid::Uuid::new_v4(),
             None,
             "treasury",
-            parsed.id(),
+            canonical,
             &material.address()?,
             material.derivation_index(),
             &sealed.salt,
@@ -761,7 +764,7 @@ impl Service {
             None,
         )
         .await?;
-        repo::temp_wallets::treasury(client, chain)
+        repo::temp_wallets::treasury(client, canonical)
             .await?
             .ok_or_else(|| invalid("the treasury wallet could not be provisioned"))
     }
