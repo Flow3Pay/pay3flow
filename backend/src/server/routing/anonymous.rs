@@ -39,7 +39,8 @@ pub async fn register(
         .await
         .map_err(AppError::from)?;
     if is_new {
-        notify_new_user(&state, request.anonymous_id, client_ip(&headers));
+        let ua = user_agent(&headers);
+        notify_new_user(&state, request.anonymous_id, client_ip(&headers), ua);
     }
     Ok(Json(RegisterResponse {
         anonymous_id: request.anonymous_id,
@@ -61,14 +62,22 @@ pub async fn record_request(pool: &DbPool, anonymous_id: Uuid) -> anyhow::Result
     Ok(is_new)
 }
 
-fn notify_new_user(state: &AppState, anonymous_id: Uuid, ip: Option<IpAddr>) {
+fn notify_new_user(
+    state: &AppState,
+    anonymous_id: Uuid,
+    ip: Option<IpAddr>,
+    user_agent: Option<String>,
+) {
     let Some(bot) = state.telegram.clone() else {
         return;
     };
 
     tokio::spawn(async move {
         let region = resolve_region(ip).await;
-        if let Err(error) = bot.notify_new_user(anonymous_id, &region).await {
+        if let Err(error) = bot
+            .notify_new_user(anonymous_id, &region, user_agent.as_deref())
+            .await
+        {
             tracing::warn!(%error, "Telegram new-user notification failed");
         }
     });
@@ -122,6 +131,13 @@ async fn resolve_region(ip: Option<IpAddr>) -> String {
     }
 }
 
+fn user_agent(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
+
 /// Prefer headers commonly set to the original client address by a trusted
 /// edge proxy; use the first forwarded hop only as a fallback.
 fn client_ip(headers: &HeaderMap) -> Option<IpAddr> {
@@ -167,8 +183,9 @@ pub async fn track_request(
     if request.uri().path() != "/api/anonymous/register" {
         if let Some(anonymous_id) = request_anonymous_id(&request) {
             let ip = client_ip(request.headers());
+            let ua = user_agent(request.headers());
             match record_request(&state.pool, anonymous_id).await {
-                Ok(true) => notify_new_user(&state, anonymous_id, ip),
+                Ok(true) => notify_new_user(&state, anonymous_id, ip, ua),
                 Ok(false) => {}
                 Err(error) => tracing::warn!(error = %error, "anonymous request accounting failed"),
             }
