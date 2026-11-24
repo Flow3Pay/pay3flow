@@ -35,6 +35,8 @@
   import { formatTokenMarketValue, formatUsdAmount, formatUsdMarketValue, sanitizeDecimalInput, tokenAmountForUsd } from "$lib/usd-amount";
   import NetworkPicker from "./NetworkPicker.svelte";
   import ScrambleHeadline from "./ScrambleHeadline.svelte";
+  import { wallets } from "$lib/wallet-session";
+  import { readWalletBalance, COMMON_TOKEN_DECIMALS } from "$lib/wallet-execution";
 
   export let onGuideChange: (active: boolean) => void = () => {};
   export let guideActive = false;
@@ -645,6 +647,29 @@
   $: sourceUsdPrice = sourceMethod?.kind === "wallet" ? marketPrices[selectedSourceCurrency] : undefined;
   $: sourceUsdAvailable = typeof sourceUsdPrice === "number" && Number.isFinite(sourceUsdPrice) && sourceUsdPrice > 0;
   $: if (!sourceUsdAvailable && sourceAmountUsd) { sourceAmountUsd = false; sourceUsdEntry = ""; }
+
+  // Wallet balance for the Max button — read whenever the source wallet or network changes.
+  let sourceWalletBalance: string | null = null;
+  let sourceWalletBalanceKey = "";
+  $: {
+    const wallet = sourceMethod?.kind === "wallet" ? $wallets[sourceMethod.currency === "EVER" ? "everscale" : (sourceNetwork?.id === "near" ? "near" : sourceNetwork?.id === "tron" ? "tron" : "evm")] : undefined;
+    const key = wallet ? `${wallet.address}:${selectedSourceCurrency}:${sourceNetwork?.id ?? ""}` : "";
+    if (key !== sourceWalletBalanceKey) {
+      sourceWalletBalanceKey = key;
+      sourceWalletBalance = null;
+      if (wallet && sourceMethod?.kind === "wallet" && sourceNetwork) {
+        const dec = COMMON_TOKEN_DECIMALS[selectedSourceCurrency.toUpperCase()] ?? 18;
+        void readWalletBalance(wallet, sourceNetwork.id, null, dec).then(v => {
+          if (sourceWalletBalanceKey === key) sourceWalletBalance = v;
+        });
+      }
+    }
+  }
+
+  function applySourceMax() {
+    if (!sourceWalletBalance) return;
+    updateSourceAmount(sourceWalletBalance);
+  }
   $: displayedSourceUsdValue = sourceUsdAvailable ? calculateMarketUsd(displayedSourceAmount, sourceUsdPrice) : null;
   $: displayedSourceInput = sourceAmountUsd && sourceUsdAvailable
     ? (sourceAmountFocused && sourceUsdEntry ? sourceUsdEntry : formatUsdAmount(displayedSourceUsdValue))
@@ -1355,7 +1380,7 @@
 
       <div class="moneyStack">
       <div class="moneyPanel moneyPanelSource exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateSourceAmount(event.currentTarget.value)} aria-label={sourceAmountUsd && sourceUsdAvailable ? t("Amount to send in USD", {}, activeLocale) : t("Amount to send", {}, activeLocale)} /><div class="marketMeta"><span class="marketValue" aria-label={sourceAmountUsd && sourceUsdAvailable ? t("Approximate token amount", {}, activeLocale) : marketUsd.source === null ? undefined : t("Approximate USD market value", {}, activeLocale)}>{#if sourceAmountUsd && sourceUsdAvailable}{formatTokenMarketValue(Number(displayedSourceAmount.replace(",", ".")), selectedSourceCurrency)}{:else}{marketUsd.source === null ? "" : formatMarketUsd(marketUsd.source)}{/if}</span>{#if sourceMethod?.kind === "wallet"}<button type="button" class="usdToggle" class:usdToggleActive={sourceAmountUsd} aria-pressed={sourceAmountUsd} disabled={!sourceUsdAvailable} title={t("Toggle USD amount input", {}, activeLocale)} aria-label={t("Toggle USD amount input", {}, activeLocale)} on:click={toggleSourceUsd}>USD</button>{/if}</div></div>
+        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateSourceAmount(event.currentTarget.value)} aria-label={sourceAmountUsd && sourceUsdAvailable ? t("Amount to send in USD", {}, activeLocale) : t("Amount to send", {}, activeLocale)} /><div class="marketMeta"><span class="marketValue" aria-label={sourceAmountUsd && sourceUsdAvailable ? t("Approximate token amount", {}, activeLocale) : marketUsd.source === null ? undefined : t("Approximate USD market value", {}, activeLocale)}>{#if sourceAmountUsd && sourceUsdAvailable}{formatTokenMarketValue(Number(displayedSourceAmount.replace(",", ".")), selectedSourceCurrency)}{:else}{marketUsd.source === null ? "" : formatMarketUsd(marketUsd.source)}{/if}</span>{#if sourceMethod?.kind === "wallet"}<button type="button" class="usdToggle" class:usdToggleActive={sourceAmountUsd} aria-pressed={sourceAmountUsd} disabled={!sourceUsdAvailable} title={t("Toggle USD amount input", {}, activeLocale)} aria-label={t("Toggle USD amount input", {}, activeLocale)} on:click={toggleSourceUsd}>USD</button>{/if}{#if sourceMethod?.kind === "wallet" && sourceWalletBalance}<button type="button" class="usdToggle" title={t("Use full wallet balance", {}, activeLocale)} aria-label={t("Use full wallet balance", {}, activeLocale)} on:click={applySourceMax}>Max</button>{/if}</div></div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>

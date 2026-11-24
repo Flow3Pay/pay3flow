@@ -589,6 +589,64 @@ export async function hasExecutionFunds(execution: RouteExecution, wallet: Conne
   return balance >= required;
 }
 
+/**
+ * Common token decimals by ticker. Used by readWalletBalance when no on-chain
+ * lookup is performed. 18 is the EVM/ERC-20 default.
+ */
+export const COMMON_TOKEN_DECIMALS: Record<string, number> = {
+  ETH: 18, BNB: 18, MATIC: 18, AVAX: 18, ARB: 18, OP: 18, CRO: 18,
+  USDT: 6, USDC: 6, DAI: 18, FDUSD: 18, BUSD: 18, TUSD: 18, USDС: 6,
+  WBTC: 8, BTC: 8, CBBTC: 8, WBETH: 18, STETH: 18,
+  LINK: 18, UNI: 18, AAVE: 18, CRV: 18, "1INCH": 18, GNK: 18,
+  SOL: 9, TRX: 6, NEAR: 24, TON: 9, SUI: 9, APT: 8, XRP: 6,
+  EVER: 9, VENOM: 9,
+  RLUSD: 6, USDE: 18, USD1: 18, GUSD: 2, CSPR: 9,
+};
+
+/**
+ * Read the wallet balance for a given token on a given network.
+ * Returns the balance as a decimal string (e.g. "1.5"), or null on any error.
+ * Pass token as a contract address for ERC-20/TRC-20, or null/undefined for the native coin.
+ */
+export async function readWalletBalance(
+  wallet: ConnectedWallet,
+  network: string,
+  token: string | null | undefined,
+  decimals: number,
+): Promise<string | null> {
+  try {
+    if (wallet.family === "tron") {
+      const web = await ensureTronMainnet(wallet.provider);
+      const raw = !token || isNativeToken(token)
+        ? await web.trx.getBalance(wallet.address)
+        : await (await web.contract(erc20Abi, tronAddress(web, token))).balanceOf(wallet.address).call();
+      return atomicToDecimal(BigInt(raw.toString()).toString(), decimals);
+    }
+    if (wallet.family === "near") {
+      const bal = await nearBalance(asNear(wallet), token && !isNativeToken(token) ? token : undefined);
+      return atomicToDecimal(bal.toString(), decimals);
+    }
+    if (isExtraWallet(wallet)) return null;
+    const evm = asEvm(wallet);
+    await ensureEvmChain(evm);
+    const { getBalance, readContract } = await import("@wagmi/core");
+    if (!token || isNativeToken(token)) {
+      const bal = await getBalance(evm.config as Parameters<typeof getBalance>[0], { address: evm.address, chainId: evm.chainId });
+      return atomicToDecimal(bal.value.toString(), decimals);
+    }
+    const bal = await readContract(evm.config as Parameters<typeof readContract>[0], {
+      address: token as Address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [evm.address],
+      chainId: evm.chainId,
+    });
+    return atomicToDecimal((bal as bigint).toString(), decimals);
+  } catch {
+    return null;
+  }
+}
+
 export async function executeWalletAction(execution: RouteExecution, wallet: ConnectedWallet): Promise<
   | { reference: string; kind: "transaction_hash" | "order_uid" }
   | { kind: "approval_confirmed" }
