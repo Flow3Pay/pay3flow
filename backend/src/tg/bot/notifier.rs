@@ -28,11 +28,13 @@ impl BotNotifier {
         &self,
         anonymous_id: Uuid,
         region: &str,
+        ip: Option<&str>,
         user_agent: Option<&str>,
     ) -> Result<()> {
+        let ip_line = ip.unwrap_or("неизвестен");
         let device = user_agent.unwrap_or("неизвестно");
         let message = format!(
-            "Новый пользователь\nАнонимный ID: {anonymous_id}\nРегион: {region}\nУстройство: {device}"
+            "Новый пользователь\nАнонимный ID: {anonymous_id}\nРегион: {region}\nIP: {ip_line}\nУстройство: {device}"
         );
         let avatar = identicon_svg(&anonymous_id.to_string());
 

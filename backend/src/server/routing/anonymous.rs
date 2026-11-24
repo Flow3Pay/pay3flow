@@ -74,8 +74,14 @@ fn notify_new_user(
 
     tokio::spawn(async move {
         let region = resolve_region(ip).await;
+        let ip_str = ip.map(|a| a.to_string());
         if let Err(error) = bot
-            .notify_new_user(anonymous_id, &region, user_agent.as_deref())
+            .notify_new_user(
+                anonymous_id,
+                &region,
+                ip_str.as_deref(),
+                user_agent.as_deref(),
+            )
             .await
         {
             tracing::warn!(%error, "Telegram new-user notification failed");
