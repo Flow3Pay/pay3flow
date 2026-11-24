@@ -60,7 +60,7 @@ pub(crate) enum Chain {
 impl Chain {
     pub(crate) fn parse(id: &str) -> Result<Self> {
         match id.trim().to_ascii_lowercase().as_str() {
-            "eth" | "ethereum" => Ok(Self::Ethereum),
+            "eth" | "ethereum" | "sepolia" => Ok(Self::Ethereum),
             "polygon" | "polygon-pos" => Ok(Self::PolygonPos),
             "avalanche" | "avalanche-c" => Ok(Self::AvalancheC),
             "tron" => Ok(Self::Tron),
