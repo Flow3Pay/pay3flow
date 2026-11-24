@@ -105,7 +105,14 @@ impl Service {
             return Err(Error::Disabled);
         }
         let paused = crate::otc::repo::metrics::control_paused(&client).await?;
-        let unhealthy = crate::otc::repo::metrics::unhealthy_observers(&client).await?;
+        // In demo mode the Ethereum observer does not run (tick skips it), so
+        // last_scan is never updated.  Skip the observer-health gate so it does
+        // not permanently block the settlement worker on a demo/testnet node.
+        let unhealthy = if self.cfg.demo {
+            0
+        } else {
+            crate::otc::repo::metrics::unhealthy_observers(&client).await?
+        };
         if paused || unhealthy > 0 {
             return Err(Error::Disabled);
         }
