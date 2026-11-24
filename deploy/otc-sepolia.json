@@ -6,7 +6,7 @@
   "matcher_actor": "https://lefine.pro/actors/otc-1c1b827a551c4c2aae3c7f484cac8f33",
   "desk_actor": "https://lefine.pro/actors/otc-1c1b827a551c4c2aae3c7f484cac8f33",
   "desk_name": "Lefine OTC Desk (Sepolia test)",
-  "ethereum_rpc": ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.gateway.tenderly.co"],
+  "ethereum_rpc": ["https://ethereum-sepolia-rpc.publicnode.com", "https://ethereum-sepolia.publicnode.com"],
   "everscale_graphql": ["https://mainnet.evercloud.dev/graphql", "https://mainnet.evercloud.dev/graphql?source=otc"],
   "everwallet_code_hashes": ["3ba6528ab2694c118180aa3bd10dd19ff400b909ab4dcf58fc69925b2c7b12a6"],
   "ever_resource": "https://pay3flow.lefine.pro/assets/everscale-42-native-ever",
@@ -41,5 +41,5 @@
   "temp_wallets": true,
   "p2p_ethereum_chain_id": 11155111,
   "p2p_usdt_contract": "0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0",
-  "p2p_ethereum_rpc": ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.gateway.tenderly.co"]
+  "p2p_ethereum_rpc": ["https://ethereum-sepolia-rpc.publicnode.com", "https://ethereum-sepolia.publicnode.com"]
 }

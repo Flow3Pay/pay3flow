@@ -445,13 +445,24 @@ async fn main() -> Result<()> {
         .as_ref()
         .map(|r| r.get::<_, String>("address"))
         .context("treasury wallet not found — start the backend first to provision it")?;
-    let treasury_eth = eth_balance(&http, &rpc_urls[0], &treasury_addr).await?;
+    let treasury_eth  = eth_balance(&http, &rpc_urls[0], &treasury_addr).await?;
+    let treasury_usdt = erc20_balance(&http, &rpc_urls[0], &usdt, &treasury_addr).await?;
     println!(
-        "    treasury: {treasury_addr}  ETH: {}",
-        decimal(treasury_eth, 18)
+        "    treasury: {treasury_addr}  ETH: {}  USDT: {}",
+        decimal(treasury_eth, 18), decimal(treasury_usdt, 6)
     );
     if treasury_eth < 1_000_000_000_000_000 {
         bail!("treasury has less than 0.001 ETH — fund it before running the test");
+    }
+    // Treasury needs USDT to front same-network payouts. Top it up if needed.
+    if treasury_usdt < gross {
+        let needed = gross.saturating_sub(treasury_usdt);
+        println!("    treasury USDT low — sending {} USDT from funder…", decimal(needed, 6));
+        let nonce = eth_nonce(&http, &rpc_urls[0], &funder_addr).await?;
+        let htx = send_erc20(&http, &rpc_urls[0], &funder_signer, &usdt, &treasury_addr, needed, nonce).await?;
+        println!("    tx: {htx}");
+        wait_mined(&http, &rpc_urls[0], &htx).await?;
+        println!("    confirmed ✓  treasury now has enough USDT");
     }
 
     // ── [3] generate temp wallets ──────────────────────────────────────────────
