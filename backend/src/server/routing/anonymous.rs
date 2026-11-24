@@ -16,9 +16,11 @@ use crate::db::{repo, DbPool};
 const ANONYMOUS_USER_HEADER: &str = "x-anonymous-user-id";
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct RegisterRequest {
     pub anonymous_id: Uuid,
+    /// Coarse region string resolved on the client side (e.g. "Berlin, Germany").
+    /// When present, the server skips its own IP-based geo lookup.
+    pub region: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -40,7 +42,13 @@ pub async fn register(
         .map_err(AppError::from)?;
     if is_new {
         let ua = user_agent(&headers);
-        notify_new_user(&state, request.anonymous_id, client_ip(&headers), ua);
+        notify_new_user(
+            &state,
+            request.anonymous_id,
+            client_ip(&headers),
+            request.region,
+            ua,
+        );
     }
     Ok(Json(RegisterResponse {
         anonymous_id: request.anonymous_id,
@@ -66,6 +74,7 @@ fn notify_new_user(
     state: &AppState,
     anonymous_id: Uuid,
     ip: Option<IpAddr>,
+    region: Option<String>,
     user_agent: Option<String>,
 ) {
     let Some(bot) = state.telegram.clone() else {
@@ -73,7 +82,10 @@ fn notify_new_user(
     };
 
     tokio::spawn(async move {
-        let region = resolve_region(ip).await;
+        let region = match region {
+            Some(r) if !r.trim().is_empty() => r,
+            _ => resolve_region(ip).await,
+        };
         let ip_str = ip.map(|a| a.to_string());
         if let Err(error) = bot
             .notify_new_user(
@@ -191,7 +203,7 @@ pub async fn track_request(
             let ip = client_ip(request.headers());
             let ua = user_agent(request.headers());
             match record_request(&state.pool, anonymous_id).await {
-                Ok(true) => notify_new_user(&state, anonymous_id, ip, ua),
+                Ok(true) => notify_new_user(&state, anonymous_id, ip, None, ua),
                 Ok(false) => {}
                 Err(error) => tracing::warn!(error = %error, "anonymous request accounting failed"),
             }

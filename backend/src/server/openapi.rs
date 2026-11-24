@@ -81,7 +81,8 @@ fn components() -> Value {
                 "required": ["anonymous_id"],
                 "additionalProperties": false,
                 "properties": {
-                    "anonymous_id": { "type": "string", "format": "uuid", "description": "Random browser-generated pseudonymous ID kept in localStorage." }
+                    "anonymous_id": { "type": "string", "format": "uuid", "description": "Random browser-generated pseudonymous ID kept in localStorage." },
+                    "region": { "type": "string", "description": "Optional coarse region resolved on the client side (e.g. \"Berlin, Germany\"). When supplied the server skips its own IP geo lookup.", "example": "Berlin, Germany" }
                 }
             },
             "AnonymousUser": {

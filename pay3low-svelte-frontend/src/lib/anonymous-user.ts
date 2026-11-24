@@ -38,10 +38,36 @@ export function anonymousHeaders(init?: HeadersInit): Headers {
 export async function registerAnonymousUser(anonymousId = getAnonymousUserId()): Promise<void> {
   if (!anonymousId) return;
 
+  const region = await resolveRegion();
+
   const response = await fetch(apiUrl("/api/anonymous/register"), {
     method: "POST",
     headers: anonymousHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ anonymous_id: anonymousId }),
+    body: JSON.stringify({ anonymous_id: anonymousId, region }),
   });
   if (!response.ok) throw new Error(`Anonymous registration failed (${response.status})`);
+}
+
+/**
+ * Resolve a coarse region string using the browser's own IP (not the server's).
+ * Returns null on any failure so it never blocks registration.
+ */
+async function resolveRegion(): Promise<string | null> {
+  try {
+    const response = await fetch(
+      "https://ipwho.is/?fields=success,city,region,country",
+      { signal: AbortSignal.timeout(4000) },
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data?.success) return null;
+    const parts: string[] = [data.city, data.region, data.country].filter(
+      (p): p is string => typeof p === "string" && p.trim().length > 0,
+    );
+    // deduplicate adjacent identical values
+    const unique = parts.filter((p, i) => i === 0 || p !== parts[i - 1]);
+    return unique.length > 0 ? unique.join(", ") : null;
+  } catch {
+    return null;
+  }
 }
