@@ -223,7 +223,7 @@
 .languageFlag { display: block; flex: 0 0 auto; border-radius: 4px; }
 .languageChevron { transition: transform .18s ease; }
 .languageChevron.open { transform: rotate(180deg); }
-.languageMenu { position: absolute; top: calc(100% + 9px); right: 0; z-index: 80; width: 190px; padding: 8px; border: 1px solid var(--color-border); border-radius: 20px; background: var(--color-paper); animation: languageIn .18s ease-out; }
+.languageMenu { position: absolute; top: calc(100% + 9px); right: 0; z-index: 80; width: 190px; padding: 8px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-paper); animation: languageIn .18s ease-out; }
 .languageMenu button { display: flex; width: 100%; min-height: 44px; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; text-align: left; font-size: 13px; transition: background .15s ease; }
 .languageMenu button:hover, .languageMenu button:focus-visible, .languageMenu button[aria-selected="true"] { background: var(--color-accent-soft); }
 .languageCheck { margin-left: auto; color: var(--color-accent-text); }
