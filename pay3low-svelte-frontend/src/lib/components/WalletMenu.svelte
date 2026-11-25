@@ -5,6 +5,7 @@
   import { fade, fly } from "svelte/transition";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { locale, t } from "$lib/i18n";
+  import { hotkey } from "$lib/shortcuts";
   import { assetIcon } from "$lib/icons";
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import { identiconDataUri } from "$lib/otc/identicon";
@@ -219,7 +220,7 @@ import { chainIdForNetwork, evmWalletChoices, extraExecutionWalletChoices, usesA
 
 <svelte:window on:keydown={keydown} />
 <div class="walletMenu">
-  <button class="walletToggle" type="button" bind:this={toggle} disabled={$venueWalletMenu?.disabled ?? false} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={$venueWalletMenu ? undefined : open} aria-controls={$venueWalletMenu ? undefined : "wallet-connections"} on:click={() => { error = ""; query = ""; if ($venueWalletMenu) $venueWalletMenu.onOpen(); else openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
+  <button class="walletToggle" type="button" bind:this={toggle} disabled={$venueWalletMenu?.disabled ?? false} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={$venueWalletMenu ? undefined : open} aria-controls={$venueWalletMenu ? undefined : "wallet-connections"} use:hotkey={{ keys: "alt+w", allowInInputs: true, global: true, run: () => open ? closeWalletDialog() : toggle?.click() }} on:click={() => { error = ""; query = ""; if ($venueWalletMenu) $venueWalletMenu.onOpen(); else openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
     {#if avatar}<img class="walletAvatar" src={avatar} width="20" height="20" alt="" aria-hidden="true" />{/if}
     <img class="walletIcon" src="/icons/ui/wallet-connect.svg" width="18" height="18" alt="" aria-hidden="true" />
     <span>{count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")}</span>

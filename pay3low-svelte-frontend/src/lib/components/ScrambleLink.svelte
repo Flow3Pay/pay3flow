@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { hotkey } from "$lib/shortcuts";
 
   export let href: string;
   export let label: string;
   export let active = false;
   export let current: "page" | undefined = undefined;
   export let onNavigate: ((event: MouseEvent) => void) | undefined = undefined;
+  /** Position in the header nav: Alt+1, Alt+2, … follows the rendered order. */
+  export let shortcutIndex = 0;
 
   const GLYPHS = "#%&*+=-_/\\<>[]{}?!$@0123456789";
   const STEP_MS = 22;
@@ -137,8 +140,8 @@
   $: if (label !== currentLabel && !running) setLabel(label);
 </script>
 
-<!-- The visible label is the accessible name, so the global icon tooltip would only repeat it. -->
-<a {href} class:active aria-current={current} aria-label={label} data-no-tooltip on:mouseenter={trigger} on:focus={trigger} on:click={(event) => onNavigate?.(event)}>
+<!-- The visible label is the accessible name, so the tooltip only adds the shortcut. -->
+<a {href} class:active aria-current={current} aria-label={label} data-tooltip="" use:hotkey={{ keys: shortcutIndex ? `alt+${shortcutIndex}` : "", allowInInputs: true, global: true }} on:mouseenter={trigger} on:focus={trigger} on:click={(event) => onNavigate?.(event)}>
   <span class="scrambleLabel" aria-hidden="true" bind:this={element}>{label}</span>
 </a>
 

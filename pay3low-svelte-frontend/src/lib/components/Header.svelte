@@ -4,7 +4,8 @@
   import WalletMenu from "./WalletMenu.svelte";
   import { tick, onDestroy } from "svelte";
   import { API_BASE_URL, apiUrl } from "$lib/api";
-  import { locale, setLocale, t, type Locale } from "$lib/i18n";
+  import { locale, setLocale, t, cycleLocale, type Locale } from "$lib/i18n";
+  import { hotkey } from "$lib/shortcuts";
   import { homeContent } from "$lib/home-content";
   import ScrambleLink from "./ScrambleLink.svelte";
   import { fly } from "svelte/transition";
@@ -98,6 +99,11 @@
     if (restoreFocus) languageButton?.focus();
   }
   function selectLanguage(language: Locale) { setLocale(language); closeLanguages(true); }
+  /** Ctrl+Alt+L switches the language without opening the picker. */
+  function cycleLanguage() {
+    closeLanguages();
+    setLocale(cycleLocale(activeLocale));
+  }
   function outsideLanguage(event: PointerEvent) {
     if (languageOpen && !languageWrap.contains(event.target as Node)) closeLanguages();
   }
@@ -168,7 +174,7 @@
 <header class="header">
   <div class="inner">
     <div class="menuWrap" bind:this={menuWrap} on:focusout={menuFocus}>
-      <button class="menuToggle" bind:this={menuToggle} type="button" aria-haspopup="menu" aria-controls="header-menu" aria-expanded={menuOpen} aria-label={t("Open menu", {}, activeLocale)} on:click={() => menuOpen ? closeMenu() : openMenu()}><img src={menuIcon} alt="" width="24" height="24" /></button>
+      <button class="menuToggle" bind:this={menuToggle} type="button" aria-haspopup="menu" aria-controls="header-menu" aria-expanded={menuOpen} aria-label={t("Open menu", {}, activeLocale)} use:hotkey={{ keys: ["alt+esc", "alt+m"], allowInInputs: true, global: true }} on:click={() => menuOpen ? closeMenu() : openMenu()}><img src={menuIcon} alt="" width="24" height="24" /></button>
       {#if menuOpen}
         <div id="header-menu" class="actionsPanel" bind:this={menuPanel} role="menu" aria-label={t("Menu", {}, activeLocale)} in:fly={{ y: -6, duration: menuDuration }} out:fly={{ y: -4, duration: menuDuration * 2 / 3 }}>
         <div class="actions">
@@ -182,19 +188,19 @@
       {/if}
     </div>
     <a class="brand" href={swapHref} aria-label="Pay3Flow"><img class="logo" src="/icons/assets/pay3flow-mark.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></a>
-    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><ScrambleLink href={swapHref} label="SWAP" active={activePage === "swap"} current={activePage === "swap" ? "page" : undefined} />
+    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><ScrambleLink href={swapHref} label="SWAP" shortcutIndex={1} active={activePage === "swap"} current={activePage === "swap" ? "page" : undefined} />
       <!-- Futures navigation paused by product decision; retain draft link for later.
       <ScrambleLink href="/futures" label={activeLocale === "ru" ? "ФЬЮЧЕРСЫ" : activeLocale === "hy" ? "ՖՅՈՒՉԵՐՍՆԵՐ" : "FUTURES"} active={activePage === "futures"} current={activePage === "futures" ? "page" : undefined} />
       -->
-      <ScrambleLink href={otcHref} label="OTC" active={activePage === "otc"} current={activePage === "otc" ? "page" : undefined} onNavigate={onOtcNavigate} /><ScrambleLink href="/trends" label={t("TRENDS", {}, activeLocale)} active={activePage === "trends"} current={activePage === "trends" ? "page" : undefined} /><ScrambleLink href="/providers" label={t("Platforms", {}, activeLocale).toLocaleUpperCase(activeLocale)} active={activePage === "providers"} current={activePage === "providers" ? "page" : undefined} /></nav>
+      <ScrambleLink href={otcHref} label="OTC" shortcutIndex={2} active={activePage === "otc"} current={activePage === "otc" ? "page" : undefined} onNavigate={onOtcNavigate} /><ScrambleLink href="/trends" label={t("TRENDS", {}, activeLocale)} shortcutIndex={3} active={activePage === "trends"} current={activePage === "trends" ? "page" : undefined} /><ScrambleLink href="/providers" label={t("Platforms", {}, activeLocale).toLocaleUpperCase(activeLocale)} shortcutIndex={4} active={activePage === "providers"} current={activePage === "providers" ? "page" : undefined} /></nav>
     <div class="utilityActions">
       <WalletMenu />
       <div class="languageWrap" bind:this={languageWrap} on:focusout={languageFocus}>
-        <button class="languageToggle" bind:this={languageButton} type="button" on:click={() => languageOpen ? closeLanguages() : openLanguages()} aria-label={t("Switch language", {}, activeLocale)} aria-haspopup="listbox" aria-controls="header-language-menu" aria-expanded={languageOpen}><svg class="languageGlobe" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2C17.523 2 22 6.477 22 12C22 17.523 17.523 22 12 22ZM9.71 19.667C8.72341 17.5743 8.15187 15.3102 8.027 13H4.062C4.25659 14.5389 4.89392 15.9882 5.89657 17.1717C6.89922 18.3552 8.22401 19.2221 9.71 19.667V19.667ZM10.03 13C10.181 15.439 10.878 17.73 12 19.752C13.1523 17.6766 13.8254 15.3695 13.97 13H10.03V13ZM19.938 13H15.973C15.8481 15.3102 15.2766 17.5743 14.29 19.667C15.776 19.2221 17.1008 18.3552 18.1034 17.1717C19.1061 15.9882 19.7434 14.5389 19.938 13V13ZM4.062 11H8.027C8.15187 8.68979 8.72341 6.42569 9.71 4.333C8.22401 4.77788 6.89922 5.64475 5.89657 6.8283C4.89392 8.01184 4.25659 9.4611 4.062 11V11ZM10.031 11H13.969C13.8248 8.6306 13.152 6.32353 12 4.248C10.8477 6.32345 10.1746 8.63052 10.03 11H10.031ZM14.29 4.333C15.2766 6.42569 15.8481 8.68979 15.973 11H19.938C19.7434 9.4611 19.1061 8.01184 18.1034 6.8283C17.1008 5.64475 15.776 4.77788 14.29 4.333V4.333Z" /></svg><svg class="languageChevron" class:open={languageOpen} width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></button>
+        <button class="languageToggle" bind:this={languageButton} type="button" on:click={() => languageOpen ? closeLanguages() : openLanguages()} aria-label={t("Switch language", {}, activeLocale)} aria-haspopup="listbox" aria-controls="header-language-menu" aria-expanded={languageOpen} use:hotkey={{ keys: "ctrl+alt+l", allowInInputs: true, global: true, run: cycleLanguage }}><svg class="languageGlobe" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2C17.523 2 22 6.477 22 12C22 17.523 17.523 22 12 22ZM9.71 19.667C8.72341 17.5743 8.15187 15.3102 8.027 13H4.062C4.25659 14.5389 4.89392 15.9882 5.89657 17.1717C6.89922 18.3552 8.22401 19.2221 9.71 19.667V19.667ZM10.03 13C10.181 15.439 10.878 17.73 12 19.752C13.1523 17.6766 13.8254 15.3695 13.97 13H10.03V13ZM19.938 13H15.973C15.8481 15.3102 15.2766 17.5743 14.29 19.667C15.776 19.2221 17.1008 18.3552 18.1034 17.1717C19.1061 15.9882 19.7434 14.5389 19.938 13V13ZM4.062 11H8.027C8.15187 8.68979 8.72341 6.42569 9.71 4.333C8.22401 4.77788 6.89922 5.64475 5.89657 6.8283C4.89392 8.01184 4.25659 9.4611 4.062 11V11ZM10.031 11H13.969C13.8248 8.6306 13.152 6.32353 12 4.248C10.8477 6.32345 10.1746 8.63052 10.03 11H10.031ZM14.29 4.333C15.2766 6.42569 15.8481 8.68979 15.973 11H19.938C19.7434 9.4611 19.1061 8.01184 18.1034 6.8283C17.1008 5.64475 15.776 4.77788 14.29 4.333V4.333Z" /></svg><svg class="languageChevron" class:open={languageOpen} width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></button>
         {#if languageOpen}<div class="languageMenu" id="header-language-menu" role="listbox" aria-label={t("Switch language", {}, activeLocale)}>{#each languages as language}<button type="button" role="option" tabindex="-1" aria-selected={activeLocale === language.locale} on:click={() => selectLanguage(language.locale)}><img class="languageFlag" src={`/icons/flags/${language.flag}.svg`} alt="" width="22" height="22" /><span lang={language.locale}>{language.name}</span>{#if activeLocale === language.locale}<span class="languageCheck" aria-hidden="true">✓</span>{/if}</button>{/each}</div>{/if}
       </div>
-      <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)}><img class="moonIcon" src={moonIcon} alt="" width="20" height="20" /><img class="sunIcon" src={sunIcon} alt="" width="20" height="20" /></button>
-      {#if shareState || shareUrl}<button type="button" class="shareButton" aria-label={t(shareTitle, {}, activeLocale)} title={t(shareTitle, {}, activeLocale)} aria-haspopup={shareHasDialog ? "dialog" : undefined} aria-expanded={shareHasDialog ? shareOpen : undefined} aria-busy={shareLoading} on:click={openShare}><img src="/icons/ui/share.svg" alt="" width="20" height="20" /></button>{/if}
+      <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)} use:hotkey={{ keys: "alt+t", allowInInputs: true, global: true }}><img class="moonIcon" src={moonIcon} alt="" width="20" height="20" /><img class="sunIcon" src={sunIcon} alt="" width="20" height="20" /></button>
+      {#if shareState || shareUrl}<button type="button" class="shareButton" aria-label={t(shareTitle, {}, activeLocale)} title={t(shareTitle, {}, activeLocale)} aria-haspopup={shareHasDialog ? "dialog" : undefined} aria-expanded={shareHasDialog ? shareOpen : undefined} aria-busy={shareLoading} use:hotkey={{ keys: "alt+backspace", global: true }} on:click={openShare}><img src="/icons/ui/share.svg" alt="" width="20" height="20" /></button>{/if}
       {#if shareMessage}<span class="shareMessage" role="status">{shareMessage}</span>{/if}
     </div>
   </div>

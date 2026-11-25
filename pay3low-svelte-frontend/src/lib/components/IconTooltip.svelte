@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
 
   let label = "";
+  let shortcut = "";
   let x = 0;
   let y = 0;
   let tooltip: HTMLDivElement;
@@ -24,6 +25,7 @@
     }
     trigger = null;
     label = "";
+    shortcut = "";
   }
   function scheduleHide() {
     clearTimeout(hideTimer);
@@ -37,6 +39,10 @@
     y = rect.bottom + 8;
     if (y + tip.height > window.innerHeight - 8) y = Math.max(8, rect.top - tip.height - 8);
   }
+  function resolveLabel(node: HTMLElement) {
+    if (node.hasAttribute("data-tooltip")) return node.getAttribute("data-tooltip") ?? "";
+    return node.getAttribute("aria-label") || node.getAttribute("title") || "";
+  }
   async function show(node: HTMLElement) {
     clearTimeout(hideTimer);
     if (trigger === node) return;
@@ -44,7 +50,11 @@
     trigger = node;
     previousDescription = node.getAttribute("aria-describedby");
     previousTitle = node.getAttribute("title");
-    label = node.getAttribute("data-tooltip") || node.getAttribute("aria-label") || previousTitle || "";
+    const name = resolveLabel(node);
+    const text = normalize(node.textContent);
+    // Never repeat the visible text: the shortcut hint is the only new information.
+    label = text && normalize(name) === text ? "" : name;
+    shortcut = node.getAttribute("data-shortcut") ?? "";
     node.removeAttribute("title");
     node.setAttribute("aria-describedby", [previousDescription, id].filter(Boolean).join(" "));
     await tick();
@@ -55,16 +65,19 @@
   }
   function candidate(target: EventTarget | null) {
     if (!(target instanceof Element)) return null;
-    const node = target.closest<HTMLElement>("button[aria-label], a[aria-label]");
+    const node = target.closest<HTMLElement>("button[aria-label], a[aria-label], [data-shortcut]");
     if (!node || node.matches(":disabled") || node.closest(".venueRow") || node.matches(".sheetHandle, .periodHandle")) return null;
     // Controls that opt out keep their accessible name for screen readers only.
     if (node.hasAttribute("data-no-tooltip")) return null;
+    const name = resolveLabel(node);
+    if (!name && !node.hasAttribute("data-shortcut")) return null;
+    // Explicit tooltips and shortcut hints always add information.
+    if (node.hasAttribute("data-shortcut") || node.hasAttribute("data-tooltip")) return node;
     // Text-labelled controls already explain themselves. Icon buttons and compact
     // language/currency controls need the longer accessible name on hover/focus.
-    if (node.hasAttribute("data-tooltip")) return node;
     if ((node.textContent?.trim().length ?? 0) > 3) return null;
     // A tooltip that only repeats the visible label adds nothing.
-    return normalize(node.getAttribute("aria-label")) === normalize(node.textContent) ? null : node;
+    return normalize(name) === normalize(node.textContent) ? null : node;
   }
   onMount(() => {
     const over = (event: PointerEvent) => {
@@ -106,11 +119,15 @@
   });
 </script>
 
-{#if label}
-  <div use:portal bind:this={tooltip} {id} role="tooltip" class="iconTooltip" style:left={`${x}px`} style:top={`${y}px`}>{label}</div>
+{#if label || shortcut}
+  <div use:portal bind:this={tooltip} {id} role="tooltip" class="iconTooltip" style:left={`${x}px`} style:top={`${y}px`}>
+    {#if label}<span>{label}</span>{/if}
+    {#if shortcut}<kbd>{shortcut}</kbd>{/if}
+  </div>
 {/if}
 
 <style>
-  .iconTooltip { position: fixed; z-index: 2000; max-width: min(280px, calc(100vw - 16px)); padding: 8px 12px; border-radius: 8px; background: var(--color-text); color: var(--color-paper); font-size: 12px; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
+  .iconTooltip { position: fixed; z-index: 2000; display: flex; align-items: center; gap: 8px; max-width: min(280px, calc(100vw - 16px)); padding: 8px 12px; border-radius: 8px; background: var(--color-text); color: var(--color-paper); font-size: 12px; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
+  .iconTooltip kbd { flex: 0 0 auto; padding: 1px 5px; border: 1px solid currentColor; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; white-space: nowrap; opacity: .85; }
   .iconTooltip::before { position: absolute; inset: -8px 0; z-index: -1; content: ""; }
 </style>
