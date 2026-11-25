@@ -137,6 +137,7 @@ GET  /api/payments/:id
 POST /api/providers/:provider/webhooks
 GET  /api/banks
 GET  /api/networks
+GET  /api/crypto-tokens
 GET  /api/providers
 GET  /api/exchange-pairs
 ```

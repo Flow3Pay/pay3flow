@@ -4,6 +4,7 @@ pub mod api;
 pub mod auth;
 pub mod b2b;
 pub mod banks;
+pub mod crypto_tokens;
 pub mod discovery;
 pub mod exchange;
 pub mod matcher;

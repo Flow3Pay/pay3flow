@@ -887,6 +887,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/crypto-tokens",
+        "get",
+        "List crypto token addresses",
+        "List cached token symbols with decimals and contract addresses per canonical network id. A null contract address marks the network's native coin. Clients use this to read wallet balances of the exact asset; empty until the first catalog refresh.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
         "/api/reference-rates",
         "get",
         "Get informational fiat reference rates",

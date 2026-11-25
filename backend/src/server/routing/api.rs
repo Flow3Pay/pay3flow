@@ -18,8 +18,9 @@ use crate::external_reviews;
 use crate::market_prices;
 use crate::server::openapi;
 use crate::server::routing::{
-    activitypub, anonymous, auth, b2b, banks, exchange, matcher, networks, oauth, p2p, pairs,
-    payments, payments_ws, providers, rates, referrals, route_executions, share_links, solver, ws,
+    activitypub, anonymous, auth, b2b, banks, crypto_tokens, exchange, matcher, networks, oauth,
+    p2p, pairs, payments, payments_ws, providers, rates, referrals, route_executions, share_links,
+    solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -160,6 +161,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/banks", get(banks::list))
         .route("/api/networks", get(networks::list))
+        .route("/api/crypto-tokens", get(crypto_tokens::list))
         .route("/api/market-prices", get(market_prices::market_prices))
         .route(
             "/api/reference-rates",
