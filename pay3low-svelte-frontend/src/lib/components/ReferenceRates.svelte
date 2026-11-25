@@ -88,7 +88,7 @@
     {#if crypto}
       {#if median}
         <div class="rateRow"><span><img class="rateIcon" src="/icons/ui/coinbase-pictogram.svg" alt="" width="14" height="14" />{t("Reference rate", {}, locale)} · 1 {from} = {formatReferenceRate(median.rate, locale)} {to}</span><span class="details">{t("Route median", {}, locale)} · {t("{count} samples", { count: median.sample_count }, locale)}</span></div>
-      {:else}<span class="details">{t("Rate available after route search", {}, locale)}</span>{/if}
+      {:else}{/if}
     {:else if loading}
       <span class="skeleton" role="status" aria-label={t("Loading reference rate", {}, locale)}></span>
     {:else}

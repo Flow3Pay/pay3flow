@@ -155,6 +155,9 @@ export function marketCandles(candles: ExchangeBar[] | null | undefined): Market
 export function sparseSeries(bars: { volume?: number }[]): boolean {
   if (!bars.length) return false;
   const traded = bars.filter(bar => (bar.volume ?? 0) > 0).length;
+  // All-zero volume means mark-synthesised candles (no real trading data yet).
+  // Those should stay as candles; only switch to area when real data is sparse.
+  if (traded === 0) return false;
   return traded * 2 < bars.length;
 }
 
