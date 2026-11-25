@@ -23,6 +23,7 @@
   import OtcDealModal from "./OtcDealModal.svelte";
   import OtcTradeTables from "./OtcTradeTables.svelte";
   import ScrambleHeadline from "../ScrambleHeadline.svelte";
+  import { hotkey } from "$lib/shortcuts";
   export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
   export let onShareUrlChange: (url: string) => void = () => {};
   export let introCompleted = true;
@@ -340,7 +341,7 @@
     <OtcMarketChart slot="chart" {trades} publicOffers={config?.public_offers_available && (saleEnabled || !trades.length) ? offerHistory : null} />
     <svelte:fragment slot="book">
       <section class="activityCard" id="otc-activity" aria-label={say("Trade activity", "Активность сделок")}>
-        <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")} use:activityIndicator={`${tab}:${$locale}:${activeTrades.length}`} style:--activity-motion={`${motionDuration}ms`}>{#each ["trades", "orders", "history"] as item}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} on:keydown={navigateTab} on:click={() => setTab(item as typeof tab)}>{item === "trades" ? config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска") : item === "orders" ? config?.public_offers_available ? say("My orders", "Мои заявки") : say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length + mine.filter(o => o.state === "open").length + p2pActiveCount}<span class="orderCount">{activeTrades.length + mine.filter(o => o.state === "open").length + p2pActiveCount}</span>{/if}</button>{/each}<span class="tabIndicator" aria-hidden="true"></span></div>
+        <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")} use:activityIndicator={`${tab}:${$locale}:${activeTrades.length}`} style:--activity-motion={`${motionDuration}ms`}>{#each ["trades", "orders", "history"] as item, index}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} use:hotkey={{ keys: `shift+${index + 1}`, allowInInputs: true }} on:keydown={navigateTab} on:click={() => setTab(item as typeof tab)}>{item === "trades" ? config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска") : item === "orders" ? config?.public_offers_available ? say("My orders", "Мои заявки") : say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length + mine.filter(o => o.state === "open").length + p2pActiveCount}<span class="orderCount">{activeTrades.length + mine.filter(o => o.state === "open").length + p2pActiveCount}</span>{/if}</button>{/each}<span class="tabIndicator" aria-hidden="true"></span></div>
         <OtcActivityContent activeKey={tab} duration={motionDuration}>
         <div class="activityContent" role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
           {#if tab === "trades"}

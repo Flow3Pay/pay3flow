@@ -13,6 +13,7 @@ explicitly say `planned`, `research`, or `legacy`.
 5. [`api-overview.md`](api-overview.md) — HTTP and WebSocket route families.
 6. [`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) — current route algorithms, budgets and caches.
 7. [`swap-widgets.md`](swap-widgets.md) — embedded swaps, wallet boundaries, runtime keys and build requirements.
+8. [`frontend-keyboard-shortcuts.md`](frontend-keyboard-shortcuts.md) — desktop shortcut map and how to add a new combo.
 
 ## Domain and protocol references
 

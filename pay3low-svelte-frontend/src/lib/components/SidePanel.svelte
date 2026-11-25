@@ -13,6 +13,7 @@
   import { routeScrollColor } from "$lib/route-scroll-color";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { OTC_PROVIDER, routeUsesOtc } from "$lib/otc/route";
+  import { hotkey } from "$lib/shortcuts";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -116,6 +117,7 @@
                 aria-haspopup="dialog"
                 aria-expanded={venueListOpen}
                 title={t("Venues in these routes", {}, $locale)}
+                use:hotkey={{ keys: "shift+?", allowInInputs: true }}
                 on:click={onOpenVenueList}
               >
                 <small class="routeCountText" role="status" aria-live="polite">{routeCountLabel(routesFound, $locale)}</small>

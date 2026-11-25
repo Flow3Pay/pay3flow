@@ -3291,12 +3291,13 @@ test("icon tooltips work on hover and keyboard focus without clipping", async ({
   await settleEntrance(page);
   const button = page.getByRole("button", { name: "Route refresh settings" });
   const tooltip = page.locator("#icon-control-tooltip");
-  // Short text labels that already spell out their accessible name need no tooltip.
+  // A short label that repeats its accessible name shows only the shortcut hint.
   const navOtc = page.getByRole("link", { name: "OTC", exact: true });
   await navOtc.hover();
+  await expect(tooltip).toHaveText("Alt+2");
   const navBox = await navOtc.boundingBox();
   await page.mouse.move(navBox!.x + 4, navBox!.y + navBox!.height / 2);
-  await expect(tooltip).toHaveCount(0);
+  await expect(tooltip).toHaveText("Alt+2");
   await page.mouse.move(0, 0);
   await button.hover();
   await expect(tooltip).toHaveText("Route refresh settings");
@@ -3324,6 +3325,33 @@ test("icon tooltips work on hover and keyboard focus without clipping", async ({
   await page.keyboard.press("Tab");
   await expect(asset).toBeFocused();
   await expect(tooltip).toContainText("USDT");
+});
+
+test("desktop shortcuts drive the header, dialogs and theme", async ({ page, isMobile }) => {
+  test.skip(isMobile, "Desktop keyboard shortcuts only");
+  await mockBackend(page);
+  await openApp(page);
+  await settleEntrance(page);
+
+  const html = page.locator("html");
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme ?? "");
+  const beforeTheme = await theme();
+  await page.keyboard.press("Alt+t");
+  await expect.poll(theme).not.toBe(beforeTheme);
+
+  await expect(page.getByTestId("start-search")).toHaveAttribute("data-shortcut", "Shift+Enter");
+
+  await page.keyboard.press("Alt+s");
+  await expect(page.getByLabel("Search settings")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Search settings")).toHaveCount(0);
+
+  const beforeLanguage = await html.getAttribute("lang");
+  await page.keyboard.press("Control+Alt+l");
+  await expect.poll(() => html.getAttribute("lang")).not.toBe(beforeLanguage);
+
+  await page.keyboard.press("Alt+w");
+  await expect(page.locator("#wallet-connections")).toBeVisible();
 });
 
 for (const theme of ["light", "dark"] as const) {
