@@ -353,7 +353,8 @@
   .rangeThumb.ready { opacity: 1; }
   .ranges button { position: relative; z-index: 1; min-width: 40px; min-height: 34px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; transition: color .2s ease; }
   .ranges button:hover { color: var(--color-text); }
-  .ranges button.active { color: var(--color-accent-text); font-weight: 650; }
+  /* The active pill sits on the lime thumb in both themes, so its label must stay dark ink. */
+  .ranges button.active { color: #172110; font-weight: 650; }
   .chartPlot { position: relative; width: 100%; height: clamp(320px, 34vw, 460px); padding: 0 4px 4px; transition: opacity .22s ease; }
   .marketChart.swapping .chartPlot { opacity: .5; }
   .chartLoading { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; text-align: center; pointer-events: none; }
@@ -368,6 +369,8 @@
     .ranges { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; width: 100%; border-radius: 14px; }
     .rangeThumb { display: none; }
     .ranges button { min-width: 0; min-height: 32px; padding: 2px; }
+    /* The moving thumb is hidden on the tiled grid, so the active pill carries the lime fill itself. */
+    .ranges button.active { background: var(--color-accent); }
     .chartPlot { height: 280px; }
   }
   @media (prefers-reduced-motion: reduce) { .ranges button, .rangeThumb, .chartPlot { transition: none; } }
