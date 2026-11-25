@@ -1,5 +1,4 @@
 use std::net::IpAddr;
-use std::time::Duration;
 
 use axum::extract::{Request, State};
 use axum::http::HeaderMap;
@@ -82,9 +81,18 @@ fn notify_new_user(
     };
 
     tokio::spawn(async move {
+        // The /api/anonymous/register endpoint receives a client-resolved region
+        // (the browser calls ipwho.is directly with its own IP). When that path
+        // runs, region is already filled in correctly here.
+        //
+        // The track_request middleware path has no region, and a server-side
+        // lookup would resolve the *server's* outbound IP rather than the
+        // client's, producing the wrong country every time. We therefore show
+        // "неизвестен" for middleware-originated notifications instead of
+        // misleading data.
         let region = match region {
             Some(r) if !r.trim().is_empty() => r,
-            _ => resolve_region(ip).await,
+            _ => "неизвестен".to_string(),
         };
         let ip_str = ip.map(|a| a.to_string());
         if let Err(error) = bot
@@ -99,54 +107,6 @@ fn notify_new_user(
             tracing::warn!(%error, "Telegram new-user notification failed");
         }
     });
-}
-
-/// Best-effort country/region lookup for the new-user notification. Runs off
-/// the request path and falls back to a placeholder on any failure, so a slow
-/// or blocked geo service can never delay or fail registration.
-async fn resolve_region(ip: Option<IpAddr>) -> String {
-    let Some(ip) = ip else {
-        return "неизвестен".to_string();
-    };
-
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(4))
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return "неизвестен".to_string(),
-    };
-    let response = client
-        .get(format!(
-            "https://ipwho.is/{ip}?fields=success,country,region,city"
-        ))
-        .send()
-        .await;
-    let Ok(response) = response else {
-        return "неизвестен".to_string();
-    };
-    let Ok(body) = response.json::<serde_json::Value>().await else {
-        return "неизвестен".to_string();
-    };
-    if body.get("success").and_then(|value| value.as_bool()) != Some(true) {
-        return "неизвестен".to_string();
-    }
-
-    let mut parts: Vec<&str> = Vec::new();
-    for key in ["city", "region", "country"] {
-        let Some(value) = body.get(key).and_then(|value| value.as_str()) else {
-            continue;
-        };
-        let value = value.trim();
-        if !value.is_empty() && !parts.contains(&value) {
-            parts.push(value);
-        }
-    }
-    if parts.is_empty() {
-        "неизвестен".to_string()
-    } else {
-        parts.join(", ")
-    }
 }
 
 fn user_agent(headers: &HeaderMap) -> Option<String> {
