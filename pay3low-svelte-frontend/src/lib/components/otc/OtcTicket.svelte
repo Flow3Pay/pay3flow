@@ -106,21 +106,6 @@
     "arbitrum-one": "0x…", base: "0x…", optimism: "0x…", gnosis: "0x…",
     near: "name.near", tron: "T…", solana: "Base58 address", ton: "UQ… or 0:…", sui: "0x…", aptos: "0x…",
   };
-  let settingsOpen = false, settingsWrap: HTMLDivElement, settingsInput: HTMLInputElement;
-  function openSettings() {
-    settingsOpen = true;
-    void tick().then(() => settingsInput?.focus());
-  }
-  function closeSettings(restoreFocus = false) {
-    settingsOpen = false;
-    if (restoreFocus) settingsWrap?.querySelector<HTMLButtonElement>(".settingsButton")?.focus();
-  }
-  function outsideSettings(event: PointerEvent) {
-    if (settingsOpen && settingsWrap && !settingsWrap.contains(event.target as Node)) closeSettings();
-  }
-  function settingsKeys(event: KeyboardEvent) {
-    if (settingsOpen && event.key === "Escape") { event.preventDefault(); closeSettings(true); }
-  }
   function changeSend(value: string) {
     if (sale && usdMode && usdAvailable) {
       const nextUsd = sanitizeDecimalInput(value);
@@ -180,22 +165,10 @@
     </svg>
   </button>
 {/snippet}
-<svelte:window on:pointerdown={outsideSettings} on:keydown={settingsKeys} />
+<svelte:window on:keydown={() => {}} />
 <form class="bridgeForm" on:submit|preventDefault={() => sale ? sale.onRequest() : quote ? onReview() : onRequest()}>
   <div class="ticketHead">
-    <div class="sideTabs" class:selling={direction === "sell"} role="group" aria-label="Trade direction"><button type="button" disabled={busy} class:active={direction === "buy"} aria-pressed={direction === "buy"} on:click={() => { closeSettings(); onDirection("buy"); }}>{say("Buy EVER", "Купить EVER")}</button><button type="button" disabled={busy} class:active={direction === "sell"} aria-pressed={direction === "sell"} on:click={() => { closeSettings(); onDirection("sell"); }}>{say("Sell EVER", "Продать EVER")}</button></div>
-    {#if sale}
-      <div class="settingsWrap" bind:this={settingsWrap}>
-        <button type="button" class="settingsButton" class:active={settingsOpen} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={say("Offer settings", "Настройки предложения")} title={say("Offer settings", "Настройки предложения")} on:click={() => settingsOpen ? closeSettings() : openSettings()}><img src="/icons/ui/route-settings.svg" alt="" width="18" height="18" /></button>
-        {#if settingsOpen}
-          <div class="settingsPanel" role="dialog" aria-label={say("Offer settings", "Настройки предложения")} tabindex="-1">
-            <div class="settingsPanelHead"><strong>{say("Offer settings", "Настройки предложения")}</strong><button type="button" class="settingsClose" aria-label={say("Close settings", "Закрыть настройки")} on:click={() => closeSettings(true)}>×</button></div>
-            <label class="recipientField">{say(`Your ${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address on ${walletNetworkLabel}`, `Ваш ${direction === "buy" ? "адрес оплаты" : "адрес получения"} ${sale.stablecoin} в сети ${walletNetworkLabel}`)}<input bind:this={settingsInput} data-testid="otc-offer-recipient" value={sale.receivingAddress} on:input={(event) => sale?.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={addressPlaceholders[sale.stablecoinNetwork] ?? say("Wallet address", "Адрес кошелька")} disabled={busy} /></label>
-            {#if walletConnectable}<button class="walletAddress" type="button" disabled={busy || sale.linkingWallet} on:click={sale.onUseWallet}>{sale.linkingWallet ? say("Connecting…", "Подключаем…") : say(`Use my ${walletNetworkLabel} wallet address`, `Использовать адрес моего кошелька ${walletNetworkLabel}`)}</button>{/if}
-          </div>
-        {/if}
-      </div>
-    {/if}
+    <div class="sideTabs" class:selling={direction === "sell"} role="group" aria-label="Trade direction"><button type="button" disabled={busy} class:active={direction === "buy"} aria-pressed={direction === "buy"} on:click={() => { onDirection("buy"); }}>{say("Buy EVER", "Купить EVER")}</button><button type="button" disabled={busy} class:active={direction === "sell"} aria-pressed={direction === "sell"} on:click={() => { onDirection("sell"); }}>{say("Sell EVER", "Продать EVER")}</button></div>
   </div>
   <div class="moneyStack">
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say(usdMode ? "Buy amount · USD" : "Buy amount · EVER", usdMode ? "Количество к покупке · USD" : "Количество к покупке · EVER") : say(usdMode ? "Sell amount · USD" : "Sell amount · EVER", usdMode ? "Количество к продаже · USD" : "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSendValue} placeholder={everHint} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={focusSend} on:blur={blurSend} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div>{#if sale}<div class="marketMeta"><span class="marketValue" data-testid="otc-market-value" aria-label={usdMode && usdAvailable ? say("Approximate EVER amount", "Примерная сумма в EVER") : say("Approximate USD market value", "Примерная рыночная стоимость в долларах")}>{usdMode && usdAvailable ? formatTokenMarketValue(Number(sale.everAmount), "EVER") : formatUsdMarketValue(Number(usdValue))}</span><button type="button" class="usdToggle" class:usdToggleActive={usdMode} aria-pressed={usdMode} disabled={!usdAvailable || busy} title={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} aria-label={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} on:click={toggleUsd}>USD</button>{#if maxBalance}<button type="button" class="usdToggle" class:usdToggleActive={maxActive} data-testid="otc-amount-max" aria-pressed={maxActive} disabled={busy} title={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} aria-label={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} on:click={applyMax}>{say("Max", "Макс")}</button>{/if}</div>{/if}</div></div>
@@ -241,11 +214,11 @@
     {#if sale.reviewing && sale.seller}<OtcOfferReview {direction} stablecoin={sale.stablecoin} stablecoinNetwork={sale.stablecoinNetwork} swapMinimum={sale.swapMinimum} swapFee={sale.swapFee} swapOptions={sale.swapOptions} everAmount={sale.everAmount} usdtAmount={sale.usdtAmount} askingRate={sale.askingRate} seller={sale.seller} receivingAddress={sale.receivingAddress} error={sale.error} busy={busy} onClose={sale.onCloseReview} onPublish={() => sale.onRequest()} />{/if}
   {/if}
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
-  {#if sale?.seller && !sale.addressValid && !settingsOpen}
+  {#if sale?.seller}
     <div class="recipientPrompt" data-testid="otc-offer-address-prompt">
-      <span>{say(`Add the ${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address on ${walletNetworkLabel}`, `Укажите ${direction === "buy" ? "адрес оплаты" : "адрес получения"} ${sale.stablecoin} в сети ${walletNetworkLabel}`)}</span>
+      <span>{say(`${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address · ${walletNetworkLabel}`, `Адрес ${direction === "buy" ? "оплаты" : "получения"} ${sale.stablecoin} · ${walletNetworkLabel}`)}</span>
       <div class="recipientPromptRow">
-        <input value={sale.receivingAddress} on:input={(event) => sale.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={addressPlaceholders[sale.stablecoinNetwork] ?? say("Wallet address", "Адрес кошелька")} disabled={busy} aria-label={say(`${sale.stablecoin} address on ${walletNetworkLabel}`, `Адрес ${sale.stablecoin} в сети ${walletNetworkLabel}`)} />
+        <input value={sale.receivingAddress} on:input={(event) => sale.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={addressPlaceholders[sale.stablecoinNetwork] ?? say("Wallet address", "Адрес кошелька")} disabled={busy} data-testid="otc-offer-recipient" aria-label={say(`${sale.stablecoin} address on ${walletNetworkLabel}`, `Адрес ${sale.stablecoin} в сети ${walletNetworkLabel}`)} />
         {#if walletConnectable}<button class="walletAddress" type="button" disabled={busy || sale.linkingWallet} on:click={sale.onUseWallet}>{sale.linkingWallet ? say("Connecting…", "Подключаем…") : say("Use my wallet", "Использовать мой кошелёк")}</button>{/if}
       </div>
     </div>
@@ -258,8 +231,6 @@
 {#if sale}<PaymentMethodPicker open={stablecoinPickerOpen} title={stablecoinPickerStage === "detail" ? say(`Choose ${sale.stablecoin} network`, `Выберите сеть для ${sale.stablecoin}`) : say("Choose token", "Выберите токен")} role="recipient" networks={stablecoinPickerNetworks} paymentMethods={stablecoinMethods} selected={selectedStablecoinMethod} selectedNetwork={selectedStablecoinNetwork} initialStage={stablecoinPickerStage} initialCurrency={sale.stablecoin} onClose={() => stablecoinPickerOpen = false} onSelect={selectStablecoin} />{/if}
 
 <style>
-  .recipientField { display:grid; gap:8px; margin:16px 0 8px; color:var(--color-text-soft); font-size:12px; }
-  .recipientField input { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid var(--exchange-field-border); border-radius:8px; background:var(--exchange-field-bg); color:var(--color-text); font:inherit; }
   .recipientPrompt { display:grid; gap:7px; margin:6px 0 12px; color:var(--color-text-soft); font-size:12px; line-height:1.5; }
   .recipientPromptRow { display:grid; gap:6px; grid-template-columns:minmax(0,1fr) auto; }
   .recipientPromptRow input { width:100%; min-width:0; min-height:40px; padding:8px 10px; border:1px solid var(--exchange-field-border); border-radius:8px; background:var(--exchange-field-bg); color:var(--color-text); font:inherit; }
@@ -273,16 +244,6 @@
   .sideTabs { --side-buy: var(--otc-buy, var(--color-accent-strong)); --side-sell: var(--otc-sell, var(--color-danger)); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }
   .sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 9px; background-image: linear-gradient(90deg, var(--side-buy) 0 40%, #e6d94c 46%, #f0a34d 52%, var(--side-sell) 58% 100%); background-position: 0% 50%; background-size: 300% 100%; content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1), background-position .5s ease; }
   .sideTabs.selling::before { background-position: 100% 50%; transform: translateX(calc(100% + 4px)); }
-  .settingsWrap { flex: 0 0 auto; }
-  .settingsButton { display: grid; width: 40px; min-width: 40px; height: 40px; place-items: center; border: 1px solid var(--exchange-field-border); border-radius: 12px; background: var(--color-panel); transition: background .18s ease, border-color .18s ease; }
-  .settingsButton:hover, .settingsButton.active { border-color: var(--color-border-strong); background: var(--color-paper); }
-  .settingsButton img { display: block; width: 18px; height: 18px; object-fit: contain; filter: brightness(0); opacity: .62; }
-  :global(html[data-theme="dark"]) .settingsButton img { filter: brightness(0) invert(1); }
-  .settingsPanel { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: min(320px, 100%); padding: 16px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-panel, 12px); background: var(--color-paper); box-shadow: 0 18px 50px rgb(0 0 0 / .18); }
-  .settingsPanelHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-  .settingsPanelHead strong { font-size: 13px; }
-  .settingsClose { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 7px; color: var(--color-text-soft); font-size: 18px; line-height: 1; }
-  .settingsClose:hover { background: var(--color-panel); color: var(--color-text); }
   .sideTabs button { flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; font-weight: 650; line-height: 1.5; transition: color .2s ease; }
   .sideTabs button.active { color: #152016; }
   .sideTabs.selling button.active { color: var(--color-text-invert); }
