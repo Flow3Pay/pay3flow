@@ -4,7 +4,7 @@
   import PaymentMethodPicker from "../PaymentMethodPicker.svelte";
   import OtcOfferReview from "./OtcOfferReview.svelte";
   import { locale } from "$lib/i18n";
-  import { networkIcon, venueIcon } from "$lib/icons";
+  import { networkIcon } from "$lib/icons";
   import type { CryptoNetwork } from "$lib/networks";
   import { otcCopy } from "$lib/otc/copy";
   import type { PaymentMethod } from "$lib/payment-methods";
@@ -156,10 +156,6 @@
   $: usdtHint = sale && !sale.usdtAmount && sale.usdtApprox ? `≈ ${sale.usdtApprox}` : "—";
   // Every cross-network offer has an Ethereum leg, so it is swapped inside by
   // NEAR Intents. Below the measured floor that swap cannot be built at all.
-  $: swapViaIntents = !!sale && sale.stablecoinNetwork !== "ethereum";
-  $: swapTooSmall = swapViaIntents && !!sale?.swapMinimum
-    && Number(sale?.usdtAmount || 0) > 0
-    && Number(sale?.usdtAmount) < Number(sale?.swapMinimum);
 
 </script>
 {#snippet asset(asset: string)}
@@ -211,16 +207,6 @@
     </div>
     <div class="priceFieldRow"><input aria-label={copy.price} readonly={!sale || sale.marketPrice} value={sale ? sale.price : quote ? rate(quote.terms) : "—"} data-testid={sale ? "otc-offer-price" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—" on:input={(event) => sale?.onPrice(event.currentTarget.value)} /><span>{sale?.stablecoin || "USDT"}</span></div>
   </div>
-  {#if swapViaIntents && sale}
-    <div class="swapNote" class:swapWarn={swapTooSmall} data-testid="otc-swap-note">
-      <img src={venueIcon("near-intents")} alt="" width="16" height="16" loading="lazy" decoding="async" />
-      {#if swapTooSmall}
-        <span>{say(`Too small for NEAR Intents · min ${sale.swapMinimum} ${sale.stablecoin}`, `Слишком мало для NEAR Intents · мин. ${sale.swapMinimum} ${sale.stablecoin}`)}</span>
-      {:else}
-        <span>{say(`Swapped inside by NEAR Intents · ≈${sale.swapFee || "0.3"} USDT fee`, `Обмен внутри через NEAR Intents · фикс ≈${sale.swapFee || "0.3"} USDT`)}</span>
-      {/if}
-    </div>
-  {/if}
   {#if sale}
     {#if sale.priceRounded}<p class="priceHint">{sale.roundingAsset === "EVER" ? say("The EVER amount is rounded down to 9 decimals. Review the exact amounts before publishing.", "Сумма EVER округлена вниз до 9 знаков. Проверьте точные суммы перед публикацией.") : say(`The total is rounded down to 6 ${sale.stablecoin} decimal places. Review the exact amount before publishing.`, `Общая сумма округлена вниз до 6 знаков ${sale.stablecoin}. Проверьте точную сумму перед публикацией.`)}</p>{/if}
     {#if sale.amountFloored}<p class="priceHint">{sale.amountFloored === "EVER" ? say("EVER has 9 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У EVER 9 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.") : say(`${sale.stablecoin} has 6 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.`, `У ${sale.stablecoin} 6 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.`)}</p>{/if}
@@ -256,9 +242,6 @@
   .priceFieldRow > span { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; }
   .moneyPanel .amountInput::placeholder { color: var(--color-text-soft); font-size: 20px; letter-spacing: -.02em; opacity: .55; }
   .priceHint { margin: 6px 0 12px; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-  .swapNote { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--exchange-field-border); border-radius: 7px; background: var(--exchange-field-bg); color: var(--color-text-soft); font-size: 11px; line-height: 1.4; }
-  .swapNote img { flex: 0 0 auto; border-radius: 4px; }
-  .swapNote.swapWarn { border-color: var(--color-warn); color: var(--color-warn); }
   .intentLabel { margin: 0 0 8px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: .04em; text-transform: uppercase; }
   .intentLabel span::before { display: inline-block; width: 5px; height: 5px; margin-right: 8px; border-radius: 50%; background: var(--color-danger); content: ""; vertical-align: 2px; }
   .receiveLabel span::before { background: var(--color-accent-strong); }
