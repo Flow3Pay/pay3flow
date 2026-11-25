@@ -324,20 +324,18 @@
   .accentLine {
     position: relative;
     z-index: 0;
-    display: inline-block;
+    display: inline;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    background-image: linear-gradient(var(--color-accent), var(--color-accent));
+    background-repeat: no-repeat;
+    background-size: 100% 0.2em;
+    background-position: left 88%;
+    padding-bottom: 0.05em;
   }
 
   .accentLine::after {
-    position: absolute;
-    right: -0.05em;
-    bottom: 0.02em;
-    left: -0.04em;
-    z-index: -1;
-    height: 0.2em;
-    border-radius: 3px;
-    background: var(--color-accent);
-    content: "";
-    transform: rotate(-1deg);
+    display: none;
   }
 
   .line :global(.dud) {
