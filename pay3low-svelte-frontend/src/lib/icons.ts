@@ -4,9 +4,9 @@ const JPG_VENUE_ICONS = new Set(["nordstern"]);
 const VENUE_ICON_ALIASES: Record<string, string> = { "1ich": "1inch", lighing: "lifi", verola: "velora", "rate.am": "rate-am" };
 const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
-  "link", "ltc", "matic", "near", "sol", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
+  "link", "ltc", "matic", "near", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
 ]);
-const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc", "base", "optimism", "arbitrum", "plasma", "ink", "linea", "gnosis"]);
+const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc", "base", "optimism", "arbitrum", "plasma", "ink", "linea", "gnosis", "sol"]);
 const WEBP_ASSET_ICONS = new Set(["00"]);
 const LOCAL_FIAT_ICONS = new Set(["amd", "byn", "kzt", "rub", "uah", "usd"]);
 

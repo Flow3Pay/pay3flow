@@ -43,7 +43,9 @@ import { otcNetworkAllowed } from "$lib/otc/p2p";
       if (draft && (draft.direction || "sell") === direction && [draft.ever_amount, draft.usdt_amount, draft.usdt_address, draft.key].every(value => typeof value === "string")) {
         everAmount = draft.ever_amount; usdtAmount = draft.usdt_amount; receivingAddress = draft.usdt_address; key = draft.key; priceMode = !!draft.price_mode; priceInput = typeof draft.price_input === "string" ? draft.price_input : ""; amountSource = draft.amount_source === "usdt" ? "usdt" : "ever";
         stablecoin = draft.stablecoin === "USDC" ? "USDC" : "USDT";
-        stablecoinNetwork = typeof draft.stablecoin_network === "string" ? draft.stablecoin_network : "ethereum";
+        const OTC_COMING_SOON = new Set(["avalanche-c", "polygon-pos", "aptos"]);
+        const savedNetwork = typeof draft.stablecoin_network === "string" ? draft.stablecoin_network : "ethereum";
+        stablecoinNetwork = OTC_COMING_SOON.has(savedNetwork) ? "ethereum" : savedNetwork;
         if (typeof draft.market_price === "boolean") marketPrice = draft.market_price;
         else marketPrice = true;
       }

@@ -50,7 +50,7 @@ export const markets: OtcMarket[] = [
   { id: "EVER-USDT", base: "EVER", quote: "USDT", name: "Everscale", price: 0.01, priceDecimals: 5, amountDecimals: 6, tickSize: 0.00001, change: 2.84, volume: 12500, icon: "/icons/assets/ever.svg" },
   { id: "BTC-USDT", base: "BTC", quote: "USDT", name: "Bitcoin", price: 68240.5, priceDecimals: 2, amountDecimals: 6, tickSize: 10, change: 2.84, volume: 1248500, icon: "/icons/assets/btc.png" },
   { id: "ETH-USDT", base: "ETH", quote: "USDT", name: "Ethereum", price: 2648.72, priceDecimals: 2, amountDecimals: 5, tickSize: 0.5, change: 1.62, volume: 486320, icon: "/icons/assets/eth.png" },
-  { id: "SOL-USDT", base: "SOL", quote: "USDT", name: "Solana", price: 148.36, priceDecimals: 2, amountDecimals: 4, tickSize: 0.05, change: 4.21, volume: 214850, icon: "/icons/assets/sol.webp" },
+  { id: "SOL-USDT", base: "SOL", quote: "USDT", name: "Solana", price: 148.36, priceDecimals: 2, amountDecimals: 4, tickSize: 0.05, change: 4.21, volume: 214850, icon: "/icons/assets/sol.png" },
 ];
 const anchorTime = Date.UTC(2026, 9, 9, 12);
 export const gnkMarket: OtcMarket = { id: "GNK-USDT", base: "GNK", quote: "USDT", name: "Gonka", price: 0, priceDecimals: 6, amountDecimals: 9, tickSize: 0, change: 0, volume: 0, icon: "/icons/assets/gnk.jpg" };
