@@ -56,6 +56,8 @@
     { id: "otc-usdt", name: "Tether", country: "global", currency: "USDT", role: "recipient", kind: "wallet", color: "#26a17b", initials: "USDT", iconUrl: "/icons/assets/usdt.png", p2pQuery: "USDT" },
     { id: "otc-usdc", name: "USD Coin", country: "global", currency: "USDC", role: "recipient", kind: "wallet", color: "#2775ca", initials: "USDC", iconUrl: "/icons/assets/usdc.png", p2pQuery: "USDC" },
   ];
+  /** Networks that are known but temporarily disabled for OTC trading. */
+  const OTC_COMING_SOON_NETWORKS = new Set(["avalanche-c", "polygon-pos", "aptos"]);
   const networkNames: Record<string, string> = {
     ethereum: "Ethereum (ERC-20)",
     "avalanche-c": "Avalanche C-Chain",
@@ -86,6 +88,17 @@
       if (!network.currencies.includes(asset.symbol)) network.currencies.push(asset.symbol);
       networks.set(asset.network, network);
     }
+    // Inject temporarily-disabled networks so they appear grayed-out in the picker
+    // for both USDT and USDC.
+    for (const [netId, netName] of [
+      ["avalanche-c", networkNames["avalanche-c"]],
+      ["polygon-pos", networkNames["polygon-pos"]],
+      ["aptos", networkNames["aptos"]],
+    ] as [string, string][]) {
+      if (!networks.has(netId)) {
+        networks.set(netId, { id: netId, name: netName, currencies: ["USDT", "USDC"], comingSoon: true });
+      }
+    }
     return [...networks.values()];
   }
   let stablecoinPickerOpen = false;
@@ -99,6 +112,7 @@
   }
   function selectStablecoin(method: PaymentMethod, network?: CryptoNetwork) {
     if (!sale || !network || (method.currency !== "USDT" && method.currency !== "USDC")) return;
+    if (network.comingSoon) return;
     const token: Stablecoin = method.currency;
     if (sale.stablecoin !== token) sale.onStablecoin(token);
     if (sale.stablecoinNetwork !== network.id) sale.onStablecoinNetwork(network.id);

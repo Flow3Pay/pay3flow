@@ -342,6 +342,15 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         {
             continue;
         }
+        if state
+            .otc
+            .cfg
+            .disabled_networks
+            .iter()
+            .any(|disabled| crate::route_engine::canonical_network_id(disabled) == network)
+        {
+            continue;
+        }
         candidates.push((asset, token));
     }
 

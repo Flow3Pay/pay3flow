@@ -6,6 +6,8 @@ export interface CryptoNetwork {
   id: string;
   name: string;
   currencies: string[];
+  /** Network is known but temporarily unavailable for trading; shown grayed-out. */
+  comingSoon?: boolean;
 }
 
 export const FALLBACK_NETWORK: CryptoNetwork = {

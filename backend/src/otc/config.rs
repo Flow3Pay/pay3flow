@@ -177,6 +177,11 @@ pub(crate) struct Config {
     pub heartbeat_url: Option<String>,
     pub live_gate_evidence: Option<String>,
     pub escrow: Option<super::escrow::EscrowPolicy>,
+    /// Networks temporarily excluded from the OTC p2p asset catalog.
+    /// The network configuration and fee recipients are preserved; only the
+    /// asset list endpoint stops advertising these networks.
+    #[serde(default)]
+    pub disabled_networks: Vec<String>,
     #[serde(skip)]
     pub fee_recipients: BTreeMap<String, String>,
 }
@@ -235,6 +240,7 @@ impl Default for Config {
             heartbeat_url: None,
             live_gate_evidence: None,
             escrow: None,
+            disabled_networks: Vec::new(),
             fee_recipients: BTreeMap::new(),
         }
     }
