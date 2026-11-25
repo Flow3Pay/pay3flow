@@ -295,5 +295,8 @@
   .cta:disabled { opacity: .45; cursor: default; }
   button:focus-visible, .priceFieldRow:focus-within { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
   @media (max-width: 640px) { .moneyPanel .amountInput { font-size: 28px; } .sideTabs button { min-height: 44px; } }
+  /* On the desktop grid the ticket card is stretched to the chart height, so the
+     call to action sits at the bottom instead of floating under the fields. */
+  @media (min-width: 981px) { .cta { margin-top: auto; } }
   @media (prefers-reduced-motion: reduce) { .sideTabs::before, .sideTabs button, .cta { transition: none; } }
 </style>
