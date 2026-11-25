@@ -329,11 +329,11 @@
   .chartValue em.negative { color: var(--color-danger); }
   .chartRange { margin: 0; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
   .ranges { position: relative; display: flex; flex: 0 1 auto; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-paper); }
-  .rangeThumb { position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; border-radius: 999px; background: var(--color-good); opacity: 0; pointer-events: none; transition: transform .32s cubic-bezier(.22, 1, .36, 1), width .32s cubic-bezier(.22, 1, .36, 1), opacity .2s ease; }
+  .rangeThumb { position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; border-radius: 999px; background: var(--color-accent); opacity: 0; pointer-events: none; transition: transform .32s cubic-bezier(.22, 1, .36, 1), width .32s cubic-bezier(.22, 1, .36, 1), opacity .2s ease; }
   .rangeThumb.ready { opacity: 1; }
   .ranges button { position: relative; z-index: 1; min-width: 40px; min-height: 34px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; transition: color .2s ease; }
   .ranges button:hover { color: var(--color-text); }
-  .ranges button.active { color: #152016; font-weight: 650; }
+  .ranges button.active { color: var(--color-accent-text); font-weight: 650; }
   .chartPlot { position: relative; width: 100%; height: clamp(320px, 34vw, 460px); padding: 0 4px 4px; transition: opacity .22s ease; }
   .marketChart.swapping .chartPlot { opacity: .5; }
   .chartLoading { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; text-align: center; pointer-events: none; }
