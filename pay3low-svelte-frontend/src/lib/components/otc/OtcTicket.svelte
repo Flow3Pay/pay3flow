@@ -33,6 +33,9 @@
   $: sendValue = sale ? sale.everAmount : input;
   $: receiveValue = sale ? sale.usdtAmount : quote?.terms.output || "";
   let usdMode = false, usdEntry = "", sendFocused = false;
+  let touched = false;
+  let prevDirection = direction;
+  $: if (direction !== prevDirection) { touched = false; prevDirection = direction; }
   $: usdRate = Number(sale?.marketUsdRate || 0);
   $: usdAvailable = !!sale && Number.isFinite(usdRate) && usdRate > 0;
   $: if (usdMode && !usdAvailable) { usdMode = false; usdEntry = ""; }
@@ -107,6 +110,7 @@
     near: "name.near", tron: "T…", solana: "Base58 address", ton: "UQ… or 0:…", sui: "0x…", aptos: "0x…",
   };
   function changeSend(value: string) {
+    touched = true;
     if (sale && usdMode && usdAvailable) {
       const nextUsd = sanitizeDecimalInput(value);
       usdEntry = nextUsd;
@@ -130,13 +134,14 @@
   $: maxBalance = Number(sale?.fundedBalance || 0) > 0 ? sale?.fundedBalance || "" : "";
   $: maxActive = !!maxBalance && Number(direction === "sell" ? sale?.everAmount : sale?.usdtAmount) === Number(maxBalance);
   function applyMax() {
+    touched = true;
     if (!sale || !maxBalance) return;
     usdEntry = "";
     const value = maxActive ? "" : maxBalance;
     if (direction === "sell") sale.onEver(value);
     else sale.onUsdt(value);
   }
-  function changeReceive(value: string) { sale?.onUsdt(value); }
+  function changeReceive(value: string) { touched = true; sale?.onUsdt(value); }
   $: walletConnectable = !!sale && !!walletFamily(sale.stablecoinNetwork);
   $: walletNetworkLabel = sale ? (networkNames[sale.stablecoinNetwork] ?? sale.stablecoinNetwork) : "";
   $: everHint = sale && !sale.everAmount && !usdMode && sale.everApprox ? `≈ ${sale.everApprox}` : "";
@@ -224,7 +229,7 @@
     </div>
   {/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
-  {#if sale && sale.blockingReason && (sale.seller || sale.belowMinimum)}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
+  {#if sale && sale.blockingReason && touched && (sale.seller || sale.belowMinimum)}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
   {#if pendingBooking}<p class="priceHint" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button type="button" class="reconcileButton" disabled={busy || pendingBookingLocked} on:click={onReconcile}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}
   <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingWallet || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
