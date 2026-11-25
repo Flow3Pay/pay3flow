@@ -3291,6 +3291,13 @@ test("icon tooltips work on hover and keyboard focus without clipping", async ({
   await settleEntrance(page);
   const button = page.getByRole("button", { name: "Route refresh settings" });
   const tooltip = page.locator("#icon-control-tooltip");
+  // Short text labels that already spell out their accessible name need no tooltip.
+  const navOtc = page.getByRole("link", { name: "OTC", exact: true });
+  await navOtc.hover();
+  const navBox = await navOtc.boundingBox();
+  await page.mouse.move(navBox!.x + 4, navBox!.y + navBox!.height / 2);
+  await expect(tooltip).toHaveCount(0);
+  await page.mouse.move(0, 0);
   await button.hover();
   await expect(tooltip).toHaveText("Route refresh settings");
   await expect(button).toHaveAttribute("aria-describedby", "icon-control-tooltip");

@@ -137,7 +137,8 @@
   $: if (label !== currentLabel && !running) setLabel(label);
 </script>
 
-<a {href} class:active aria-current={current} aria-label={label} on:mouseenter={trigger} on:focus={trigger} on:click={(event) => onNavigate?.(event)}>
+<!-- The visible label is the accessible name, so the global icon tooltip would only repeat it. -->
+<a {href} class:active aria-current={current} aria-label={label} data-no-tooltip on:mouseenter={trigger} on:focus={trigger} on:click={(event) => onNavigate?.(event)}>
   <span class="scrambleLabel" aria-hidden="true" bind:this={element}>{label}</span>
 </a>
 

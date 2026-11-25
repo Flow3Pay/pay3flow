@@ -50,13 +50,21 @@
     await tick();
     position();
   }
+  function normalize(value: string | null) {
+    return (value ?? "").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  }
   function candidate(target: EventTarget | null) {
     if (!(target instanceof Element)) return null;
     const node = target.closest<HTMLElement>("button[aria-label], a[aria-label]");
     if (!node || node.matches(":disabled") || node.closest(".venueRow") || node.matches(".sheetHandle, .periodHandle")) return null;
+    // Controls that opt out keep their accessible name for screen readers only.
+    if (node.hasAttribute("data-no-tooltip")) return null;
     // Text-labelled controls already explain themselves. Icon buttons and compact
     // language/currency controls need the longer accessible name on hover/focus.
-    return node.hasAttribute("data-tooltip") || (node.textContent?.trim().length ?? 0) <= 3 ? node : null;
+    if (node.hasAttribute("data-tooltip")) return node;
+    if ((node.textContent?.trim().length ?? 0) > 3) return null;
+    // A tooltip that only repeats the visible label adds nothing.
+    return normalize(node.getAttribute("aria-label")) === normalize(node.textContent) ? null : node;
   }
   onMount(() => {
     const over = (event: PointerEvent) => {
