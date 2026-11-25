@@ -118,11 +118,6 @@
     if (sale.stablecoinNetwork !== network.id) sale.onStablecoinNetwork(network.id);
     stablecoinPickerOpen = false;
   }
-  const addressPlaceholders: Record<string, string> = {
-    ethereum: "0x…", sei: "0x…", "bnb-smart-chain": "0x…", "polygon-pos": "0x…", "avalanche-c": "0x…",
-    "arbitrum-one": "0x…", base: "0x…", optimism: "0x…", gnosis: "0x…",
-    near: "name.near", tron: "T…", solana: "Base58 address", ton: "UQ… or 0:…", sui: "0x…", aptos: "0x…",
-  };
   function changeSend(value: string) {
     touched = true;
     if (sale && usdMode && usdAvailable) {
@@ -156,7 +151,6 @@
     else sale.onUsdt(value);
   }
   function changeReceive(value: string) { touched = true; sale?.onUsdt(value); }
-  $: walletConnectable = !!sale && !!walletFamily(sale.stablecoinNetwork);
   $: walletNetworkLabel = sale ? (networkNames[sale.stablecoinNetwork] ?? sale.stablecoinNetwork) : "";
   $: everHint = sale && !sale.everAmount && !usdMode && sale.everApprox ? `≈ ${sale.everApprox}` : "";
   $: usdtHint = sale && !sale.usdtAmount && sale.usdtApprox ? `≈ ${sale.usdtApprox}` : "—";
@@ -233,15 +227,6 @@
     {#if sale.reviewing && sale.seller}<OtcOfferReview {direction} stablecoin={sale.stablecoin} stablecoinNetwork={sale.stablecoinNetwork} swapMinimum={sale.swapMinimum} swapFee={sale.swapFee} swapOptions={sale.swapOptions} everAmount={sale.everAmount} usdtAmount={sale.usdtAmount} askingRate={sale.askingRate} seller={sale.seller} receivingAddress={sale.receivingAddress} error={sale.error} busy={busy} onClose={sale.onCloseReview} onPublish={() => sale.onRequest()} />{/if}
   {/if}
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
-  {#if sale?.seller}
-    <div class="recipientPrompt" data-testid="otc-offer-address-prompt">
-      <span>{say(`${sale.stablecoin} ${direction === "buy" ? "paying" : "receiving"} address · ${walletNetworkLabel}`, `Адрес ${direction === "buy" ? "оплаты" : "получения"} ${sale.stablecoin} · ${walletNetworkLabel}`)}</span>
-      <div class="recipientPromptRow">
-        <input value={sale.receivingAddress} on:input={(event) => sale.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder={addressPlaceholders[sale.stablecoinNetwork] ?? say("Wallet address", "Адрес кошелька")} disabled={busy} data-testid="otc-offer-recipient" aria-label={say(`${sale.stablecoin} address on ${walletNetworkLabel}`, `Адрес ${sale.stablecoin} в сети ${walletNetworkLabel}`)} />
-        {#if walletConnectable}<button class="walletAddress" type="button" disabled={busy || sale.linkingWallet} on:click={sale.onUseWallet}>{sale.linkingWallet ? say("Connecting…", "Подключаем…") : say("Use my wallet", "Использовать мой кошелёк")}</button>{/if}
-      </div>
-    </div>
-  {/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
   {#if sale && sale.blockingReason && touched && (sale.seller || sale.belowMinimum)}<p class="priceHint blockingHint" role="alert" data-testid="otc-offer-blocked">{sale.blockingReason}</p>{/if}
   {#if pendingBooking}<p class="priceHint" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button type="button" class="reconcileButton" disabled={busy || pendingBookingLocked} on:click={onReconcile}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}
@@ -250,12 +235,6 @@
 {#if sale}<PaymentMethodPicker open={stablecoinPickerOpen} title={stablecoinPickerStage === "detail" ? say(`Choose ${sale.stablecoin} network`, `Выберите сеть для ${sale.stablecoin}`) : say("Choose token", "Выберите токен")} role="recipient" networks={stablecoinPickerNetworks} paymentMethods={stablecoinMethods} selected={selectedStablecoinMethod} selectedNetwork={selectedStablecoinNetwork} initialStage={stablecoinPickerStage} initialCurrency={sale.stablecoin} onClose={() => stablecoinPickerOpen = false} onSelect={selectStablecoin} />{/if}
 
 <style>
-  .recipientPrompt { display:grid; gap:7px; margin:6px 0 12px; color:var(--color-text-soft); font-size:12px; line-height:1.5; }
-  .recipientPromptRow { display:grid; gap:6px; grid-template-columns:minmax(0,1fr) auto; }
-  .recipientPromptRow input { width:100%; min-width:0; min-height:40px; padding:8px 10px; border:1px solid var(--exchange-field-border); border-radius:8px; background:var(--exchange-field-bg); color:var(--color-text); font:inherit; }
-  .recipientPromptRow .walletAddress { width:auto; min-height:40px; white-space:nowrap; }
-  @media (max-width:520px) { .recipientPromptRow { grid-template-columns:minmax(0,1fr); } }
-  .walletAddress { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; font-size:12px; }
   .reconcileButton { width:100%; min-height:44px; margin:8px 0 12px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-panel); color:inherit; font-size:13px; }
   .reconcileButton:disabled { opacity:.45; cursor:default; }
   .bridgeForm { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0 var(--otc-panel-padding, 20px) 16px; }
