@@ -153,6 +153,21 @@
     chart.resetData();
   }
 
+  let draggingRange = false;
+
+  function hitTestRange(clientX: number) {
+    if (!ranges) return;
+    for (let i = 0; i < rangeButtons.length; i++) {
+      const btn = rangeButtons[i];
+      if (!btn) continue;
+      const rect = btn.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right) {
+        choose(chartRanges[i]);
+        break;
+      }
+    }
+  }
+
   function choose(value: ChartRange) {
     if (range === value) return;
     range = value;
@@ -298,7 +313,12 @@
       </div>
       <p class="chartRange" data-testid="otc-chart-range">{say("Candles", "Свечи")} · {candleIntervalLabel(layout.window.bucketSeconds, $locale)}</p>
     </div>
-    <div class="ranges" bind:this={ranges} role="group" aria-label={say("Candle timeframe", "Таймфрейм графика")}>
+    <div class="ranges" bind:this={ranges} role="group" aria-label={say("Candle timeframe", "Таймфрейм графика")}
+      on:pointerdown={(e) => { draggingRange = true; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); hitTestRange(e.clientX); }}
+      on:pointermove={(e) => { if (draggingRange) hitTestRange(e.clientX); }}
+      on:pointerup={() => { draggingRange = false; }}
+      on:pointercancel={() => { draggingRange = false; }}
+    >
       <span class="rangeThumb" class:ready={thumb.ready} style="transform: translateX({thumb.offset}px); width: {thumb.width}px" aria-hidden="true"></span>
       {#each chartRanges as item, index}<button type="button" bind:this={rangeButtons[index]} class:active={range === item} aria-pressed={range === item} on:click={() => choose(item)}>{item}</button>{/each}
     </div>

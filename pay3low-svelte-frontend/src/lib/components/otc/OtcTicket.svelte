@@ -288,7 +288,7 @@
   .networkCopy { display: flex; min-width: 0; align-items: center; gap: 4px; white-space: nowrap; }
   .networkName { overflow: hidden; font-size: 12px; font-weight: 600; line-height: 1; text-overflow: ellipsis; }
   .networkChevron { flex: 0 0 auto; color: var(--color-text-faint); }
-  .cta { display: flex; width: 100%; min-height: 50px; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 12px 16px; border: 1px solid var(--color-accent-strong); border-radius: 5px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: left; transition: background .18s ease, opacity .18s ease; }
+  .cta { display: flex; width: 100%; min-height: 50px; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 12px 16px; border: 1px solid var(--color-accent-strong); border-radius: 5px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: left; transition: background .18s ease, opacity .18s ease; }
   .cta:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 82%, #fff); }
   .cta span { flex: 0 0 auto; font-size: 18px; }
   .cta:disabled { opacity: .45; cursor: default; }

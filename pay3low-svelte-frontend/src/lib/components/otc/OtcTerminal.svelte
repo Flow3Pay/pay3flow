@@ -4,7 +4,8 @@
   import { marketByBase, type OtcMarket } from "$lib/otc/markets";
   import OtcMarketPicker from "./OtcMarketPicker.svelte";
   import OtcPanel from "./OtcPanel.svelte";
-  export let baseAsset = "EVER", quoteAsset = "USDT", marketIcon = "/icons/assets/ever.svg", networkLabel = "Everscale ↔ Ethereum", venueLabel = "OTC";
+  export let baseAsset = "EVER", quoteAsset = "USDT", marketIcon = "/icons/assets/ever.svg", venueLabel = "OTC";
+  export const networkLabel = "";
   export let selectedRate = "—", rateLabel = "", bookTitle = "", stats: { label:string; value:string; secondary?:boolean; unit?:string }[] = [];
   // Terminals whose content brings its own card shell still get the generic panel here.
   export let bookPanel = true, chartPanel = true, bookWide = false;
@@ -32,7 +33,7 @@
 <div class="marketStrip">
   <button type="button" class="marketSelector" data-testid="otc-market-selector" bind:this={selectorButton} class:open={pickerOpen} aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label={`${say("Choose OTC market","Выберите рынок OTC")}: ${baseAsset} / ${quoteAsset}`} on:click={() => pickerOpen = true}>
     <img src={marketIcon} width="38" height="38" alt="" />
-    <span class="marketCopy"><span class="pairSelect"><strong>{baseAsset} / {quoteAsset}</strong></span><span class="marketRoute">{networkLabel} <span class="marketTag">{venueLabel}</span></span></span>
+    <span class="marketCopy"><span class="pairSelect"><strong>{baseAsset} / {quoteAsset}</strong></span><span class="marketRoute"><span class="marketTag">{venueLabel}</span></span></span>
     <svg class="selectorChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
   </button>
   <div class="marketStat last"><span>{rateLabel || say("Your selected rate","Выбранный курс")}</span><strong>{selectedRate} <small>{quoteAsset} / {baseAsset}</small></strong></div>{#each stats as stat}<div class="marketStat" class:secondaryStat={stat.secondary} class:volumeStat={!!stat.unit}><span>{stat.label}</span><strong>{stat.value}{#if stat.unit}{" "}<small>{stat.unit}</small>{/if}</strong></div>{/each}
@@ -90,8 +91,12 @@
   @media (min-width: 981px) and (max-width: 1200px) { .marketStrip { grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(0, 1fr)); } .secondaryStat { display: none; } }
   @media (max-width: 980px) {
     .terminalShell { display: flex; width: 100%; flex-direction: column; gap: 20px; }
+    .otcGrid { order: 2; }
+    .railColumn { order: 1; }
     .bookWide { margin-top: 20px; }
     .marketStrip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .otcGrid { order: 2; }
+    .railColumn { order: 1; }
     .marketSelector { grid-column: span 2; border-right: 0; padding-right: 0; }
     .marketStat:not(.last) { border-top: 1px solid var(--color-border); padding-top: 12px; }
   }

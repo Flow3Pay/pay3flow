@@ -8,10 +8,8 @@
   import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { aggregateTrends, layoutWall, trendSwapHref, type TrendEvent, type TrendItem, type TrendMetric, type TrendPeriod } from "$lib/trends/model";
   import { readTrendActivity, TREND_STORAGE_KEY, TREND_ACTIVITY_EVENT } from "$lib/trends/activity";
-  import { demoTrendActivity } from "$lib/trends/demo";
   import { trendsCopy, venueNames, networkNames } from "$lib/trends/copy";
 
-  let mode: "demo" | "personal" = "demo";
   let metric: TrendMetric = "searches";
   let period: TrendPeriod = "1w";
   let query = "";
@@ -36,8 +34,7 @@
   const venueName = (value: string) => venueNames[value] ?? value;
   const networkName = (value: string) => networkNames[value] ?? value.replace(/-/g, " ");
   $: copy = trendsCopy[$locale];
-  $: example = demoTrendActivity(now);
-  $: ranked = aggregateTrends(mode === "demo" ? example : events, period, metric, now);
+  $: ranked = aggregateTrends(events, period, metric, now);
   $: filtered = ranked.filter((item) => `${item.asset} ${networkName(item.network)} ${venueName(item.provider)}`.toLowerCase().includes(query.trim().toLowerCase()));
   $: cells = layoutWall(filtered, width, measured);
   $: if (ready) void measureBricks(filtered, $locale, width);
@@ -151,10 +148,6 @@
         <TrendCanvasBackground {cells} {brickHeight} />
         <Panel position="top-left" class="trendsToolbar">
           <div class="toolbar">
-            <div class="segmented mode" aria-label="Trends data">
-              <button type="button" class:chosen={mode === "demo"} aria-pressed={mode === "demo"} on:click={() => { mode = "demo"; resetDetail(); }}>{copy.demo}</button>
-              <button type="button" class:chosen={mode === "personal"} aria-pressed={mode === "personal"} on:click={() => { mode = "personal"; resetDetail(); }}>{copy.personal}</button>
-            </div>
             <label class="filter"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" /><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg><input aria-label={copy.filter} placeholder={copy.filter} bind:value={query} on:input={resetDetail} />{#if query}<button type="button" aria-label={copy.clear} on:click={() => query = ""}>×</button>{/if}</label>
             <div class="segmented period" aria-label="Trends period">{#each [["1d", copy.day], ["1w", copy.week], ["1m", copy.month]] as [value, label]}<button type="button" class:chosen={period === value} aria-pressed={period === value} on:click={() => { period = value as TrendPeriod; resetDetail(); }}>{label}</button>{/each}</div>
             <div class="segmented metric"><button type="button" class:chosen={metric === "searches"} aria-pressed={metric === "searches"} on:click={() => { metric = "searches"; resetDetail(); }}>{copy.searches}</button><button type="button" class:chosen={metric === "appearances"} aria-pressed={metric === "appearances"} on:click={() => { metric = "appearances"; resetDetail(); }}>{copy.appearances}</button></div>
@@ -232,9 +225,10 @@
   .explore:hover, .explore:focus-visible { color: var(--color-accent-text); }
   @keyframes detailIn { from { opacity: 0; transform: translateY(5px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
   @media (max-width: 640px) {
-    .toolbar { gap: 8px; }
+    .toolbar { gap: 8px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
     .segmented button { padding-inline: 9px; min-height: 36px; }
     .filter { order: 4; width: 100%; }
+    .toolbar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
     .trendDetails { width: min(272px, calc(100vw - 24px)); }
     .explore { min-height: 44px; }
   }
