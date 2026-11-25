@@ -6,7 +6,7 @@ const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sol", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
 ]);
-const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc"]);
+const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc", "base", "optimism", "arbitrum", "plasma", "ink", "linea", "gnosis"]);
 const WEBP_ASSET_ICONS = new Set(["00"]);
 const LOCAL_FIAT_ICONS = new Set(["amd", "byn", "kzt", "rub", "uah", "usd"]);
 
@@ -18,7 +18,14 @@ export const warningIcon = "/icons/ui/warning.svg";
 const NETWORK_ASSETS: Array<[RegExp, string]> = [
   [/bitcoin cash/i, "bch"],
   [/bitcoin/i, "btc"],
-  [/ethereum|arbitrum|optimism|base/i, "eth"],
+  [/\bbase\b/i, "base"],
+  [/optimism/i, "optimism"],
+  [/arbitrum/i, "arbitrum"],
+  [/\bplasma\b/i, "plasma"],
+  [/\bink\b/i, "ink"],
+  [/\blinea\b/i, "linea"],
+  [/gnosis/i, "gnosis"],
+  [/ethereum/i, "eth"],
   [/(?:bnb|binance)[- ]smart[- ]chain|\bbsc\b|\bbep[- ]?20\b/i, "bnb"],
   [/solana/i, "sol"],
   [/^cronos$/i, "cro"],
