@@ -1,5 +1,5 @@
 import { get, writable } from "svelte/store";
-import { scramblingNodes } from "./scramble-on-load";
+import { scrambleText, scramblingNodes } from "./scramble-on-load";
 import { walletMessages } from "./wallet-messages";
 import { spotMessages } from "./guides/spot/messages";
 import { guideMessages } from "./guides/messages";
@@ -1215,6 +1215,40 @@ export function formatRouteCount(count: number, language: Locale) {
   }
   if (language === "hy") return `${count} ուղղություն է գտնվել`;
   return `${count} ${count === 1 ? "route" : "routes"} found`;
+}
+
+/**
+ * Replays the decoder on the copy that is on screen after every language
+ * change, so translated text arrives the way the hero phrase does.
+ */
+export function scrambleOnLocaleChange(node: HTMLElement) {
+  let ready = false;
+  let frame = 0;
+  let cancel: (() => void) | null = null;
+  // The language restored during mount is not a language change, so the decoder
+  // only arms itself once the page has painted.
+  const armed = window.requestAnimationFrame(() => { ready = true; });
+
+  const unsubscribe = locale.subscribe(() => {
+    if (!ready) return;
+    if (frame) window.cancelAnimationFrame(frame);
+    cancel?.();
+    cancel = null;
+    // Wait for the reactive translation to land in the DOM before planning runs.
+    frame = window.requestAnimationFrame(() => {
+      frame = 0;
+      cancel = scrambleText(node);
+    });
+  });
+
+  return {
+    destroy() {
+      window.cancelAnimationFrame(armed);
+      if (frame) window.cancelAnimationFrame(frame);
+      cancel?.();
+      unsubscribe();
+    },
+  };
 }
 
 /**

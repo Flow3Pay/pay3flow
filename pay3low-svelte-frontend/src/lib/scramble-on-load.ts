@@ -154,22 +154,28 @@ function finishRun(run: NodeRun) {
  * Decodes the copy that is on screen once, after the startup animation finishes.
  * Numbers and currency codes inside amount readouts are never touched.
  */
-export function scrambleOnLoad(node: HTMLElement) {
-  let started = false;
+/**
+ * Decodes every visible line of copy under `root` right now. Returns a canceller
+ * that restores the final text, so a second pass can replace an unfinished one.
+ */
+export function scrambleText(root: ParentNode): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
+  if (isSkippedPath(window.location.pathname, window.location.hash)) return () => {};
+  const runs = collectRuns(root);
+  if (!runs.length) return () => {};
+  const startedAt = performance.now();
   let raf = 0;
-  let runs: NodeRun[] = [];
-  let startedAt = 0;
 
   function cancel() {
     if (raf) window.cancelAnimationFrame(raf);
     raf = 0;
     for (const run of runs) finishRun(run);
-    runs = [];
+    runs.length = 0;
   }
 
   function step(now: number) {
     raf = 0;
-    if (!runs.length) return;
     const elapsed = now - startedAt;
     for (let i = runs.length - 1; i >= 0; i--) {
       const run = runs[i];
@@ -198,21 +204,24 @@ export function scrambleOnLoad(node: HTMLElement) {
     if (runs.length) raf = window.requestAnimationFrame(step);
   }
 
+  raf = window.requestAnimationFrame(step);
+  return cancel;
+}
+
+export function scrambleOnLoad(node: HTMLElement) {
+  let started = false;
+  let cancel = () => {};
+
   function begin() {
     if (started) return;
     if (!get(introFinished)) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (isSkippedPath(window.location.pathname, window.location.hash)) return;
     started = true;
-    runs = collectRuns(node);
-    if (!runs.length) return;
-    startedAt = performance.now();
-    raf = window.requestAnimationFrame(step);
+    cancel = scrambleText(node);
   }
 
   const unsubscribe = introFinished.subscribe((ready) => {
     if (ready && !started) window.requestAnimationFrame(begin);
   });
 
-  return { destroy: cancel };
+  return { destroy() { cancel(); unsubscribe(); } };
 }
