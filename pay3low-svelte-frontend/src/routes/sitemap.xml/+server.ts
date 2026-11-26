@@ -1,6 +1,5 @@
 import { SITE_URL } from "$lib/home-content";
 import { profileVenues } from "$lib/provider-profile";
-import { popularSwapPairs } from "$lib/swap-landing";
 
 export const prerender = true;
 
@@ -22,7 +21,6 @@ export function GET() {
   const urls = [
     ...pages.map((page) => `${origin}/${page}`),
     ...profileVenues.map((venue) => `${origin}/providers/${venue.slug}`),
-    ...popularSwapPairs.map(([source, target]) => `${origin}/swap/${source}/${target}`),
   ];
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
