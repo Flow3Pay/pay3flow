@@ -1,4 +1,10 @@
+# Pay3Flow — public pages are open to every crawler.
 User-agent: *
 Allow: /
+
+# Machine endpoints and internal tooling are not content.
+Disallow: /api/
+Disallow: /share-links
+Disallow: /otc-runbook
 
 Sitemap: https://pay3flow.lefine.pro/sitemap.xml
