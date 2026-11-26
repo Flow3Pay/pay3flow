@@ -341,7 +341,8 @@
 
 <style>
   .marketChart { display: flex; width: 100%; min-width: 0; flex: 1; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 15px); background: var(--exchange-card-bg); overflow: hidden; }
-  .chartHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 20px var(--otc-panel-padding, 20px) 8px; }
+  /* Centre the timeframe pill against the price block instead of pinning it to the caption line. */
+  .chartHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 20px var(--otc-panel-padding, 20px) 8px; }
   .chartQuote { display: grid; gap: 2px; min-width: 0; }
   .chartValue { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
   .chartValue strong { font-family: var(--font-mono); font-size: clamp(34px, 4.4vw, 52px); font-weight: 500; line-height: 1.05; letter-spacing: -.04em; overflow-wrap: anywhere; }
