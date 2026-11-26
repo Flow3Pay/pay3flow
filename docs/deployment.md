@@ -87,9 +87,10 @@ expected `pay3flow.io/source-revision` annotation. Check `/health`, `/`,
 is not a completed deployment.
 
 For search crawlers, confirm `/robots.txt` and `/sitemap.xml` answer 200. The
-sitemap is prerendered and lists the public pages plus every provider profile
-that the frontend knows about, so extend the provider identities when a new
-venue should be discoverable.
+sitemap is prerendered and lists the public pages, every provider profile that
+the frontend knows about, and the curated swap directions from
+`src/lib/swap-landing.ts`. Add a venue identity or a popular pair there when it
+should be discoverable.
 
 Use a read-only browser flow to check SWAP/guide switching and widget loading.
 For Aurora, confirm the token catalog authenticates and the selected pair and
