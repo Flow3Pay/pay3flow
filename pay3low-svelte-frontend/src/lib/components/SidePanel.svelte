@@ -229,9 +229,7 @@
       </div>
     {:else if searching}
       <div class="routeLoading" role="status" aria-live="polite" aria-label={t("Searching live routes", {}, $locale)}>
-        <div class="routeLoadingMark">
-          <LogoLoader size={46} label={t("Searching live routes", {}, $locale)} />
-        </div>
+        <LogoLoader size={72} label={t("Searching live routes", {}, $locale)} />
         <p>{t("Searching live routes", {}, $locale)}</p>
       </div>
     {:else}
@@ -836,16 +834,6 @@
   padding: 32px 8px;
   color: var(--color-text-soft);
   text-align: center;
-}
-
-.routeLoadingMark {
-  display: grid;
-  width: 96px;
-  height: 96px;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: 26px;
-  background: var(--color-panel-soft);
 }
 
 .routeLoading p {
