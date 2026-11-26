@@ -66,6 +66,8 @@ export function assetIcon(asset: string): string {
   if (key === "near") return "/icons/assets/near-investx.png";
   if (key === "ever") return "/icons/assets/ever.svg";
   if (key === "tusd") return "/icons/assets/tusd.svg";
+  // POL is Polygon's current ticker; it shares the MATIC mark.
+  if (key === "pol") return "/icons/assets/matic.webp";
   if (WEBP_ASSET_ICONS.has(key)) return `/icons/assets/${key}.webp`;
   if (PNG_ASSET_ICONS.has(key)) return `/icons/assets/${key}.png`;
   if (LOCAL_FIAT_ICONS.has(key)) return `/icons/assets/${key}.svg`;
