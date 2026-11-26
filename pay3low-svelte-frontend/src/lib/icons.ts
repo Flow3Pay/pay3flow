@@ -6,8 +6,8 @@ const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
 ]);
-const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc", "base", "optimism", "arbitrum", "plasma", "ink", "linea", "gnosis", "sol"]);
-const WEBP_ASSET_ICONS = new Set(["00"]);
+const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc", "base", "optimism", "arbitrum", "plasma", "ink", "linea", "gnosis", "sol", "gt", "cfx", "fil"]);
+const WEBP_ASSET_ICONS = new Set(["00", "rbc"]);
 const LOCAL_FIAT_ICONS = new Set(["amd", "byn", "kzt", "rub", "uah", "usd"]);
 
 export const likeIcon = "/icons/ui/like.svg";
