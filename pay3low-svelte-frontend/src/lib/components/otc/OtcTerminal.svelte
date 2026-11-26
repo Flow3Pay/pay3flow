@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import { locale } from "$lib/i18n";
-  import { marketByBase, type OtcMarket } from "$lib/otc/markets";
-  import OtcMarketPicker from "./OtcMarketPicker.svelte";
+  // import { marketByBase } from "$lib/otc/markets";
+  // Market switching is paused for launch: the picker only offers EVER and GNK, and GNK is not needed yet.
+  // Restore this import, the block below, and the selector's on:click to bring the picker back.
+  // import OtcMarketPicker from "./OtcMarketPicker.svelte";
   import OtcPanel from "./OtcPanel.svelte";
   export let baseAsset = "EVER", quoteAsset = "USDT", marketIcon = "/icons/assets/ever.svg", venueLabel = "OTC";
   export const networkLabel = "";
@@ -10,7 +11,9 @@
   // Terminals whose content brings its own card shell still get the generic panel here.
   export let bookPanel = true, chartPanel = true, bookWide = false;
   $: say = (en:string,ru:string) => $locale === "ru" ? ru : en;
-  $: currentMarket = marketByBase(baseAsset);
+  // $: currentMarket = marketByBase(baseAsset);
+  /*
+   * Market switching is paused for launch; the selector only shows the current market.
   let pickerOpen = false, selectorButton: HTMLButtonElement;
   function closePicker() {
     pickerOpen = false;
@@ -29,9 +32,11 @@
     if (side === "buy" || side === "sell") params.set("side", side);
     location.hash = `#/otc?${params}`;
   }
+  */
 </script>
 <div class="marketStrip">
-  <button type="button" class="marketSelector" data-testid="otc-market-selector" bind:this={selectorButton} class:open={pickerOpen} aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label={`${say("Choose OTC market","Выберите рынок OTC")}: ${baseAsset} / ${quoteAsset}`} on:click={() => pickerOpen = true}>
+  <!-- Market switching is paused for launch, so this card no longer opens the market picker. -->
+  <button type="button" class="marketSelector" data-testid="otc-market-selector" aria-label={`${baseAsset} / ${quoteAsset}`}>
     <img src={marketIcon} width="38" height="38" alt="" />
     <span class="marketCopy"><span class="pairSelect"><strong>{baseAsset} / {quoteAsset}</strong></span><span class="marketRoute"><span class="marketTag">{venueLabel}</span></span></span>
     <svg class="selectorChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -60,16 +65,16 @@
     {#if bookPanel}<OtcPanel id="otc-book" title={bookTitle} collapsible={false}><slot name="book" /></OtcPanel>{:else}<slot name="book" />{/if}
   </div>
 {/if}
-<OtcMarketPicker open={pickerOpen} selected={currentMarket.id} onClose={closePicker} onSelect={chooseMarket} />
+<!-- <OtcMarketPicker open={pickerOpen} selected={currentMarket.id} onClose={closePicker} onSelect={chooseMarket} /> -->
 <style>
   .marketStrip { display: grid; grid-template-columns: minmax(220px, 1.25fr) repeat(5, minmax(0, 1fr)); gap: 20px; align-items: center; min-height: 96px; margin-bottom: 24px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--otc-card-radius, 15px); background: var(--color-paper); }
   .marketSelector { display: flex; min-width: 0; align-items: center; gap: 12px; padding: 0 20px 0 0; border: 0; border-right: 1px solid var(--color-border); border-radius: 12px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .marketSelector:hover .pairSelect strong, .marketSelector:focus-visible .pairSelect strong, .marketSelector.open .pairSelect strong { color: var(--color-accent-text); }
   .marketSelector:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 6px; }
   .marketSelector > img { flex: 0 0 38px; border-radius: 50%; }
-  .marketCopy { display: block; min-width: 0; flex: 1; }
+  .marketCopy { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; }
   .pairSelect { display: block; font-size: 14px; font-weight: 650; white-space: nowrap; }
-  .marketRoute { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; color: var(--color-text-soft); font-size: 12px; }
+  .marketRoute { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--color-text-soft); font-size: 12px; }
   .marketTag { padding: 2px 4px; border-radius: 4px; background: var(--color-panel); font-family: var(--font-mono); font-size: 11px; }
   .selectorChevron { flex: 0 0 auto; margin-left: auto; color: var(--color-text-faint); transition: transform .18s ease; }
   .marketSelector.open .selectorChevron { transform: rotate(180deg); }

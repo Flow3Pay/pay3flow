@@ -100,20 +100,14 @@ test("funding, cancellation, and claiming use selected wallet and explicit confi
   await page.getByRole("button",{name:"Claim pending balance",exact:true}).click();await page.getByRole("dialog").getByRole("button",{name:"Confirm in wallet"}).click();
   expect((await calls(page)).map((c:any)=>c.kind)).toEqual(["deposit","withdraw","cancel","claim"]);
 });
-test("market, direction and exact input survive reload; EVER navigation still works",async({page})=>{
+test("market, direction and exact input survive reload; market picker stays paused",async({page})=>{
   await fixture(page);await open(page,"&side=sell&type=limit&amount=1.000000001&price=0.205");
   await page.reload();await expect(page.locator("#hex-amount")).toHaveValue("1.000000001");
   await expect(page.locator("#hex-price")).toHaveValue("0.205");await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-market","GNK-USDT");
-  await expect(page.getByTestId("otc-market-selector")).toHaveAttribute("aria-label",/GNK \/ USDT/);
-  await page.getByTestId("otc-market-selector").click();
-  const marketDialog=page.getByRole("dialog"),search=marketDialog.getByRole("textbox",{name:"OTC markets"});
-  await search.fill("gonka");await expect(marketDialog.getByRole("option")).toHaveCount(1);await expect(marketDialog.getByRole("option")).toContainText("GNK / USDT");
-  await search.fill("everscale");await expect(marketDialog.getByRole("option")).toHaveCount(1);
-  await marketDialog.getByRole("option",{name:/EVER \/ USDT/}).click();
-  await expect(page.getByTestId("otc-workspace")).toContainText("EVER");
-  await expect(page.getByTestId("otc-market-selector")).toHaveAttribute("aria-label",/EVER \/ USDT/);
-  await page.getByTestId("otc-market-selector").click();
-  await page.getByRole("dialog").getByRole("option",{name:/GNK \/ USDT/}).click();
+  const selector=page.getByTestId("otc-market-selector");
+  await expect(selector).toHaveAttribute("aria-label","GNK / USDT");
+  await expect(selector).not.toHaveAttribute("aria-haspopup",/.*/);
+  await selector.click();await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-market","GNK-USDT");
   await page.setViewportSize({width:320,height:760});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
