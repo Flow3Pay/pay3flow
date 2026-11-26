@@ -15,10 +15,11 @@ use crate::db::{repo, DbPool};
 const ANONYMOUS_USER_HEADER: &str = "x-anonymous-user-id";
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegisterRequest {
     pub anonymous_id: Uuid,
-    /// Coarse region string resolved on the client side (e.g. "Berlin, Germany").
-    /// When present, the server skips its own IP-based geo lookup.
+    /// Coarse region string resolved by the browser (e.g. "Berlin, Germany").
+    /// The server never performs its own IP geo lookup.
     pub region: Option<String>,
 }
 
@@ -28,18 +29,21 @@ pub struct RegisterResponse {
 }
 
 /// Register the browser-generated pseudonymous identifier without collecting
-/// an account, contact details, or device fingerprint. The request IP is only
-/// used transiently to derive a coarse region for the operator notification;
-/// it is never stored.
+/// an account, contact details, or device fingerprint. The coarse region comes
+/// from the browser; the request IP is relayed to the operator notification and
+/// never stored.
 pub async fn register(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, AppError> {
-    let is_new = record_request(&state.pool, request.anonymous_id)
+    record_request(&state.pool, request.anonymous_id)
         .await
         .map_err(AppError::from)?;
-    if is_new {
+    let claimed = claim_notification(&state.pool, request.anonymous_id)
+        .await
+        .map_err(AppError::from)?;
+    if claimed {
         let ua = user_agent(&headers);
         notify_new_user(
             &state,
@@ -52,6 +56,16 @@ pub async fn register(
     Ok(Json(RegisterResponse {
         anonymous_id: request.anonymous_id,
     }))
+}
+
+/// Claim the single new-user notification for this browser ID. The first API
+/// request usually creates the row from the tracking middleware before the
+/// explicit registration arrives with the client-resolved region, so "new user"
+/// is tracked separately from row creation. The atomic update makes concurrent
+/// registrations (multiple tabs) send at most one notification.
+async fn claim_notification(pool: &DbPool, anonymous_id: Uuid) -> anyhow::Result<bool> {
+    let client = pool.get().await?;
+    repo::anonymous::claim_notification(&client, &anonymous_id).await
 }
 
 /// Count one API request for a pseudonymous browser. Unknown IDs are accepted
@@ -81,15 +95,10 @@ fn notify_new_user(
     };
 
     tokio::spawn(async move {
-        // The /api/anonymous/register endpoint receives a client-resolved region
-        // (the browser calls ipwho.is directly with its own IP). When that path
-        // runs, region is already filled in correctly here.
-        //
-        // The track_request middleware path has no region, and a server-side
-        // lookup would resolve the *server's* outbound IP rather than the
-        // client's, producing the wrong country every time. We therefore show
-        // "неизвестен" for middleware-originated notifications instead of
-        // misleading data.
+        // The region is resolved by the browser (it calls ipwho.is with its own
+        // IP) and passed in by /api/anonymous/register. A server-side lookup is
+        // deliberately not attempted here: it would describe the server, not the
+        // visitor. The tracking middleware never notifies; see claim_notification.
         let region = match region {
             Some(r) if !r.trim().is_empty() => r,
             _ => "неизвестен".to_string(),
@@ -160,11 +169,8 @@ pub async fn track_request(
 ) -> Response {
     if request.uri().path() != "/api/anonymous/register" {
         if let Some(anonymous_id) = request_anonymous_id(&request) {
-            let ip = client_ip(request.headers());
-            let ua = user_agent(request.headers());
             match record_request(&state.pool, anonymous_id).await {
-                Ok(true) => notify_new_user(&state, anonymous_id, ip, None, ua),
-                Ok(false) => {}
+                Ok(_) => {}
                 Err(error) => tracing::warn!(error = %error, "anonymous request accounting failed"),
             }
         }

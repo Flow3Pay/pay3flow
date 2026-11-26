@@ -24,6 +24,12 @@ SET request_count = request_count + 1,
 WHERE id = $1
 "#;
 const INSERT_SESSION: &str = "INSERT INTO anonymous_user_sessions (anonymous_id) VALUES ($1)";
+const CLAIM_NOTIFICATION: &str = r#"
+UPDATE anonymous_users
+SET notified_at = now()
+WHERE id = $1 AND notified_at IS NULL
+RETURNING id
+"#;
 const COUNT_USERS: &str = "SELECT (SELECT COUNT(*)::BIGINT FROM anonymous_users), \
                     (SELECT COUNT(*)::BIGINT FROM users)";
 const ACTIVITY_COUNTS: &str = r#"
@@ -62,6 +68,15 @@ pub async fn bump_request(tx: &Transaction<'_>, id: &Uuid, starts_session: bool)
 pub async fn insert_session(tx: &Transaction<'_>, id: &Uuid) -> Result<()> {
     tx.execute(INSERT_SESSION, &[&id]).await?;
     Ok(())
+}
+
+/// Mark the single new-user notification as sent. Returns true only for the
+/// caller that won the atomic update.
+pub async fn claim_notification(client: &DbPoolObject, id: &Uuid) -> Result<bool> {
+    Ok(client
+        .query_opt(CLAIM_NOTIFICATION, &[&id])
+        .await?
+        .is_some())
 }
 
 pub async fn count_users(client: &DbPoolObject) -> Result<(i64, i64)> {

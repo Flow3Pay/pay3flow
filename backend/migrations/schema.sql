@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS anonymous_users (
 );
 
 ALTER TABLE anonymous_users ADD COLUMN IF NOT EXISTS last_session_at TIMESTAMPTZ;
+-- Set when the operator was notified about this browser. Distinct from row
+-- creation because the tracking middleware may create the row before the
+-- explicit registration carrying the client-resolved region arrives.
+ALTER TABLE anonymous_users ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS anonymous_users_last_seen_idx
     ON anonymous_users (last_seen_at DESC);
