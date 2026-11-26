@@ -599,7 +599,9 @@
     instructionsRoute = routes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
   }
 
-  $: corridor = corridors.find((item) => item.id === corridorId) ?? corridors[0];
+  // Hold the corridor fallback until the payment-method catalog is in: it would
+  // otherwise flash the first corridor (AMD→RUB) before the saved methods apply.
+  $: corridor = paymentCatalogLoading ? undefined : (corridors.find((item) => item.id === corridorId) ?? corridors[0]);
   $: sourceCountry = corridor ? (directionReversed ? corridor.target_country : corridor.source_country) : "";
   $: sourceCurrency = corridor ? (directionReversed ? corridor.target_currency : corridor.source_currency) : "";
   $: targetCountry = corridor ? (directionReversed ? corridor.source_country : corridor.target_country) : "";
@@ -1261,6 +1263,9 @@
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {}).finally(() => { networksReady = true; markUrlReady(); });
     fetchPaymentMethods().then((items) => {
       paymentMethods = items;
+      // Resolve the corridor and the saved methods in the same render so the
+      // first corridor (AMD→RUB) never appears before the restored selection.
+      paymentCatalogLoading = false;
       onPaymentMethodsLoaded(items);
       if (shared) {
         sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", shared.params.get("from") ?? sourceMethodId)?.id ?? sourceMethodId;
