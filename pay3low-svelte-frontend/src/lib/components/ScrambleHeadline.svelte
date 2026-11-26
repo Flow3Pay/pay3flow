@@ -324,18 +324,23 @@
   .accentLine {
     position: relative;
     z-index: 0;
-    display: inline;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-    background-image: linear-gradient(var(--color-accent), var(--color-accent));
-    background-repeat: no-repeat;
-    background-size: 100% 0.2em;
-    background-position: left 88%;
+    display: inline-block;
+    white-space: nowrap;
     padding-bottom: 0.05em;
   }
 
+  /* The marker hugs the accent phrase and tilts slightly, as in the intro. */
   .accentLine::after {
-    display: none;
+    position: absolute;
+    right: -0.05em;
+    bottom: 0.02em;
+    left: -0.04em;
+    z-index: -1;
+    height: 0.2em;
+    border-radius: 3px;
+    background: var(--color-accent);
+    content: "";
+    transform: rotate(-1deg);
   }
 
   .line :global(.dud) {
@@ -391,6 +396,15 @@
     .line {
       display: block;
       min-height: 0.96em;
+    }
+
+    /* The accent phrase stays on its own line so the marker matches the text, not the column. */
+    .accentLine {
+      display: inline-block;
+    }
+
+    :global(html[lang="ru"]) .headline {
+      font-size: clamp(30px, 8vw, 44px);
     }
   }
 </style>
