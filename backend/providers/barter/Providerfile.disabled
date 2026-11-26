@@ -1,3 +1,6 @@
+# Paused: the Barter partnership is not agreed yet. Rename this file back to
+# `Providerfile` and regenerate `migrations/providers.sql` to re-enable it.
+#
 # Official read-only /route API. Server registration requires BARTER_API_KEY.
 exchange_methods = ["exchanger"]
 

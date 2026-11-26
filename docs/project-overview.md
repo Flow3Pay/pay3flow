@@ -50,7 +50,7 @@ holding funds. Other offers open at their venue and may change before execution.
 | ID Pay | Public server-rendered calculator rate | Selectable direct AMD/RUB and RUB/AMD transfer estimates |
 | Gate.io | Public API v4 spot tickers | Crypto spot paths and cycles |
 | 0x | Swap API v2 price endpoint | Same-chain EVM swaps and fiat compositions; requires `ZEROX_API_KEY` |
-| Barter | Official Ethereum route API | Ethereum swaps and fiat compositions; requires `BARTER_API_KEY` |
+| Barter | Official Ethereum route API | Paused: the partnership is not agreed yet, so its Providerfile is disabled and `BARTER_API_KEY` is ignored |
 
 CoW Swap loads token addresses and per-network precision from its live token
 list and the bridge catalog. The protocol network registry supplies public API
@@ -91,9 +91,10 @@ available when a provider or browser blocks embedding. See
 and `PUBLIC_AURORA_INTENTS_API_KEY` runtime configuration. BestChange requires
 `BESTCHANGE_API_KEY` from the referral-program dashboard; the numeric referral
 ID used in public links is not an API key. The other listed
-public-data adapters make anonymous read-only requests, except 0x and Barter
-which use the optional server credentials above. Both load addresses and token
-precision from the shared token list at startup.
+public-data adapters make anonymous read-only requests, except 0x, which uses
+the optional server credential above. It loads addresses and token precision
+from the shared token list at startup. Barter is paused for now and is not
+registered.
 
 The [provider coverage audit](route-aggregation-research.md#provider-coverage-audit--2026-10-12)
 records supported surfaces, live checks, corrected restrictions, and remaining limits.

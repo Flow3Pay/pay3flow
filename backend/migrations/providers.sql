@@ -3,7 +3,7 @@
 -- The application embeds this migration; Providerfiles are not read at runtime.
 DELETE FROM providers
 WHERE source_file LIKE '%/Providerfile'
-AND (slug, operation) NOT IN (('0x', 'buy'), ('0x', 'sell'), ('barter', 'buy'), ('barter', 'sell'), ('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('crypto-office', 'buy'), ('crypto-office', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('gate', 'buy'), ('gate', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('pay3flow-otc', 'buy'), ('pay3flow-otc', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('solunex', 'buy'), ('solunex', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+AND (slug, operation) NOT IN (('0x', 'buy'), ('0x', 'sell'), ('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('crypto-office', 'buy'), ('crypto-office', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('gate', 'buy'), ('gate', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('pay3flow-otc', 'buy'), ('pay3flow-otc', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('solunex', 'buy'), ('solunex', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('0x', 'buy', 'https://matcha.xyz/', '0x Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"0x Swap API v2 token quotes, enabled when the server has ZEROX_API_KEY. Token and network availability depends on the selected route.","steps":["Open Matcha and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Matcha.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Open Matcha by 0x","url":"https://matcha.xyz/"}],"review_sources":[]}'::JSONB, '0x/Providerfile')
@@ -23,38 +23,6 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('0x', 'sell', 'https://matcha.xyz/', '0x Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"0x Swap API v2 token quotes, enabled when the server has ZEROX_API_KEY. Token and network availability depends on the selected route.","steps":["Open Matcha and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Matcha.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Open Matcha by 0x","url":"https://matcha.xyz/"}],"review_sources":[]}'::JSONB, '0x/Providerfile')
-ON CONFLICT (slug, operation) DO UPDATE SET
-source_url = EXCLUDED.source_url,
-name = EXCLUDED.name,
-currencies = EXCLUDED.currencies,
-currency_exceptions = EXCLUDED.currency_exceptions,
-banks = EXCLUDED.banks,
-exchange_methods = EXCLUDED.exchange_methods,
-adapter = EXCLUDED.adapter,
-workflow = EXCLUDED.workflow,
-fee_model = EXCLUDED.fee_model,
-guidance = EXCLUDED.guidance,
-source_file = EXCLUDED.source_file,
-updated_at = now();
-
-INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
-VALUES ('barter', 'buy', 'https://app.barterswap.xyz/', 'Barter Buy', ARRAY['ALL']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Live Ethereum route output; wallet gas and approvals must be checked separately.","docs_url":"https://api2.eth.barterswap.xyz/openapi"}'::JSONB, '{"description":"Ethereum token swap through Barter. Quotes require the deployment''s Barter API credential.","steps":["Open Barter and select the exact Ethereum tokens shown in the route.","Refresh the quote and check fees and minimum received before signing in your wallet."],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[]}'::JSONB, 'barter/Providerfile')
-ON CONFLICT (slug, operation) DO UPDATE SET
-source_url = EXCLUDED.source_url,
-name = EXCLUDED.name,
-currencies = EXCLUDED.currencies,
-currency_exceptions = EXCLUDED.currency_exceptions,
-banks = EXCLUDED.banks,
-exchange_methods = EXCLUDED.exchange_methods,
-adapter = EXCLUDED.adapter,
-workflow = EXCLUDED.workflow,
-fee_model = EXCLUDED.fee_model,
-guidance = EXCLUDED.guidance,
-source_file = EXCLUDED.source_file,
-updated_at = now();
-
-INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
-VALUES ('barter', 'sell', 'https://app.barterswap.xyz/', 'Barter Sell', ARRAY['ALL']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Live Ethereum route output; wallet gas and approvals must be checked separately.","docs_url":"https://api2.eth.barterswap.xyz/openapi"}'::JSONB, '{"description":"Ethereum token swap through Barter. Quotes require the deployment''s Barter API credential.","steps":["Open Barter and select the exact Ethereum tokens shown in the route.","Refresh the quote and check fees and minimum received before signing in your wallet."],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[]}'::JSONB, 'barter/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,

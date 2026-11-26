@@ -15,7 +15,8 @@ only after the user confirms the transaction in their own wallet.
 - Binance, Bybit, OKX, Bitget, MEXC, Cifra Markets, Dzengi, and Gate spot tickers for
   crypto-to-crypto paths.
 - CoW Swap, NEAR Intents and Symbiosis token catalogs and amount-specific quotes;
-  optional authenticated 0x, Barter and Crypto Office quote adapters.
+  optional authenticated 0x and Crypto Office quote adapters. Barter is paused
+  until the partnership is agreed.
 
 Providerfile-backed sources are discovered from the generated provider catalog;
 the list is not hardcoded in the route API. Their normalized advertisements are

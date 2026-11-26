@@ -140,7 +140,9 @@ async fn main() -> anyhow::Result<()> {
     )?
     .with_execution_contracts(&cfg.symbiosis_execution_contracts)?;
     public_route_providers.push(Arc::new(symbiosis.clone()));
-    for (name, variable) in [("0x", "ZEROX_API_KEY"), ("barter", "BARTER_API_KEY")] {
+    // Barter is paused while the partnership is unsettled; its Providerfile is
+    // kept as `providers/barter/Providerfile.disabled`.
+    for (name, variable) in [("0x", "ZEROX_API_KEY")] {
         let Some(key) = std::env::var(variable)
             .ok()
             .filter(|key| !key.trim().is_empty())

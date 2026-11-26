@@ -100,7 +100,7 @@ These values are never read from `config.toml`:
 | `OTC_FEE_RECIPIENTS` | Optional network-to-address map for OTC fee destinations (JSON string array) |
 | `BESTCHANGE_API_KEY` | Authenticated BestChange rates API |
 | `ZEROX_API_KEY` | Optional server-side 0x quote credential |
-| `BARTER_API_KEY` | Optional server-side Barter quote credential |
+| `BARTER_API_KEY` | Paused: Barter is not enabled until the partnership is agreed, so the value is ignored |
 | `NEAR_INTENTS_JWT` | Optional authenticated 1-Click API credential |
 | `SYMBIOSIS_PARTNER_ID` | Optional Symbiosis partner credential |
 | `CRYPTO_OFFICE_PUBLIC_KEY` | Crypto Office public API key; configure together with the secret key |

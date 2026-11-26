@@ -20,7 +20,8 @@ a swap. The user explicitly starts the swap and confirms wallet requests.
 An unavailable wallet adapter or unsupported provider is reported inside the
 common form. There is no fallback to an external swap application. Availability
 still depends on provider liquidity, configured contracts and wallet support.
-0x and Barter quote credentials do not by themselves enable wallet execution.
+0x quote credentials do not by themselves enable wallet execution. Barter is
+paused for now, so no Barter route reaches the widget.
 
 ## Amounts and signing
 

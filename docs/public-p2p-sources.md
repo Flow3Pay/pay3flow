@@ -30,7 +30,7 @@ not implicitly invoked by route search.
 | NEAR Intents | 1Click token catalog and dry quotes | Optional server `NEAR_INTENTS_JWT`; dry quotes still require valid chain-specific preview addresses |
 | Symbiosis | Token catalog and quote API | Optional partner credential; preview address compatibility is checked separately from native execution contracts |
 | 0x | Swap API price discovery | Server `ZEROX_API_KEY`; installed TypeScript SDK is not a browser swap form |
-| Barter | Ethereum route API | Server `BARTER_API_KEY`; indicative discovery and an external app link |
+| Barter | Ethereum route API | Paused: not registered until the partnership is agreed; its Providerfile is disabled |
 | Crypto Office | Available pairs and amount-specific rates | Server public/secret key pair produces fresh IP-bound authorization; optional legacy token fallback |
 
 Exact coverage, network aliases and response mappings live in
