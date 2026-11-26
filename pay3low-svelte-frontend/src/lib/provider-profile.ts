@@ -37,7 +37,9 @@ const identities: Array<[string, string, string, MarketType[]]> = [
   ['symbiosis', 'Symbiosis', 'https://app.symbiosis.finance', ['swap']],
   ['gate', 'Gate.io', 'https://www.gate.io', ['spot']],
   ['0x', '0x', 'https://matcha.xyz', ['swap']],
-  ['barter', 'Barter', 'https://app.barterswap.xyz', ['swap']],
+  // Barter is paused until the partnership is agreed, so it stays out of every
+  // venue listing; restore this line together with its Providerfile.
+  // ['barter', 'Barter', 'https://app.barterswap.xyz', ['swap']],
   ['solunex', 'Solunex', 'https://solunex.ge/en', ['exchanger']],
   ['id-pay', 'ID Pay', 'https://id-pay.ru', ['exchanger']],
   ['crypto-office', 'Crypto Office', 'https://crypto-office.com/ru/exchange', ['exchanger']],

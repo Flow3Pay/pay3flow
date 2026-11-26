@@ -166,17 +166,17 @@ test('active tabs have a green underline and the existing share dialog previews 
 
 test('SWAP category restores wallet providers from older catalogs and their profile labels', async ({ page }) => {
   await mock(page);
-  const swaps = ['cow-swap', 'near-intents', 'symbiosis', '0x', 'barter'].map(slug => ({
+  const swaps = ['cow-swap', 'near-intents', 'symbiosis', '0x'].map(slug => ({
     ...providers[1], id: `${slug}-buy`, slug, name: `${slug} Buy`,
   }));
   await page.route('**/api/providers', route => route.fulfill({
     contentType: 'application/json', body: JSON.stringify([...providers, ...swaps]),
   }));
   await page.goto('/providers');
-  await expect(page.locator('.venueCard')).toHaveCount(7);
+  await expect(page.locator('.venueCard')).toHaveCount(6);
   await page.getByRole('button', { name: 'SWAP', exact: true }).click();
-  await expect(page.locator('.venueCard')).toHaveCount(5);
-  await expect(page.locator('.venueCard .types')).toHaveText(Array(5).fill('SWAP'));
+  await expect(page.locator('.venueCard')).toHaveCount(4);
+  await expect(page.locator('.venueCard .types')).toHaveText(Array(4).fill('SWAP'));
   await page.getByRole('button', { name: 'Обменник', exact: true }).click();
   await expect(page.locator('.venueCard')).toHaveCount(1);
   await expect(page.locator('.venueCard')).toContainText('Whitebird');
@@ -190,6 +190,6 @@ test('SWAP category remains available when the catalog fails', async ({ page }) 
   await page.goto('/providers');
   await expect(page.locator('.notice')).toBeVisible();
   await page.getByRole('button', { name: 'SWAP', exact: true }).click();
-  await expect(page.locator('.venueCard')).toHaveCount(5);
-  await expect(page.locator('.venueCard')).toContainText(['CoW Swap', 'NEAR Intents', 'Symbiosis', '0x', 'Barter']);
+  await expect(page.locator('.venueCard')).toHaveCount(4);
+  await expect(page.locator('.venueCard')).toContainText(['CoW Swap', 'NEAR Intents', 'Symbiosis', '0x']);
 });
