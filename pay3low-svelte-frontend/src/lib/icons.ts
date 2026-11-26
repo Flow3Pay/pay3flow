@@ -6,8 +6,8 @@ const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
 ]);
-const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc", "base", "optimism", "arbitrum", "plasma", "ink", "linea", "gnosis", "sol", "gt", "cfx", "fil"]);
-const WEBP_ASSET_ICONS = new Set(["00", "rbc"]);
+const PNG_ASSET_ICONS = new Set(["10set", "acnon", "ab", "ai", "aave", "aixbt", "aevo", "cro", "sei", "1inch", "0xbtc", "0x0", "stx", "steth", "crv", "cspr", "wbeth", "etc", "usd1", "gusd", "rlusd", "usde", "bgb", "cbbtc", "base", "optimism", "arbitrum", "plasma", "ink", "linea", "gnosis", "sol", "gt", "cfx", "fil", "mx", "wld", "wbtc", "paxg", "neo"]);
+const WEBP_ASSET_ICONS = new Set(["00", "rbc", "xlm"]);
 const LOCAL_FIAT_ICONS = new Set(["amd", "byn", "kzt", "rub", "uah", "usd"]);
 
 export const likeIcon = "/icons/ui/like.svg";
@@ -65,6 +65,7 @@ export function assetIcon(asset: string): string {
   if (key === "gram") return "/icons/assets/gram.png";
   if (key === "near") return "/icons/assets/near-investx.png";
   if (key === "ever") return "/icons/assets/ever.svg";
+  if (key === "tusd") return "/icons/assets/tusd.svg";
   if (WEBP_ASSET_ICONS.has(key)) return `/icons/assets/${key}.webp`;
   if (PNG_ASSET_ICONS.has(key)) return `/icons/assets/${key}.png`;
   if (LOCAL_FIAT_ICONS.has(key)) return `/icons/assets/${key}.svg`;
